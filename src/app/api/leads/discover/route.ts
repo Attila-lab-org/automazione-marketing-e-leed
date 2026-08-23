@@ -25,7 +25,8 @@ export async function POST(request: Request) {
       found: result.found,
       created: result.created,
       duplicates: result.duplicates,
-      message: `${result.found} lead trovati · ${result.created} nuovi · ${result.duplicates} duplicati`,
+      qualified: result.qualified,
+      message: `${result.found} lead trovati · ${result.created} nuovi · ${result.duplicates} duplicati · ${result.qualified} qualificati`,
       query: result.query,
       leads: result.leads,
     });

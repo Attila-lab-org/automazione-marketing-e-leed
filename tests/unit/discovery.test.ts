@@ -5,22 +5,22 @@ import { mapPlaceToDiscovered } from '@/lib/providers/google-places/live';
 import type { DiscoveredPlace } from '@/lib/providers/google-places/types';
 
 describe('validateDiscoveryInput', () => {
-  it('accetta input valido e limita maxResults a 5', () => {
+  it('accetta input valido e limita maxResults a 50', () => {
     expect(
       validateDiscoveryInput({
         category: 'Ristoranti',
         location: 'Milano',
-        maxResults: 5,
+        maxResults: 50,
       }),
-    ).toEqual({ category: 'Ristoranti', location: 'Milano', maxResults: 5 });
+    ).toEqual({ category: 'Ristoranti', location: 'Milano', maxResults: 50 });
   });
 
-  it('rifiuta maxResults > 5', () => {
+  it('rifiuta maxResults > 50', () => {
     expect(() =>
       validateDiscoveryInput({
         category: 'Ristoranti',
         location: 'Milano',
-        maxResults: 20,
+        maxResults: 80,
       }),
     ).toThrow(DiscoveryValidationError);
   });

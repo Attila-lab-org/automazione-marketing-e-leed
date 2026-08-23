@@ -27,7 +27,7 @@ const OWNER_NAMES = ['Rossi', 'Bianchi', 'Verdi', 'Ferrari', 'Romano', 'Gallo', 
 
 export class GooglePlacesMock implements GooglePlacesProvider {
   async searchMinimal(query: DiscoveryQuery): Promise<DiscoveredPlace[]> {
-    const max = Math.min(query.maxResults ?? 5, 5);
+    const max = Math.min(query.maxResults ?? 5, 50);
     const seed = stableHash(`${query.category}|${query.location}`);
     const label = CATEGORY_LABELS[query.category.trim().toLowerCase()] ?? query.category;
     const places: DiscoveredPlace[] = [];

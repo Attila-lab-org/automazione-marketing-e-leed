@@ -164,6 +164,14 @@ export type LeadSourceType =
   | 'MANUAL'
   | 'IMPORT';
 
+/** 0011 — qualification status Phase B */
+export type QualificationStatus =
+  | 'NEW'
+  | 'PREQUALIFIED'
+  | 'NEEDS_ANALYSIS'
+  | 'LOW_PRIORITY'
+  | 'REJECTED';
+
 /** Status testuale ACTIVE/ARCHIVED (templates e followup_sequences) */
 export type CatalogStatus = 'ACTIVE' | 'ARCHIVED';
 
@@ -239,6 +247,13 @@ export interface LeadRow {
   rating: number | null;
   review_count: number | null;
   google_last_enriched_at: string | null;
+  discovery_score: number | null;
+  discovery_confidence: number | null;
+  qualification_status: QualificationStatus;
+  offer_candidate: string | null;
+  qualification_reasons: Json;
+  qualification_algorithm_version: string | null;
+  qualified_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -270,6 +285,13 @@ export interface LeadInsert {
   rating?: number | null;
   review_count?: number | null;
   google_last_enriched_at?: string | null;
+  discovery_score?: number | null;
+  discovery_confidence?: number | null;
+  qualification_status?: QualificationStatus;
+  offer_candidate?: string | null;
+  qualification_reasons?: Json;
+  qualification_algorithm_version?: string | null;
+  qualified_at?: string | null;
 }
 
 export interface LeadContactRow {
@@ -1106,6 +1128,43 @@ export interface WorkspaceFeatureFlagInsert {
 }
 
 // ---------------------------------------------------------------------------
+// 0011 — cost tracking (minimal)
+// ---------------------------------------------------------------------------
+
+export interface CostEventRow {
+  id: string;
+  workspace_id: string;
+  provider: string;
+  operation: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  lead_id: string | null;
+  campaign_id: string | null;
+  quantity: number;
+  estimated_cost_usd: number;
+  currency: string;
+  meta: Json;
+  occurred_at: string;
+  created_at: string;
+}
+
+export interface CostEventInsert {
+  id?: string;
+  workspace_id: string;
+  provider: string;
+  operation: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  lead_id?: string | null;
+  campaign_id?: string | null;
+  quantity?: number;
+  estimated_cost_usd?: number;
+  currency?: string;
+  meta?: Json;
+  occurred_at?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Mappa tabelle → Row (helper per i Domain Services / repository)
 // ---------------------------------------------------------------------------
 
@@ -1142,6 +1201,7 @@ export interface Tables {
   activity_log: ActivityLogRow;
   provider_connections: ProviderConnectionRow;
   workspace_feature_flags: WorkspaceFeatureFlagRow;
+  cost_events: CostEventRow;
 }
 
 export type TableName = keyof Tables;

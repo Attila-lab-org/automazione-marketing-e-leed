@@ -10,7 +10,7 @@ export default function LeadsPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
         title="Leads"
-        description="Discovery Google Places (Text Search New), deduplica per Place ID e persistenza Supabase. Slice 1: nessun outreach, nessuna email inventata."
+        description="Discovery Places → Discovery Score / Confidence / stato di qualificazione. Nessuna demo, nessuna email: outreach resta in mock."
       />
       <LeadsBrowser />
     </div>

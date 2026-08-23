@@ -149,37 +149,57 @@ export class GooglePlacesLive implements GooglePlacesProvider {
   }
 
   async searchMinimal(query: DiscoveryQuery): Promise<DiscoveredPlace[]> {
-    const max = Math.min(Math.max(query.maxResults ?? 5, 1), 5);
+    const max = Math.min(Math.max(query.maxResults ?? 5, 1), 50);
     const textQuery = `${query.category.trim()} ${query.location.trim()}`.trim();
     if (!textQuery) {
       throw new Error('GooglePlacesLive.searchMinimal: category e location sono obbligatorie');
     }
 
-    const response = await placesFetch(SEARCH_ENDPOINT, this.config.apiKey, SEARCH_FIELD_MASK, {
-      method: 'POST',
-      body: JSON.stringify({
+    const collected: DiscoveredPlace[] = [];
+    let pageToken: string | undefined;
+
+    while (collected.length < max) {
+      const pageSize = Math.min(20, max - collected.length);
+      const body: Record<string, unknown> = {
         textQuery,
         languageCode: 'it',
         regionCode: 'IT',
-        pageSize: max,
-      }),
-    });
+        pageSize,
+      };
+      if (pageToken) body.pageToken = pageToken;
 
-    if (!response.ok) {
-      const body = sanitizeErrorMessage(await response.text());
-      throw new Error(
-        `GooglePlacesLive.searchMinimal fallito (${response.status}): ${body.slice(0, 400)}`,
+      const response = await placesFetch(
+        SEARCH_ENDPOINT,
+        this.config.apiKey,
+        SEARCH_FIELD_MASK,
+        { method: 'POST', body: JSON.stringify(body) },
       );
+
+      if (!response.ok) {
+        const errBody = sanitizeErrorMessage(await response.text());
+        throw new Error(
+          `GooglePlacesLive.searchMinimal fallito (${response.status}): ${errBody.slice(0, 400)}`,
+        );
+      }
+
+      const data = (await response.json()) as {
+        places?: PlacesApiPlace[];
+        nextPageToken?: string;
+      };
+
+      const batch = (data.places ?? [])
+        .map((p) => mapPlaceToDiscovered(p, query))
+        .filter((p): p is DiscoveredPlace => p !== null);
+
+      collected.push(...batch);
+
+      if (!data.nextPageToken || batch.length === 0) break;
+      pageToken = data.nextPageToken;
     }
 
-    const data = (await response.json()) as { places?: PlacesApiPlace[] };
-    const places = (data.places ?? [])
-      .map((p) => mapPlaceToDiscovered(p, query))
-      .filter((p): p is DiscoveredPlace => p !== null)
-      .slice(0, max);
-
+    let places = collected.slice(0, max);
     if (query.businessStatus) {
-      return places.filter(
+      places = places.filter(
         (p) => !p.businessStatus || p.businessStatus === query.businessStatus,
       );
     }
