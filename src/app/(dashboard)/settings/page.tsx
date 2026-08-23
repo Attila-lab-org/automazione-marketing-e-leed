@@ -3,15 +3,15 @@
 import EmptyState from "@/components/empty-state";
 import PageHeader from "@/components/page-header";
 import ProvidersRuntimeList from "@/components/providers-runtime-list";
+import SectionSubnav from "@/components/section-subnav";
+import { SETTINGS_SUBNAV } from "@/lib/navigation";
 
-/**
- * Settings — stato provider da /api/providers/status (runtime reale).
- */
 export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-8">
+      <SectionSubnav items={[...SETTINGS_SUBNAV]} />
       <PageHeader
-        title="Settings"
+        title="Impostazioni"
         description="Stato provider derivato dal runtime (ENV + probe), non da testo statico. Slice 1: solo Supabase e Google Places possono risultare READY."
       />
 

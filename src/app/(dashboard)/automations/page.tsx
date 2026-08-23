@@ -2,6 +2,8 @@ import DecisionTrace from "@/components/decision-trace";
 import EmptyState from "@/components/empty-state";
 import PageHeader from "@/components/page-header";
 import PolicyBadge from "@/components/policy-badge";
+import SectionSubnav from "@/components/section-subnav";
+import { SETTINGS_SUBNAV } from "@/lib/navigation";
 
 /**
  * Automations (§6.1): policy, follow-up, job status.
@@ -10,8 +12,9 @@ import PolicyBadge from "@/components/policy-badge";
 export default function AutomationsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
+      <SectionSubnav items={[...SETTINGS_SUBNAV]} />
       <PageHeader
-        title="Automations"
+        title="Automazioni"
         description="Policy operative (§4.1), follow-up sequence (§12.2) e stato dei job persistenti della coda (§15.1): qui controlli cosa il sistema fa in automatico."
         actions={<PolicyBadge mode="SCORE_BASED" />}
       />

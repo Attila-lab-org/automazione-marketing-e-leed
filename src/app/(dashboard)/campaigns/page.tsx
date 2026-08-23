@@ -1,16 +1,16 @@
 import EmptyState from "@/components/empty-state";
 import PageHeader from "@/components/page-header";
 import PolicyBadge from "@/components/policy-badge";
+import SectionSubnav from "@/components/section-subnav";
+import { CAMPAIGN_SUBNAV } from "@/lib/navigation";
 
-/**
- * Campaigns (§6.1, §8.1): creazione, policy, stato, risultati.
- */
 export default function CampaignsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
+      <SectionSubnav items={[...CAMPAIGN_SUBNAV]} />
       <PageHeader
-        title="Campaigns"
-        description="Le campagne collegano un segmento a template demo, message template, follow-up e policy operativa, con soglie, rate limit e finestra oraria (§8.1)."
+        title="Campagne"
+        description="Le campagne restano manuali. Outreach, Resend e follow-up non sono attivi in questo slice."
       />
 
       {/* Legenda policy (§4) */}

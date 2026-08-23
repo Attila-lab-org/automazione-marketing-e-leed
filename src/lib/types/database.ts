@@ -162,7 +162,9 @@ export type LeadSourceType =
   | 'GOOGLE_PLACES_ENRICHMENT'
   | 'WEBSITE_ANALYSIS'
   | 'MANUAL'
-  | 'IMPORT';
+  | 'IMPORT'
+  /** Riservato: Social Lead Scout futuro. Non implementato in Phase C. */
+  | 'FACEBOOK';
 
 /** 0011 — qualification status Phase B */
 export type QualificationStatus =
@@ -479,6 +481,7 @@ export interface WebsiteTemplateRow {
   name: string | null;
   description: string | null;
   category: string | null;
+  vertical: string | null;
   status: CatalogStatus;
   created_at: string;
   updated_at: string;
@@ -491,6 +494,7 @@ export interface WebsiteTemplateInsert {
   name?: string | null;
   description?: string | null;
   category?: string | null;
+  vertical?: string | null;
   status?: CatalogStatus;
 }
 
@@ -504,6 +508,7 @@ export interface WebsiteTemplateVersionRow {
   schema: Json;
   default_content: Json;
   is_published: boolean;
+  published_at: string | null;
   created_at: string;
 }
 
@@ -517,6 +522,7 @@ export interface WebsiteTemplateVersionInsert {
   schema: Json;
   default_content?: Json;
   is_published?: boolean;
+  published_at?: string | null;
 }
 
 export interface DemoSiteRow {

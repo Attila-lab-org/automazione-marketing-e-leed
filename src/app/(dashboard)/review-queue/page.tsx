@@ -1,6 +1,8 @@
 import EmptyState from "@/components/empty-state";
 import PageHeader from "@/components/page-header";
 import ReviewCard from "@/components/review-card";
+import SectionSubnav from "@/components/section-subnav";
+import { CAMPAIGN_SUBNAV } from "@/lib/navigation";
 
 /**
  * Dati DEMO locali (Phase 1): mostrano la struttura della Review Card (§8.2).
@@ -74,6 +76,7 @@ const DEMO_QUEUE = [
 export default function ReviewQueuePage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
+      <SectionSubnav items={[...CAMPAIGN_SUBNAV]} />
       <PageHeader
         title="Review Queue"
         description="Valida molti lead rapidamente: ogni card mostra azienda, score, thumbnail demo, oggetto e segnali chiave, con azioni Approva / Modifica / Salta / Rifiuta / Pausa (§8.2)."

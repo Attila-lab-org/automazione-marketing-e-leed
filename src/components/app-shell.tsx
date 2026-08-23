@@ -7,12 +7,6 @@ import DangerZoneModal from "./danger-zone-modal";
 
 /* ── Navigazione principale (§6.1) ─────────────────────────────────────── */
 
-type NavItem = {
-  href: string;
-  label: string;
-  description: string;
-  icon: ReactNode;
-};
 
 function navIcon(path: string) {
   return (
@@ -31,102 +25,85 @@ function navIcon(path: string) {
   );
 }
 
+type NavItem = {
+  href: string;
+  label: string;
+  description: string;
+  icon: ReactNode;
+  match: string[];
+};
+
 const NAV_ITEMS: NavItem[] = [
   {
     href: "/overview",
-    label: "Overview",
-    description: "KPI, alert, pipeline, attività recenti e stato sistemi",
-    icon: navIcon(
-      "M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10",
-    ),
+    label: "Dashboard",
+    description: "Panoramica operativa",
+    match: ["/overview"],
+    icon: navIcon("M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10"),
   },
   {
     href: "/leads",
-    label: "Leads",
-    description: "Database lead, filtri, bulk actions e dettaglio",
+    label: "Lead",
+    description: "Trova lead, opportunità e filtri",
+    match: ["/leads", "/segments"],
     icon: navIcon(
       "M16 19c0-2.2-1.8-4-4-4s-4 1.8-4 4M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7 8c0-1.7-.9-3.2-2.3-3.8M17 8.5a2.5 2.5 0 0 1-1.5 2.3M5 19c0-1.7.9-3.2 2.3-3.8M7 8.5a2.5 2.5 0 0 0 1.5 2.3",
     ),
   },
   {
-    href: "/segments",
-    label: "Segments",
-    description: "Segmenti salvati per categoria, score e territorio",
-    icon: navIcon("M4 6h16M7 12h10M10 18h4"),
-  },
-  {
     href: "/campaigns",
-    label: "Campaigns",
-    description: "Creazione campagne, policy, stato e risultati",
+    label: "Campagne",
+    description: "Campagne, review, demo e template",
+    match: ["/campaigns", "/review-queue", "/demos", "/templates"],
     icon: navIcon(
       "M3 11l14-6v14L3 13v-2Zm14-2a4 4 0 0 1 0 6M7 13.5V17a1.5 1.5 0 0 0 3 0v-2.5",
     ),
   },
   {
-    href: "/review-queue",
-    label: "Review Queue",
-    description: "Approvazioni rapide di demo, messaggi e invii",
-    icon: navIcon(
-      "M9 12l2 2 4-5m5 3a9 9 0 1 1-9-9",
-    ),
-  },
-  {
-    href: "/demos",
-    label: "Demos",
-    description: "Istanze demo, preview, screenshot e stato",
-    icon: navIcon(
-      "M4 5h16v11H4zM2 19h20M9 9l3.5 2L9 13V9Z",
-    ),
-  },
-  {
-    href: "/templates",
-    label: "Templates",
-    description: "Landing e message template con versioni",
-    icon: navIcon(
-      "M4 4h16v6H4zM4 14h7v6H4zM15 14h5v6h-5z",
-    ),
-  },
-  {
     href: "/inbox",
-    label: "Inbox",
-    description: "Reply e conversazioni con i lead",
-    icon: navIcon(
-      "M4 6h16v12H4zM4 7l8 6 8-6",
-    ),
-  },
-  {
-    href: "/automations",
-    label: "Automations",
-    description: "Policy, follow-up e stato dei job",
-    icon: navIcon(
-      "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm8 4h2M2 12h2m8-10v2m0 16v2m7-17 1.5 1.5M4.5 18 6 16.5M19.5 18 18 16.5M4.5 6 6 7.5",
-    ),
+    label: "Messaggi",
+    description: "Inbox e template email",
+    match: ["/inbox"],
+    icon: navIcon("M4 6h16v12H4zM4 7l8 6 8-6"),
   },
   {
     href: "/analytics",
-    label: "Analytics",
-    description: "Conversioni e performance del funnel",
+    label: "Statistiche",
+    description: "Andamento e conversioni",
+    match: ["/analytics"],
     icon: navIcon("M4 20V10m6 10V4m6 16v-7m4 7H2"),
   },
   {
     href: "/settings",
-    label: "Settings",
-    description: "Provider, domini, API, utenti e sicurezza",
+    label: "Impostazioni",
+    description: "Providers e automazioni",
+    match: ["/settings", "/automations"],
     icon: navIcon(
       "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm8 3a8 8 0 0 1-.2 1.8l2 1.6-2 3.4-2.4-1a8 8 0 0 1-1.6.9L15.4 21H8.6l-.4-2.3a8 8 0 0 1-1.6-.9l-2.4 1-2-3.4 2-1.6A8 8 0 0 1 4 12a8 8 0 0 1 .2-1.8l-2-1.6 2-3.4 2.4 1a8 8 0 0 1 1.6-.9L8.6 3h6.8l.4 2.3a8 8 0 0 1 1.6.9l2.4-1 2 3.4-2 1.6a8 8 0 0 1 .2 1.8Z",
     ),
   },
 ];
 
-const SECTION_LABELS: Record<string, string> = Object.fromEntries(
-  NAV_ITEMS.map((item) => [item.href.slice(1), item.label]),
-);
+const SECTION_LABELS: Record<string, string> = {
+  overview: "Dashboard",
+  leads: "Lead",
+  segments: "Filtri",
+  campaigns: "Campagne",
+  "review-queue": "Review Queue",
+  demos: "Demos",
+  templates: "Templates",
+  inbox: "Messaggi",
+  automations: "Automazioni",
+  analytics: "Statistiche",
+  settings: "Impostazioni",
+};
 
 /* ── AppShell ──────────────────────────────────────────────────────────── */
 
 /**
  * AppShell — §21 inventory.
- * Sidebar con le 11 voci §6.1, topbar con breadcrumbs + global search,
+ * Sidebar con 6 macrosezioni commerciali. Route tecniche restano
+ * raggiungibili come sottosezioni. Topbar con breadcrumbs + global search,
  * badge ambiente "MOCK MODE" e kill switch "PAUSA TUTTO L'OUTREACH"
  * sempre raggiungibile (§19.2). Stato del kill switch: solo locale
  * (l'integrazione col backend arriva con le API route).
@@ -167,7 +144,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <nav aria-label="Navigazione principale" className="flex-1 overflow-y-auto px-2 py-3">
           <ul className="space-y-0.5">
             {NAV_ITEMS.map((item) => {
-              const active = pathname.startsWith(item.href);
+              const active = item.match.some((prefix) => pathname.startsWith(prefix));
               return (
                 <li key={item.href}>
                   <Link
@@ -270,10 +247,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
           {/* Badge ambiente */}
           <span
-            title="Tutti i provider esterni (Google Places, Resend, Browser Worker, AI) operano in modalità mock: nessuna chiamata reale, nessun invio (§22.3, §23.1)."
+            title="Resend, Browser Worker e AI restano in mock. Google Places può essere live. Nessuna email parte da questo slice."
             className="cursor-help whitespace-nowrap rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800"
           >
-            Mock Mode
+            Outreach mock
           </span>
 
           {/* Kill switch globale (§19.2) */}

@@ -28,6 +28,8 @@ export type LeadQuickDrawerProps = {
   /** null = drawer chiuso. */
   lead: LeadQuickDrawerLead | null;
   onClose: () => void;
+  onCreateDemo?: () => void;
+  creatingDemo?: boolean;
 };
 
 /**
@@ -39,6 +41,8 @@ export type LeadQuickDrawerProps = {
 export default function LeadQuickDrawer({
   lead,
   onClose,
+  onCreateDemo,
+  creatingDemo = false,
 }: LeadQuickDrawerProps) {
   useEffect(() => {
     if (!lead) return;
@@ -163,33 +167,23 @@ export default function LeadQuickDrawer({
               Azioni rapide
             </h3>
             <div className="grid grid-cols-2 gap-2">
-              {[
-                {
-                  label: "Genera demo",
-                  hint: "Crea una landing demo dal template (§9). Disponibile in Phase 4.",
-                },
-                {
-                  label: "Prepara messaggio",
-                  hint: "Genera una bozza editabile (§11). Disponibile in Phase 5.",
-                },
-                {
-                  label: "Apri dettaglio",
-                  hint: "Vista completa con tab Overview/Audit/Demo/Messages/Timeline (§7.2).",
-                },
-                {
-                  label: "Pausa lead",
-                  hint: "Sospende ogni automazione su questo lead (§19.2).",
-                },
-              ].map((action) => (
-                <button
-                  key={action.label}
-                  type="button"
-                  title={action.hint}
-                  className="rounded-lg border border-stone-200 px-3 py-2 text-left text-xs font-medium text-stone-700 transition-colors hover:border-amber-300 hover:bg-amber-50"
-                >
-                  {action.label}
-                </button>
-              ))}
+              <button
+                type="button"
+                title="Crea una demo Restaurant Premium dai dati già disponibili. Nessuna email."
+                onClick={onCreateDemo}
+                disabled={!onCreateDemo || creatingDemo}
+                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-60"
+              >
+                {creatingDemo ? "Creazione demo…" : "Crea demo"}
+              </button>
+              <button
+                type="button"
+                disabled
+                title="Messaggi disattivati: Resend resta in mock."
+                className="cursor-not-allowed rounded-lg border border-stone-200 px-3 py-2 text-left text-xs font-medium text-stone-300"
+              >
+                Prepara messaggio
+              </button>
             </div>
           </section>
 

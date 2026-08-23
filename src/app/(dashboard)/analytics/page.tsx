@@ -10,7 +10,7 @@ export default function AnalyticsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
-        title="Analytics"
+        title="Statistiche"
         description="Conversioni e performance lungo tutto il funnel, con drill-down categoria → campagna → template → fascia di score (§20)."
       />
 

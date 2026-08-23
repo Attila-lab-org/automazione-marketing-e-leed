@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import LeadQuickDrawer, {
   type LeadQuickDrawerLead,
@@ -102,7 +103,13 @@ function toView(lead: LeadRow): LeadView {
   };
 }
 
-export default function LeadsBrowser() {
+export default function LeadsBrowser({
+  view = "tutti",
+}: {
+  view?: "tutti" | "opportunita";
+}) {
+  const router = useRouter();
+  const [creatingDemo, setCreatingDemo] = useState(false);
   const [rows, setRows] = useState<LeadView[]>([]);
   const [selectedLead, setSelectedLead] = useState<LeadView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -173,8 +180,14 @@ export default function LeadsBrowser() {
         return true;
       })
       .filter((r) => !filterStatus || r.qualificationStatus === filterStatus)
+      .filter((r) =>
+        view === "opportunita"
+          ? r.qualificationStatus === "PREQUALIFIED" ||
+            r.qualificationStatus === "NEEDS_ANALYSIS"
+          : true,
+      )
       .sort((a, b) => (b.discoveryScore ?? -1) - (a.discoveryScore ?? -1));
-  }, [rows, minScore, filterCategory, filterCity, filterWebsite, filterStatus]);
+  }, [rows, minScore, filterCategory, filterCity, filterWebsite, filterStatus, view]);
 
   const columns: SmartDataTableColumn<LeadView>[] = [
     {
@@ -273,6 +286,26 @@ export default function LeadsBrowser() {
       setResultBanner(err instanceof Error ? err.message : "Discovery fallita");
     } finally {
       setSearching(false);
+    }
+  }
+
+  async function onCreateDemo(leadId: string) {
+    setCreatingDemo(true);
+    setResultBanner(null);
+    try {
+      const res = await fetch("/api/demos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Creazione demo fallita");
+      const id = data.demo?.id as string | undefined;
+      if (!id) throw new Error("Demo creata senza id");
+      router.push(`/demos/${id}`);
+    } catch (err) {
+      setResultBanner(err instanceof Error ? err.message : "Creazione demo fallita");
+      setCreatingDemo(false);
     }
   }
 
@@ -429,6 +462,10 @@ export default function LeadsBrowser() {
       <LeadQuickDrawer
         lead={selectedLead}
         onClose={() => setSelectedLead(null)}
+        onCreateDemo={
+          selectedLead ? () => void onCreateDemo(selectedLead.id) : undefined
+        }
+        creatingDemo={creatingDemo}
       />
 
       {selectedLead ? (

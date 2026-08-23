@@ -10,8 +10,8 @@ export default function OverviewPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
-        title="Overview"
-        description="Quanti lead abbiamo, cosa richiede attenzione, cosa è in automatico e come fermare gli invii: il punto di partenza operativo della giornata (§6)."
+        title="Dashboard"
+        description="Punto di partenza: lead, opportunità e stato sistemi. Nessuna email parte da qui."
       />
 
       <section aria-label="KPI principali">

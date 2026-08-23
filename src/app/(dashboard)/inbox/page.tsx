@@ -1,14 +1,14 @@
 import EmptyState from "@/components/empty-state";
 import PageHeader from "@/components/page-header";
+import SectionSubnav from "@/components/section-subnav";
+import { MESSAGE_SUBNAV } from "@/lib/navigation";
 
-/**
- * Inbox (§6.1, §12.1): reply e conversazioni.
- */
 export default function InboxPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
+      <SectionSubnav items={[...MESSAGE_SUBNAV]} />
       <PageHeader
-        title="Inbox"
+        title="Messaggi"
         description="Le risposte dei lead e le conversazioni: una reply ferma automaticamente i follow-up pendenti su quel lead (cancellazione atomica, §12.2)."
       />
       <EmptyState
