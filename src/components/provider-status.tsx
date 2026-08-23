@@ -1,4 +1,10 @@
-export type ProviderHealth = "ok" | "degraded" | "down" | "not_configured";
+export type ProviderHealth =
+  | "ok"
+  | "mock"
+  | "degraded"
+  | "down"
+  | "not_configured"
+  | "error";
 
 export type ProviderStatusProps = {
   /** Nome del provider, es. "Google Places", "Resend". */
@@ -16,13 +22,15 @@ const STATUS_META: Record<
   ProviderHealth,
   { label: string; dot: string; text: string }
 > = {
-  ok: { label: "Operativo", dot: "bg-emerald-500", text: "text-emerald-700" },
+  ok: { label: "READY", dot: "bg-emerald-500", text: "text-emerald-700" },
+  mock: { label: "MOCK", dot: "bg-sky-500", text: "text-sky-700" },
   degraded: { label: "Degradato", dot: "bg-amber-500", text: "text-amber-700" },
   down: {
     label: "Non raggiungibile",
     dot: "bg-red-500",
     text: "text-red-700",
   },
+  error: { label: "ERROR", dot: "bg-red-500", text: "text-red-700" },
   not_configured: {
     label: "Non configurato",
     dot: "bg-stone-400",
@@ -32,8 +40,7 @@ const STATUS_META: Record<
 
 /**
  * ProviderStatus — §21 inventory.
- * Semaforo verde/ambra/rosso sulla salute e configurazione dei provider
- * esterni (§6.2 checklist onboarding, §19 osservabilità).
+ * Semaforo sulla salute e configurazione dei provider esterni.
  */
 export default function ProviderStatus({
   name,
@@ -78,4 +85,20 @@ export default function ProviderStatus({
       ) : null}
     </div>
   );
+}
+
+/** Mappa status runtime API → visual health. */
+export function mapRuntimeStatus(
+  status: "ready" | "mock" | "error" | "not_configured",
+): ProviderHealth {
+  switch (status) {
+    case "ready":
+      return "ok";
+    case "mock":
+      return "mock";
+    case "error":
+      return "error";
+    default:
+      return "not_configured";
+  }
 }

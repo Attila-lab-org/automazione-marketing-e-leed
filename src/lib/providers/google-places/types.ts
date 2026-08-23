@@ -2,7 +2,7 @@
  * GooglePlacesProvider — contratto §13/§13.1.
  *
  * Approccio two-step:
- *  1. searchMinimal: discovery minimo, solo i campi necessari al bacino.
+ *  1. searchMinimal: discovery (Text Search New) con FieldMask mirato.
  *  2. enrich: campi aggiuntivi solo sui candidati da approfondire.
  */
 
@@ -16,7 +16,7 @@ export interface DiscoveryQuery {
   businessStatus?: string;
 }
 
-/** Output del discovery minimo (step 1 §13.1). */
+/** Output del discovery (Text Search New + FieldMask slice 1). */
 export interface DiscoveredPlace {
   googlePlaceId: string;
   name: string;
@@ -24,9 +24,15 @@ export interface DiscoveredPlace {
   address: string | null;
   city: string | null;
   region: string | null;
+  postalCode: string | null;
+  country: string | null;
   lat: number | null;
   lng: number | null;
   businessStatus: string | null;
+  /** Presenti se richiesti nel FieldMask di searchText. */
+  rating: number | null;
+  reviewCount: number | null;
+  websiteUrl: string | null;
 }
 
 /** Campi aggiuntivi richiesti solo in enrichment (step 2 §13.1). */

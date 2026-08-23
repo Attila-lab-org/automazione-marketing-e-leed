@@ -27,7 +27,7 @@ const OWNER_NAMES = ['Rossi', 'Bianchi', 'Verdi', 'Ferrari', 'Romano', 'Gallo', 
 
 export class GooglePlacesMock implements GooglePlacesProvider {
   async searchMinimal(query: DiscoveryQuery): Promise<DiscoveredPlace[]> {
-    const max = Math.min(query.maxResults ?? 5, 20);
+    const max = Math.min(query.maxResults ?? 5, 5);
     const seed = stableHash(`${query.category}|${query.location}`);
     const label = CATEGORY_LABELS[query.category.trim().toLowerCase()] ?? query.category;
     const places: DiscoveredPlace[] = [];
@@ -35,6 +35,7 @@ export class GooglePlacesMock implements GooglePlacesProvider {
     for (let i = 0; i < max; i += 1) {
       const h = stableHash(`${seed}|${i}`);
       const owner = OWNER_NAMES[h % OWNER_NAMES.length];
+      const slug = `mock${(seed % 1000).toString(36)}${i}`;
       places.push({
         googlePlaceId: `mock-place-${(seed % 1000).toString(36)}${i.toString(36)}${(h % 1296).toString(36)}`,
         name: `${label} ${owner}`,
@@ -42,9 +43,14 @@ export class GooglePlacesMock implements GooglePlacesProvider {
         address: `Via Example ${1 + (h % 200)}`,
         city: query.location,
         region: 'Lombardia',
+        postalCode: null,
+        country: 'Italia',
         lat: 45.4642 + ((h % 1000) - 500) / 10000,
         lng: 9.19 + (((h >> 8) % 1000) - 500) / 10000,
         businessStatus: query.businessStatus ?? 'OPERATIONAL',
+        rating: 3 + (h % 21) / 10,
+        reviewCount: h % 400,
+        websiteUrl: h % 5 !== 0 ? `https://${slug}.example.com` : null,
       });
     }
     return places;
@@ -53,13 +59,13 @@ export class GooglePlacesMock implements GooglePlacesProvider {
   async enrich(placeId: string): Promise<PlaceEnrichment> {
     const h = stableHash(placeId);
     const slug = placeId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 24);
-    const hasWebsite = h % 5 !== 0; // ~80% dei lead ha un sito
+    const hasWebsite = h % 5 !== 0;
     const hasPhone = h % 7 !== 0;
     return {
       googlePlaceId: placeId,
       websiteUrl: hasWebsite ? `https://${slug}.example.com` : null,
       phone: hasPhone ? `+39 02 ${1000000 + (h % 8999999)}` : null,
-      rating: 3 + (h % 21) / 10, // 3.0 – 5.0
+      rating: 3 + (h % 21) / 10,
       reviewCount: h % 400,
       openingHours: ['Mo-Fr 09:00-18:00'],
       enrichedAt: new Date().toISOString(),
