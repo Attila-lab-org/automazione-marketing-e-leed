@@ -5,16 +5,31 @@ type Props = {
   ownerCtaLabel: string;
   whatsappHref: string;
   siteHref: string;
+  businessName: string;
 };
 
 /** Owner-facing conversion only — never links to restaurant #contatti. */
-export function RestaurantV3OwnerCTA({ ownerCtaLabel, whatsappHref, siteHref }: Props) {
+export function RestaurantV3OwnerCTA({
+  ownerCtaLabel,
+  whatsappHref,
+  siteHref,
+  businessName,
+}: Props) {
   return (
     <section id="owner" className={styles.owner} aria-label="Proposta commerciale" data-reveal>
+      <div className={styles.ownerGlow} aria-hidden />
       <div className={styles.ownerInner}>
         <p className={styles.eyebrow} style={{ color: 'color-mix(in srgb, #fff 55%, transparent)' }}>
-          Per il proprietario
+          Offerta per {businessName}
         </p>
+        <div className={styles.ownerOffer}>
+          <span className={styles.ownerOfferPrice}>
+            {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerOfferPrice}
+          </span>
+          <span className={styles.ownerOfferLabel}>
+            {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerOfferLabel}
+          </span>
+        </div>
         <h2>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerHeadline}</h2>
         <p>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerBody}</p>
         <p className={styles.ownerMicro}>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerMicro}</p>
@@ -27,8 +42,8 @@ export function RestaurantV3OwnerCTA({ ownerCtaLabel, whatsappHref, siteHref }: 
           </a>
         </div>
         <ol className={styles.ownerSteps}>
-          <li>Apri WhatsApp</li>
-          <li>Messaggio già pronto</li>
+          <li>WhatsApp in un tap</li>
+          <li>Messaggio già pronto con l’offerta</li>
           <li>Ti rispondiamo noi</li>
         </ol>
       </div>

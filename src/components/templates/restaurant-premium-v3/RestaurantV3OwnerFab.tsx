@@ -5,12 +5,19 @@ type Props = {
   href: string;
 };
 
-/** Persistent owner WhatsApp chip — low friction on mobile after scroll. */
+/** Persistent owner WhatsApp chip — offer-led, low friction. */
 export function RestaurantV3OwnerFab({ href }: Props) {
   return (
-    <a className={styles.ownerFab} href={href} aria-label={RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaWhatsApp}>
+    <a
+      className={styles.ownerFab}
+      href={href}
+      aria-label={RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaWhatsApp}
+    >
       <span className={styles.ownerFabDot} aria-hidden />
-      WhatsApp
+      <span className={styles.ownerFabText}>
+        <strong>350€</strong>
+        <span>WhatsApp</span>
+      </span>
     </a>
   );
 }

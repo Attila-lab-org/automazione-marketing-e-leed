@@ -10,6 +10,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const STUDIO_FALLBACK = 'https://www.attila-lab.net/';
+/** Studio WhatsApp — commercial fallback when OWNER_WHATSAPP env is missing (Production lock). */
+const STUDIO_WHATSAPP_FALLBACK = '393518011635';
 
 /**
  * Commercial owner contact destination.
@@ -32,6 +34,21 @@ function parseChannel(raw: string | null): OwnerContactChannel {
   return 'auto';
 }
 
+function resolveWhatsAppSource(env: NodeJS.ProcessEnv): string {
+  const fromEnv = env.OWNER_WHATSAPP?.trim();
+  if (fromEnv) return fromEnv;
+  if (env.OWNER_CONTACT_URL && isWhatsAppContactTarget(env.OWNER_CONTACT_URL)) {
+    return env.OWNER_CONTACT_URL.trim();
+  }
+  if (
+    env.NEXT_PUBLIC_OWNER_CONTACT_URL &&
+    isWhatsAppContactTarget(env.NEXT_PUBLIC_OWNER_CONTACT_URL)
+  ) {
+    return env.NEXT_PUBLIC_OWNER_CONTACT_URL.trim();
+  }
+  return STUDIO_WHATSAPP_FALLBACK;
+}
+
 function resolveDestination(args: {
   env: NodeJS.ProcessEnv;
   channel: OwnerContactChannel;
@@ -39,26 +56,20 @@ function resolveDestination(args: {
   slug: string;
 }): { url: string; channel: 'whatsapp' | 'site' } | { error: string } {
   const { env, channel, businessName, slug } = args;
-  const whatsappSource =
-    env.OWNER_WHATSAPP?.trim() ||
-    (env.OWNER_CONTACT_URL && isWhatsAppContactTarget(env.OWNER_CONTACT_URL)
-      ? env.OWNER_CONTACT_URL.trim()
-      : null) ||
-    (env.NEXT_PUBLIC_OWNER_CONTACT_URL &&
-    isWhatsAppContactTarget(env.NEXT_PUBLIC_OWNER_CONTACT_URL)
-      ? env.NEXT_PUBLIC_OWNER_CONTACT_URL.trim()
-      : null);
 
-  const wantWhatsApp =
-    channel === 'whatsapp' || (channel === 'auto' && Boolean(whatsappSource));
-
-  if (wantWhatsApp && whatsappSource) {
+  // WhatsApp must never fall through to the marketing website.
+  if (channel === 'whatsapp' || channel === 'auto') {
     const wa = buildWhatsAppUrl({
-      phoneOrUrl: whatsappSource,
+      phoneOrUrl: resolveWhatsAppSource(env),
       businessName,
       slug,
     });
-    if (wa) return { url: wa, channel: 'whatsapp' };
+    if (wa) {
+      // auto → WhatsApp first (one-tap conversion); site remains available via ?channel=site
+      if (channel === 'whatsapp' || channel === 'auto') {
+        return { url: wa, channel: 'whatsapp' };
+      }
+    }
     if (channel === 'whatsapp') {
       return { error: 'OWNER_WHATSAPP non valido' };
     }

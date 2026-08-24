@@ -142,6 +142,7 @@ export default function RestaurantPremiumV3({
           ownerCtaLabel={ownerCta}
           whatsappHref={ownerWhatsAppHref}
           siteHref={siteHref}
+          businessName={name}
         />
       ) : null}
       {!compact && demoSlug ? <RestaurantV3OwnerFab href={ownerWhatsAppHref} /> : null}

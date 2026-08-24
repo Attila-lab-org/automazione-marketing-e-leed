@@ -88,7 +88,8 @@ export function buildWhatsAppUrl(args: {
     args.businessName?.trim()
       ? `ho visto l'anteprima demo per ${args.businessName.trim()}.`
       : "ho visto l'anteprima demo del mio locale.",
-    'Vorrei la versione completa — possiamo parlarne?',
+    'Mi interessa cambiare e rinnovare la presenza digitale da 350€.',
+    'Possiamo parlarne?',
     args.slug?.trim() ? `(rif: ${args.slug.trim()})` : '',
   ]
     .filter(Boolean)

@@ -48,6 +48,23 @@ describe('Owner interesse route', () => {
     expect(loc).toContain('source=restaurant-premium-v3-owner-cta');
   });
 
+  it('channel=whatsapp senza env → comunque wa.me (fallback studio)', async () => {
+    delete process.env.OWNER_WHATSAPP;
+    delete process.env.OWNER_CONTACT_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const { GET } = await import('../../src/app/demo/[slug]/interesse/route');
+    const res = await GET(
+      new Request('http://localhost/demo/trattoria-duomo/interesse?channel=whatsapp'),
+      { params: Promise.resolve({ slug: 'trattoria-duomo' }) },
+    );
+    expect(res.status).toBe(302);
+    const loc = res.headers.get('location') ?? '';
+    expect(loc.startsWith('https://wa.me/')).toBe(true);
+    expect(loc.includes('attila-lab.net')).toBe(false);
+    expect(decodeURIComponent(loc)).toContain('350');
+  });
+
   it('channel=whatsapp con OWNER_WHATSAPP → wa.me + messaggio', async () => {
     process.env.OWNER_WHATSAPP = '393518011635';
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -60,7 +77,7 @@ describe('Owner interesse route', () => {
     expect(res.status).toBe(302);
     const loc = res.headers.get('location') ?? '';
     expect(loc.startsWith('https://wa.me/393518011635')).toBe(true);
-    expect(decodeURIComponent(loc)).toContain('anteprima');
+    expect(decodeURIComponent(loc)).toContain('350');
     expect(decodeURIComponent(loc)).toContain('trattoria-duomo');
   });
 
