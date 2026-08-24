@@ -1,14 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateShortId, makePublicSlug } from '@/lib/demos/slug';
+import { ensureRestaurantPremiumV2 } from '@/lib/demos/ensure-template-v2';
+import { listPublishedTemplates } from '@/lib/demos/ensure-template';
 import { pickCompatibleTemplateKey } from '@/lib/templates/match';
 import { prefillFromLead, normalizeDemoData } from '@/lib/templates/merge';
-import type { DemoInstanceData } from '@/lib/templates/restaurant-premium';
+import { prefillFromLeadV2, normalizeDemoDataV2 } from '@/lib/templates/merge-v2';
+import { RESTAURANT_PREMIUM_RENDERER_KEY } from '@/lib/templates/restaurant-premium';
+import { RESTAURANT_PREMIUM_V2_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v2';
 import type { LeadRow } from '@/lib/types/database';
-import { ensureRestaurantPremium, listPublishedTemplates } from './ensure-template';
 
 export interface CreateDemoInput {
   leadId: string;
   templateKey?: string;
+  layoutKey?: string;
 }
 
 export interface CreatedDemo {
@@ -17,15 +21,20 @@ export interface CreatedDemo {
   publicPath: string;
   leadId: string;
   templateKey: string;
+  layoutKey: string;
   templateVersionId: string;
   templateVersion: number;
   status: string;
-  data: DemoInstanceData;
+  data: unknown;
   reused: boolean;
 }
 
 function publicPath(slug: string): string {
   return `/demo/${slug}`;
+}
+
+function isV2Layout(layoutKey: string): boolean {
+  return layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY;
 }
 
 export async function createDemoFromLead(
@@ -48,19 +57,31 @@ export async function createDemoFromLead(
     throw new Error('Demo: lead rejected, creazione non consentita');
   }
 
-  await ensureRestaurantPremium(admin, workspaceId);
+  await ensureRestaurantPremiumV2(admin, workspaceId);
   const published = await listPublishedTemplates(admin, workspaceId);
-  const key =
-    input.templateKey ??
-    pickCompatibleTemplateKey(
+
+  let template = input.layoutKey
+    ? published.find((t) => t.layoutKey === input.layoutKey)
+    : undefined;
+
+  if (!template && input.templateKey) {
+    template = published.find((t) => t.templateKey === input.templateKey);
+  }
+
+  if (!template) {
+    const key = pickCompatibleTemplateKey(
       typedLead.category,
-      published.map((t) => ({
-        key: t.templateKey,
-        vertical: t.vertical,
-        published: true,
-      })),
+      published.map((t) => ({ key: t.templateKey, vertical: t.vertical, published: true })),
     );
-  const template = published.find((t) => t.templateKey === key);
+    if (!key) {
+      throw new Error('Demo: nessun template compatibile col verticale del lead');
+    }
+    template =
+      published.find((t) => t.templateKey === key && t.layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY) ??
+      published.find((t) => t.templateKey === key && t.layoutKey === RESTAURANT_PREMIUM_RENDERER_KEY) ??
+      published.find((t) => t.templateKey === key);
+  }
+
   if (!template) {
     throw new Error('Demo: nessun template pubblicato compatibile');
   }
@@ -70,7 +91,7 @@ export async function createDemoFromLead(
     .select('id, slug, lead_id, template_id, template_version_id, status, current_version_id')
     .eq('workspace_id', workspaceId)
     .eq('lead_id', typedLead.id)
-    .eq('template_id', template.templateId)
+    .eq('template_version_id', template.versionId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -81,31 +102,37 @@ export async function createDemoFromLead(
       .select('data')
       .eq('id', existing.current_version_id)
       .maybeSingle();
+    const data = isV2Layout(template.layoutKey)
+      ? normalizeDemoDataV2(versionRow?.data, normalizeDemoDataV2(template.defaultContent))
+      : normalizeDemoData(versionRow?.data, normalizeDemoData(template.defaultContent));
     return {
       id: existing.id,
       slug: existing.slug,
       publicPath: publicPath(existing.slug),
       leadId: existing.lead_id,
       templateKey: template.templateKey,
+      layoutKey: template.layoutKey,
       templateVersionId: existing.template_version_id,
       templateVersion: template.version,
       status: existing.status,
-      data: normalizeDemoData(versionRow?.data, normalizeDemoData(template.defaultContent)),
+      data,
       reused: true,
     };
   }
 
-  const defaults = normalizeDemoData(template.defaultContent);
-  const data = prefillFromLead(
-    {
-      name: typedLead.name,
-      phone: typedLead.phone,
-      email: typedLead.email,
-      address: typedLead.address,
-      city: typedLead.city,
-    },
-    defaults,
-  );
+  const leadInput = {
+    name: typedLead.name,
+    phone: typedLead.phone,
+    email: typedLead.email,
+    address: typedLead.address,
+    city: typedLead.city,
+    rating: typedLead.rating,
+    reviewCount: typedLead.review_count,
+  };
+
+  const data = isV2Layout(template.layoutKey)
+    ? prefillFromLeadV2(leadInput, normalizeDemoDataV2(template.defaultContent))
+    : prefillFromLead(leadInput, normalizeDemoData(template.defaultContent));
 
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -165,6 +192,7 @@ export async function createDemoFromLead(
       publicPath: publicPath(site.slug),
       leadId: site.lead_id,
       templateKey: template.templateKey,
+      layoutKey: template.layoutKey,
       templateVersionId: site.template_version_id,
       templateVersion: template.version,
       status: site.status,

@@ -1,7 +1,4 @@
-import {
-  RESTAURANT_PREMIUM_TEMPLATE_KEY,
-  RESTAURANT_VERTICAL_TOKENS,
-} from './restaurant-premium';
+import { RESTAURANT_VERTICAL_TOKENS } from './restaurant-premium';
 
 export interface TemplateCandidate {
   key: string;
@@ -37,9 +34,8 @@ export function verticalMatches(
 }
 
 /**
- * Sceglie un template pubblicato compatibile. Non inventa template.
- * Se nessuno matcha il verticale, usa restaurant-premium se pubblicato,
- * altrimenti il primo pubblicato.
+ * Sceglie un template pubblicato compatibile col verticale del lead.
+ * Nessun fallback cross-verticale: se non c'è match → null.
  */
 export function pickCompatibleTemplateKey(
   leadCategory: string | null | undefined,
@@ -49,8 +45,5 @@ export function pickCompatibleTemplateKey(
   if (published.length === 0) return null;
 
   const matched = published.find((t) => verticalMatches(t.vertical, leadCategory));
-  if (matched) return matched.key;
-
-  const premium = published.find((t) => t.key === RESTAURANT_PREMIUM_TEMPLATE_KEY);
-  return premium?.key ?? published[0]?.key ?? null;
+  return matched?.key ?? null;
 }

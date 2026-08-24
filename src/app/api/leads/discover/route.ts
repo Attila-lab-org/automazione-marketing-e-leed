@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withAdmin } from '@/lib/api/with-admin';
 import {
   DiscoveryValidationError,
   runLeadDiscovery,
@@ -8,15 +9,15 @@ import { isSupabaseConfigured } from '@/lib/supabase/client';
 
 export const runtime = 'nodejs';
 
-export async function POST(request: Request) {
-  try {
-    if (!isSupabaseConfigured(process.env) || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return NextResponse.json(
-        { error: 'Supabase non configurato (URL / anon / service role).' },
-        { status: 503 },
-      );
-    }
+export const POST = withAdmin(async (request: Request) => {
+  if (!isSupabaseConfigured(process.env) || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json(
+      { error: 'Supabase non configurato (URL / anon / service role).' },
+      { status: 503 },
+    );
+  }
 
+  try {
     const body = await request.json().catch(() => null);
     const input = validateDiscoveryInput(body);
     const result = await runLeadDiscovery(input, process.env);
@@ -41,4 +42,4 @@ export async function POST(request: Request) {
     console.error('POST /api/leads/discover', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

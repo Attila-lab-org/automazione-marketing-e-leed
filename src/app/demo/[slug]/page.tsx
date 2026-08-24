@@ -1,11 +1,10 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import RestaurantPremium from "@/components/templates/restaurant-premium";
-import { loadDemoBySlug } from "@/lib/demos/load";
-import { createAdminSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import DemoRenderer from '@/components/templates/demo-renderer';
+import { loadDemoBySlug } from '@/lib/demos/load';
+import { resolveRendererKey, UnsupportedRendererError } from '@/lib/templates/registry';
+import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -19,12 +18,14 @@ async function load(slug: string) {
   return loadDemoBySlug(admin, slug);
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({ params }: PageProps) {
   const { slug } = await params;
   const demo = await load(slug);
-  const title = demo?.data.branding.business_name ?? "Demo";
+  const title =
+    (demo?.data as { branding?: { business_name?: string | null } })?.branding?.business_name ??
+    'Demo';
   return {
-    title,
+    title: String(title),
     robots: { index: false, follow: false },
   };
 }
@@ -32,12 +33,23 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function PublicDemoPage({ params }: PageProps) {
   const { slug } = await params;
   const demo = await load(slug);
-  if (!demo) notFound();
+  if (!demo) {
+    return <p className="p-8 text-sm text-stone-500">Demo non trovata</p>;
+  }
+
+  try {
+    resolveRendererKey(demo.rendererKey);
+  } catch (err) {
+    if (err instanceof UnsupportedRendererError) {
+      return <p className="p-8 text-sm text-red-600">{err.message}</p>;
+    }
+    throw err;
+  }
 
   return (
     <>
       <meta name="robots" content="noindex,nofollow" />
-      <RestaurantPremium data={demo.data} />
+      <DemoRenderer rendererKey={demo.rendererKey} data={demo.data} />
     </>
   );
 }

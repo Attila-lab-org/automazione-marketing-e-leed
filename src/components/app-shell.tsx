@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import DangerZoneModal from "./danger-zone-modal";
 
 /* ── Navigazione principale (§6.1) ─────────────────────────────────────── */
@@ -105,13 +105,34 @@ const SECTION_LABELS: Record<string, string> = {
  * Sidebar con 6 macrosezioni commerciali. Route tecniche restano
  * raggiungibili come sottosezioni. Topbar con breadcrumbs + global search,
  * badge ambiente "MOCK MODE" e kill switch "PAUSA TUTTO L'OUTREACH"
- * sempre raggiungibile (§19.2). Stato del kill switch: solo locale
- * (l'integrazione col backend arriva con le API route).
+ * sempre raggiungibile (§19.2). Stato persistito via workspace_feature_flags.
  */
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [outreachPaused, setOutreachPaused] = useState(false);
   const [killSwitchOpen, setKillSwitchOpen] = useState(false);
+  const [pauseLoading, setPauseLoading] = useState(true);
+
+  const refreshPause = useCallback(() => {
+    fetch("/api/settings/outreach-pause")
+      .then((r) => r.json())
+      .then((data) => setOutreachPaused(Boolean(data.paused)))
+      .catch(() => setOutreachPaused(false))
+      .finally(() => setPauseLoading(false));
+  }, []);
+
+  useEffect(() => {
+    refreshPause();
+  }, [refreshPause]);
+
+  async function setPause(paused: boolean) {
+    await fetch("/api/settings/outreach-pause", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paused }),
+    });
+    refreshPause();
+  }
 
   const segments = pathname.split("/").filter(Boolean);
   const crumbs = segments.map((segment, index) => ({
@@ -256,8 +277,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {/* Kill switch globale (§19.2) */}
           <button
             type="button"
+            disabled={pauseLoading}
             onClick={() =>
-              outreachPaused ? setOutreachPaused(false) : setKillSwitchOpen(true)
+              outreachPaused ? void setPause(false) : setKillSwitchOpen(true)
             }
             title={
               outreachPaused
@@ -280,10 +302,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
             role="alert"
             className="border-b border-red-200 bg-red-50 px-6 py-2.5 text-sm text-red-800"
           >
-            <span className="font-semibold">Outreach in pausa (demo):</span>{" "}
-            nuovi invii e follow-up sono bloccati in tutto il workspace. Le
-            fasi di acquisizione (discovery, scoring, demo) restano attive.
-            Stato solo locale — l&rsquo;effetto reale arriverà con le API.
+            <span className="font-semibold">Outreach in pausa:</span>{" "}
+            nuovi invii e follow-up sono bloccati in tutto il workspace (persistente).
+            Le fasi di acquisizione restano attive.
           </div>
         ) : null}
 
@@ -299,7 +320,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         confirmPhrase="PAUSA"
         confirmLabel="Pausa tutto"
         onConfirm={() => {
-          setOutreachPaused(true);
+          void setPause(true);
           setKillSwitchOpen(false);
         }}
         onCancel={() => setKillSwitchOpen(false)}

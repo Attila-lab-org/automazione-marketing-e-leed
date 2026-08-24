@@ -1,38 +1,42 @@
-# TEST REPORT — Phase 1 Foundation
+# TEST REPORT — Phase D Commercial Core
 
-**Data:** 2026-08-23 · **Branch:** main · **Commit head:** fix typecheck + policy default
+**Data:** 2026-08-24 · **Slice:** Phase D (uncommitted)
 
-## Ambiente di verifica
+## Ambiente
 
-Worktree pulito da `main`, `npm install` fresco. Supabase CLI/Docker/Postgres **non disponibili** nell'ambiente di esecuzione → validazione DB solo statica (parser PostgreSQL reale via pglast/libpg_query).
+Windows dev, `npm install` con `resend` + `svix`. Supabase remoto non eseguito in CI locale — test unitari + build Next.js.
 
 ## Risultati
 
 | Verifica | Comando | Esito |
 |---|---|---|
-| Unit test | `npx vitest run` | **74/74 verdi** (6 file: scoring 10, policy 22, send-guard 12, dedupe 12, templates 9, queue 9) |
-| Typecheck | `npx tsc --noEmit` | **Pulito su fresh clone** (dopo fix LayoutProps → tipizzazione esplicita) |
-| Build | `npm run build` | **Verde** — 13 route statiche (11 sezioni dashboard + redirect + not-found) |
-| Lint | `npx eslint src` | **0 errori**, 10 warning non bloccanti (parametri `_` negli stub live adapter) |
-| SQL statico | pglast (libpg_query) | 11 file SQL, ~450 statement parsati OK; corpi plpgsql validati |
-| Review indipendente | subagent reviewer | **6/6 controlli PASS**, nessun problema bloccante |
+| Unit test | `npm test` | **109/109 verdi** (10 file, incl. `phase-d.test.ts`) |
+| Typecheck | `npx tsc --noEmit` | **OK** |
+| Lint | `npm run lint` | **0 errori** (5 warning stub live pre-esistenti) |
+| Build | `npm run build` | **OK** — route dinamiche demo + 15 API |
 
-## Copertura invarianti (reviewer)
+## Phase D — copertura test aggiunta
 
-- 31/31 tabelle §16.1 presenti (+ `workspace_feature_flags` autorizzata da §16.3) — **PASS**
-- 17 enum SQL riconciliati 1:1 con tipi TS — **PASS**
-- Nessun secret, seed solo domini RFC 2606, mock mode di default su 4/4 provider — **PASS**
-- Policy snapshot immutabile (trigger SQL + deep-freeze TS), Send Guard unico gate (7 check §11.2), mai-invio-pre-qualifica, activity_log append-only — **PASS**
-- RLS ENABLE+FORCE su 32/32 tabelle, job idempotency/retry con SKIP LOCKED — **PASS**
+- Template matching: dentist → null, no fallback Restaurant Premium
+- Renderer registry: V1/V2 distinti, unknown → `UnsupportedRendererError`
+- V2 data: nessuna headline/recensione inventata; rating/review_count da lead
+- Email enrichment: mailto trovato; assenza email → NOT_FOUND
+- Send Guard: kill switch globale blocca send
+- Resend mock: idempotency key impedisce doppio send
+- Auth surface: `/demo/*` e email-preview pubblici
 
-## Fix applicati in chiusura fase
+## Non coperto in unit test (integrazione manuale)
 
-1. `src/app/layout.tsx`: rimosso tipo globale `LayoutProps` (richiedeva typegen) → typecheck pulito su fresh clone.
-2. `src/lib/domain/policy.ts`: `DEFAULT_WORKSPACE_POLICY` allineata a safe-by-default (§1, §6.2) e al seed — gate discovery/enrichment/analysis su MANUAL.
+- Job batch end-to-end su Supabase (`claim_job` RPC)
+- Email preview ImageResponse rendering visivo
+- Migration 0013 apply su DB remoto
+- Resend live webhook con firma Svix reale
 
-## Aperto per Phase 2 (non bloccante)
+## Comandi
 
-- **Test RLS/migrazioni su Postgres reale** (`supabase db reset` + integration test) — primo task di Phase 2; voce DoD §22.3 "RLS applicata e testata" coperta solo staticamente.
-- Verificare su DB reale: `FOR UPDATE OF j SKIP LOCKED` con LEFT JOIN, ON CONFLICT con indice parziale nel seed.
-- Bootstrap primo Owner via service_role (pattern documentato in OPERATIONS_RUNBOOK).
-- 10 warning eslint su stub live adapter (spariranno con l'implementazione live).
+```bash
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+```

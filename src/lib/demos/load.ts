@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { mergeDemoInstanceData } from '@/lib/templates/merge';
-import { resolveRendererKey } from '@/lib/templates/registry';
+import { mergeDemoInstanceDataV2 } from '@/lib/templates/merge-v2';
+import { resolveRendererKey, UnsupportedRendererError } from '@/lib/templates/registry';
 import type { DemoInstanceData } from '@/lib/templates/restaurant-premium';
+import { RESTAURANT_PREMIUM_V2_RENDERER_KEY, type DemoInstanceDataV2 } from '@/lib/templates/restaurant-premium-v2';
 import type { LeadRow } from '@/lib/types/database';
 
 export interface LoadedDemo {
@@ -22,7 +24,7 @@ export interface LoadedDemo {
     schema: unknown;
     defaultContent: unknown;
   };
-  data: DemoInstanceData;
+  data: DemoInstanceData | DemoInstanceDataV2;
   rendererKey: ReturnType<typeof resolveRendererKey>;
 }
 
@@ -81,17 +83,36 @@ async function hydrateDemo(
   }
 
   const leadRow = asLead(lead as Record<string, unknown>);
-  const data = mergeDemoInstanceData({
-    templateDefaults: version.default_content,
-    lead: {
-      name: leadRow.name,
-      phone: leadRow.phone,
-      email: leadRow.email,
-      address: leadRow.address,
-      city: leadRow.city,
-    },
-    overrides: stored,
-  });
+  const rawLead = lead as Record<string, unknown>;
+  const isV2 = version.layout_key === RESTAURANT_PREMIUM_V2_RENDERER_KEY;
+  const leadInput = {
+    name: leadRow.name,
+    phone: leadRow.phone,
+    email: leadRow.email,
+    address: leadRow.address,
+    city: leadRow.city,
+    rating: typeof rawLead.rating === 'number' ? rawLead.rating : null,
+    reviewCount: typeof rawLead.review_count === 'number' ? rawLead.review_count : null,
+  };
+  const data = isV2
+    ? mergeDemoInstanceDataV2({
+        templateDefaults: version.default_content,
+        lead: leadInput,
+        overrides: stored,
+      })
+    : mergeDemoInstanceData({
+        templateDefaults: version.default_content,
+        lead: leadInput,
+        overrides: stored,
+      });
+
+  let rendererKey;
+  try {
+    rendererKey = resolveRendererKey(version.layout_key);
+  } catch (err) {
+    if (err instanceof UnsupportedRendererError) throw err;
+    throw err;
+  }
 
   const tpl = template as { vertical?: string | null; category: string | null; key: string; name: string | null; id: string };
   return {
@@ -113,7 +134,7 @@ async function hydrateDemo(
       defaultContent: version.default_content,
     },
     data,
-    rendererKey: resolveRendererKey(version.layout_key),
+    rendererKey,
   };
 }
 

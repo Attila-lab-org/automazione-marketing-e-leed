@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { applyEditorPatch } from '@/lib/templates/merge';
+import { applyEditorPatchV2 } from '@/lib/templates/merge-v2';
 import type { DemoInstanceData } from '@/lib/templates/restaurant-premium';
+import {
+  RESTAURANT_PREMIUM_V2_RENDERER_KEY,
+  type DemoInstanceDataV2,
+} from '@/lib/templates/restaurant-premium-v2';
 import { loadDemoById } from './load';
 
 export async function updateDemoContent(
@@ -8,15 +13,28 @@ export async function updateDemoContent(
   workspaceId: string,
   demoId: string,
   patch: Partial<{
-    branding: Partial<DemoInstanceData['branding']>;
-    content: Partial<DemoInstanceData['content']>;
-    contact: Partial<DemoInstanceData['contact']>;
+    branding: Record<string, unknown>;
+    content: Record<string, unknown>;
+    contact: Record<string, unknown>;
+    signals: Record<string, unknown>;
   }>,
 ) {
   const current = await loadDemoById(admin, workspaceId, demoId);
   if (!current) throw new Error('Demo: non trovata');
 
-  const next = applyEditorPatch(current.data, patch);
+  const isV2 = current.rendererKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY;
+  const next = isV2
+    ? applyEditorPatchV2(current.data as DemoInstanceDataV2, {
+        branding: patch.branding as Partial<DemoInstanceDataV2['branding']>,
+        content: patch.content as Partial<DemoInstanceDataV2['content']>,
+        contact: patch.contact as Partial<DemoInstanceDataV2['contact']>,
+        signals: patch.signals as Partial<DemoInstanceDataV2['signals']>,
+      })
+    : applyEditorPatch(current.data as DemoInstanceData, {
+        branding: patch.branding as Partial<DemoInstanceData['branding']>,
+        content: patch.content as Partial<DemoInstanceData['content']>,
+        contact: patch.contact as Partial<DemoInstanceData['contact']>,
+      });
 
   const { data: site, error: siteError } = await admin
     .from('demo_sites')

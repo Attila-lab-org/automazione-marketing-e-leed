@@ -320,7 +320,7 @@ export function qualifyFromDiscovery(
   } else {
     reasons.push({
       code: 'website_present',
-      label: 'Sito presente — richiede analisi browser successiva',
+      label: 'Sito presente — pronto per preparazione commerciale',
       scoreDelta: 0,
       confidenceDelta: 15,
     });

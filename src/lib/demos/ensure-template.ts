@@ -42,28 +42,20 @@ export async function listPublishedTemplates(
 
   if (vError) throw new Error(`Template: lettura versioni fallita — ${vError.message}`);
 
-  const latestByTemplate = new Map<string, NonNullable<typeof versions>[number]>();
-  for (const v of versions ?? []) {
-    if (!latestByTemplate.has(v.template_id)) latestByTemplate.set(v.template_id, v);
-  }
-
   return templates.flatMap((t) => {
-    const v = latestByTemplate.get(t.id);
-    if (!v) return [];
+    const tVersions = (versions ?? []).filter((v) => v.template_id === t.id);
     const row = t as { vertical?: string | null; category: string | null };
-    return [
-      {
-        templateId: t.id,
-        templateKey: t.key,
-        templateName: t.name ?? t.key,
-        vertical: row.vertical ?? t.category,
-        versionId: v.id,
-        version: v.version,
-        layoutKey: v.layout_key,
-        defaultContent: v.default_content,
-        schema: v.schema,
-      },
-    ];
+    return tVersions.map((v) => ({
+      templateId: t.id,
+      templateKey: t.key,
+      templateName: t.name ?? t.key,
+      vertical: row.vertical ?? t.category,
+      versionId: v.id,
+      version: v.version,
+      layoutKey: v.layout_key,
+      defaultContent: v.default_content,
+      schema: v.schema,
+    }));
   });
 }
 
@@ -73,7 +65,9 @@ export async function ensureRestaurantPremium(
   workspaceId: string,
 ): Promise<PublishedTemplate> {
   const existing = (await listPublishedTemplates(admin, workspaceId)).find(
-    (t) => t.templateKey === RESTAURANT_PREMIUM_TEMPLATE_KEY,
+    (t) =>
+      t.templateKey === RESTAURANT_PREMIUM_TEMPLATE_KEY &&
+      t.layoutKey === RESTAURANT_PREMIUM_RENDERER_KEY,
   );
   if (existing) return existing;
 
