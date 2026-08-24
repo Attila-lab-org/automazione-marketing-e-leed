@@ -2,6 +2,7 @@
 
 import { Cormorant_Garamond, DM_Sans } from 'next/font/google';
 import type { DemoInstanceDataV3 } from '@/lib/templates/restaurant-premium-v3';
+import { resolveOwnerCtaHref, resolveRestaurantCtaHref } from '@/lib/templates/v3-cta';
 import { RESTAURANT_PREMIUM_V3_ASSETS, RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '@/lib/templates/v3-assets';
 import { wordmarkFromName } from '@/lib/templates/wordmark';
 import { RestaurantV3DigitalValue } from './RestaurantV3DigitalValue';
@@ -36,9 +37,15 @@ const sans = DM_Sans({
 export type RestaurantPremiumV3Props = {
   data: DemoInstanceDataV3;
   compact?: boolean;
+  /** Public demo slug — enables /demo/[slug]/interesse owner CTA. */
+  demoSlug?: string;
 };
 
-export default function RestaurantPremiumV3({ data, compact = false }: RestaurantPremiumV3Props) {
+export default function RestaurantPremiumV3({
+  data,
+  compact = false,
+  demoSlug,
+}: RestaurantPremiumV3Props) {
   useReveal();
   const scrolled = useHeaderScroll();
 
@@ -60,14 +67,16 @@ export default function RestaurantPremiumV3({ data, compact = false }: Restauran
     data.content.about?.trim() ||
     RESTAURANT_PREMIUM_V3_CONCEPT_COPY.description;
   const cta = data.content.cta?.trim() || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.cta;
-  const ctaHref =
-    data.content.cta_url?.trim() ||
-    (data.contact.phone ? `tel:${data.contact.phone}` : '#prenota');
+  const ctaHref = resolveRestaurantCtaHref({
+    ctaUrl: data.content.cta_url,
+    phone: data.contact.phone,
+  });
   const ownerCta =
     data.content.owner_cta_label?.trim() || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCta;
-  const ownerHref =
-    data.content.owner_cta_url?.trim() ||
-    `mailto:?subject=${encodeURIComponent(`Demo ${name}`)}`;
+  const ownerHref = resolveOwnerCtaHref({
+    demoSlug,
+    ownerCtaUrl: data.content.owner_cta_url,
+  });
 
   const tokenStyle = {
     ['--restaurant-primary' as string]: primary,

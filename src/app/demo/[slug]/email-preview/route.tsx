@@ -175,23 +175,35 @@ export async function GET(
                 color: '#fffdf9',
               }}
             >
+              <div
+                style={{
+                  display: 'flex',
+                  fontSize: 13,
+                  letterSpacing: 1,
+                  opacity: 0.55,
+                  marginBottom: 10,
+                  fontFamily: 'system-ui, sans-serif',
+                }}
+              >
+                Anteprima preparata per {name}
+              </div>
               {city ? (
-                <div style={{ fontSize: 16, letterSpacing: 5, textTransform: 'uppercase', opacity: 0.8 }}>
+                <div style={{ display: 'flex', fontSize: 16, letterSpacing: 5, textTransform: 'uppercase', opacity: 0.8 }}>
                   {city}
                 </div>
               ) : null}
-              <div style={{ fontSize: 20, opacity: 0.85, marginTop: 8 }}>{name}</div>
-              <div style={{ fontSize: 52, fontWeight: 600, lineHeight: 1.05, marginTop: 10, maxWidth: 920 }}>
+              <div style={{ display: 'flex', fontSize: 20, opacity: 0.85, marginTop: 8 }}>{name}</div>
+              <div style={{ display: 'flex', fontSize: 52, fontWeight: 600, lineHeight: 1.05, marginTop: 10, maxWidth: 920 }}>
                 {headline}
               </div>
               {sub ? (
-                <div style={{ fontSize: 22, opacity: 0.88, marginTop: 14, maxWidth: 780, lineHeight: 1.35 }}>
+                <div style={{ display: 'flex', fontSize: 22, opacity: 0.88, marginTop: 14, maxWidth: 780, lineHeight: 1.35 }}>
                   {sub}
                 </div>
               ) : null}
               {rating != null ? (
-                <div style={{ fontSize: 20, marginTop: 18 }}>
-                  ★ {Number(rating).toFixed(1)}
+                <div style={{ display: 'flex', fontSize: 20, marginTop: 18 }}>
+                  {Number(rating).toFixed(1)}
                   {reviews != null
                     ? ` · ${Number(reviews).toLocaleString('it-IT')} recensioni Google`
                     : ' su Google'}

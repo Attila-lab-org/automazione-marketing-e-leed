@@ -49,7 +49,7 @@ export default async function PublicDemoPage({ params }: PageProps) {
   return (
     <>
       <meta name="robots" content="noindex,nofollow" />
-      <DemoRenderer rendererKey={demo.rendererKey} data={demo.data} />
+      <DemoRenderer rendererKey={demo.rendererKey} data={demo.data} demoSlug={demo.slug} />
     </>
   );
 }

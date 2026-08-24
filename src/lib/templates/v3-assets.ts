@@ -1,7 +1,11 @@
-/** Public paths for Restaurant Premium V3 template-owned visual pack. */
+/** Template-owned visual pack for Restaurant Premium V3.
+ * See public/restaurant-premium-v3/assets/README.md for coherence rules.
+ * Lead-owned imagery (hero/gallery/logo) overrides these paths when present.
+ */
 
 export const V3_ASSET_BASE = '/restaurant-premium-v3/assets';
 
+/** Placeholder concept pack — mixed locations; replace with a coherent pack when curated. */
 export const RESTAURANT_PREMIUM_V3_ASSETS = {
   hero: `${V3_ASSET_BASE}/hero.jpg`,
   interior: `${V3_ASSET_BASE}/interior.jpg`,

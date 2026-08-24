@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import styles from './restaurant-v3.module.css';
 
 type Props = {
@@ -18,6 +19,10 @@ function stars(rating: number) {
   return '★'.repeat(full) + '☆'.repeat(5 - full);
 }
 
+function isLocalAsset(src: string) {
+  return src.startsWith('/');
+}
+
 export function RestaurantV3Hero({
   name,
   city,
@@ -33,8 +38,20 @@ export function RestaurantV3Hero({
   return (
     <section className={styles.hero} aria-label="Hero">
       <div className={styles.heroMedia}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={heroSrc} alt="" />
+        {isLocalAsset(heroSrc) ? (
+          <Image
+            src={heroSrc}
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className={styles.heroImg}
+            style={{ objectFit: 'cover' }}
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={heroSrc} alt="" className={styles.heroImg} />
+        )}
         <div className={styles.heroOverlay} />
       </div>
       <div className={styles.heroContent}>

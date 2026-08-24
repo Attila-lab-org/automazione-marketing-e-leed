@@ -6,6 +6,7 @@ type Props = {
   ownerCtaHref: string;
 };
 
+/** Owner-facing conversion only — never links to restaurant #contatti. */
 export function RestaurantV3OwnerCTA({ ownerCtaLabel, ownerCtaHref }: Props) {
   return (
     <section className={styles.owner} aria-label="Proposta commerciale" data-reveal>
@@ -18,9 +19,6 @@ export function RestaurantV3OwnerCTA({ ownerCtaLabel, ownerCtaHref }: Props) {
         <div className={styles.ownerActions}>
           <a className={`${styles.btn} ${styles.btnPrimary}`} href={ownerCtaHref}>
             {ownerCtaLabel || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCta}
-          </a>
-          <a className={`${styles.btn} ${styles.btnOnDarkGhost}`} href="#contatti">
-            Scopri di più
           </a>
         </div>
       </div>

@@ -11,6 +11,11 @@ import {
 import { prefillFromLeadV3, normalizeDemoDataV3 } from '../../src/lib/templates/merge-v3';
 import { RESTAURANT_PREMIUM_V3_ASSETS, RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '../../src/lib/templates/v3-assets';
 import { RESTAURANT_PREMIUM_V2_DEFAULTS } from '../../src/lib/templates/restaurant-premium-v2';
+import {
+  isMailtoWithoutRecipient,
+  resolveOwnerCtaHref,
+  resolveRestaurantCtaHref,
+} from '../../src/lib/templates/v3-cta';
 
 describe('Restaurant Premium V3', () => {
   it('V1 resta V1, V2 resta V2, V3 usa V3', () => {
@@ -87,5 +92,53 @@ describe('Restaurant Premium V3', () => {
       RESTAURANT_PREMIUM_V3_DEFAULTS.content.headline,
     );
     expect(RESTAURANT_PREMIUM_V3_DEFAULTS.branding.hero_image).toContain('restaurant-premium-v3');
+  });
+
+  it('CTA con booking URL usa URL', () => {
+    expect(
+      resolveRestaurantCtaHref({
+        ctaUrl: 'https://book.example/r1',
+        phone: '+3902123',
+      }),
+    ).toBe('https://book.example/r1');
+  });
+
+  it('CTA senza booking ma con phone usa tel:', () => {
+    expect(resolveRestaurantCtaHref({ ctaUrl: null, phone: '+39 02 123' })).toBe('tel:+39 02 123');
+  });
+
+  it('CTA senza entrambi va a #contatti (non #prenota)', () => {
+    expect(resolveRestaurantCtaHref({ ctaUrl: '', phone: null })).toBe('#contatti');
+    expect(resolveRestaurantCtaHref({})).toBe('#contatti');
+  });
+
+  it('owner CTA non produce mailto senza recipient', () => {
+    const withSlug = resolveOwnerCtaHref({ demoSlug: 'trattoria-duomo' });
+    expect(withSlug).toBe('/demo/trattoria-duomo/interesse');
+    expect(isMailtoWithoutRecipient(withSlug)).toBe(false);
+
+    const emptyMailto = resolveOwnerCtaHref({
+      demoSlug: 'x',
+      ownerCtaUrl: 'mailto:?subject=Demo',
+    });
+    expect(emptyMailto).toBe('/demo/x/interesse');
+    expect(isMailtoWithoutRecipient(emptyMailto)).toBe(false);
+
+    const explicit = resolveOwnerCtaHref({
+      ownerCtaUrl: 'https://sales.example/contact',
+    });
+    expect(explicit).toBe('https://sales.example/contact');
+
+    const validMailto = resolveOwnerCtaHref({
+      ownerCtaUrl: 'mailto:sales@example.com?subject=Demo',
+    });
+    expect(validMailto).toBe('mailto:sales@example.com?subject=Demo');
+    expect(isMailtoWithoutRecipient(validMailto)).toBe(false);
+  });
+
+  it('owner CTA senza slug e senza URL esplicita non è mailto dead-end', () => {
+    const href = resolveOwnerCtaHref({});
+    expect(href.startsWith('mailto:')).toBe(false);
+    expect(isMailtoWithoutRecipient(href)).toBe(false);
   });
 });

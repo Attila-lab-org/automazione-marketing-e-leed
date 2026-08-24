@@ -12,11 +12,16 @@ export function RestaurantV3OwnerRibbon({ businessName, ownerCtaHref, ownerCtaLa
     <aside className={styles.ribbon} aria-label="Anteprima dimostrativa">
       <p>
         <strong>
-          {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ribbonTitle} a {businessName}
+          {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ribbonTitle} · {businessName}
         </strong>
         <span className={styles.ribbonMuted}>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ribbonBody}</span>
       </p>
-      <a href={ownerCtaHref}>{ownerCtaLabel || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ribbonCta}</a>
+      <a href={ownerCtaHref}>
+        <span className={styles.ribbonCtaFull}>
+          {ownerCtaLabel || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ribbonCta}
+        </span>
+        <span className={styles.ribbonCtaShort}>Parliamone</span>
+      </a>
     </aside>
   );
 }

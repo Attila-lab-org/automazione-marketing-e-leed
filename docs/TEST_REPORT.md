@@ -1,6 +1,6 @@
-# TEST REPORT — Phase D.2 Final Reliability
+# TEST REPORT — Restaurant Premium V3 commercial polish
 
-**Data:** 2026-08-24 · **Slice:** Phase D.2 (defer / preview / SSRF DNS / cron docs)
+**Data:** 2026-08-24 · **Slice:** V3 final polish (mobile ATF, CTA/owner dead-ends, docs, QA)
 
 ## Ambiente
 
@@ -10,26 +10,20 @@ Windows dev. Supabase remoto non eseguito in CI locale — Vitest + Next.js buil
 
 | Verifica | Comando | Esito |
 |---|---|---|
-| Unit + integration | `npm test` | **127/127** (14 file, incl. `phase-d2-defer.test.ts`, `phase-d1-e2e.test.ts`) |
+| Unit + integration | `npm test` | **141/141** (16 file, incl. `restaurant-premium-v3`, `owner-interesse-route`) |
 | Typecheck | `npx tsc --noEmit` | **OK** |
 | Lint | `npm run lint` | **0 errori** (warning stub live pre-esistenti) |
 | Build | `npm run build` | **OK** |
 
-## Phase D.2 — copertura aggiunta
+## V3 polish — copertura aggiunta
 
-- `defer()` ripristina attempt budget; job resta `QUEUED` con `next_retry_at`, non `FAILED`
-- 50 SEND con cap 20/h → 30 deferred, 0 FAILED, reclaim dopo slot
-- Campagna 20:00 + window 09–18 UTC → `OUTSIDE_SEND_WINDOW` defer fino a mattina
-- Pause / daily limit → disposition `defer`
-- E2E MOCK path D.1 invariato (5 restaurant → follow-up stop)
-
-## Production cron
-
-Route corretta: **`/api/cron/jobs`** (`vercel.json` `*/5 * * * *`, Bearer `CRON_SECRET`).  
-`/api/jobs/run` = flush manuale admin only.
+- Restaurant CTA: booking URL → `tel:` → `#contatti` (mai `#prenota`)
+- Owner CTA: `/demo/[slug]/interesse` → `OWNER_CTA_CLICKED` + redirect `OWNER_CONTACT_URL` (no mailto senza recipient)
+- V1/V2 renderer keys immutati; V3 minimal data + email preview path
+- QA screenshots: `docs/qa/v3-*-first|full.png`, `v3-email-preview.png`, mobile 430 first
 
 ## Non coperto (go-live)
 
 - Inbound reply provider
 - Resend live + webhook Svix end-to-end
-- DNS rebinding race beyond resolve-before-fetch (mitigated; not full connect-time pin)
+- Pack fotografico V3 coerente (placeholder misto documentato)

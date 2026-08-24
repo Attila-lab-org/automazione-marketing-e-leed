@@ -14,6 +14,7 @@
   --space-section: clamp(3.5rem, 8vw, 7.5rem);
   --space-gutter: clamp(1.25rem, 4vw, 3.5rem);
   --radius-soft: 1.25rem;
+  position: relative;
   color: var(--restaurant-text);
   background: var(--restaurant-bg);
   font-family: var(--font-sans);
@@ -84,7 +85,7 @@
   border-color: color-mix(in srgb, #fff 35%, transparent);
 }
 
-/* Owner ribbon â€” discrete, outside â€œreal siteâ€ feeling */
+/* Owner ribbon — discrete, outside “real site” feeling */
 .ribbon {
   position: sticky;
   top: 0;
@@ -119,6 +120,14 @@
   white-space: nowrap;
 }
 
+.ribbonCtaShort {
+  display: none;
+}
+
+.ribbonCtaFull {
+  display: inline;
+}
+
 /* Header */
 .header {
   position: sticky;
@@ -132,7 +141,7 @@
   background: color-mix(in srgb, var(--restaurant-bg) 82%, transparent);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid transparent;
-  transition: border-color 200ms ease, background 200ms ease;
+  transition: border-color 200ms ease, background 200ms ease, color 200ms ease;
 }
 
 .headerScrolled {
@@ -167,6 +176,95 @@
   }
 }
 
+/* Mobile ATF: compact ribbon + transparent header over hero so photography shows in first ~200px */
+@media (max-width: 767px) {
+  .ribbon {
+    flex-wrap: nowrap;
+    min-height: 44px;
+    max-height: 56px;
+    padding: 0.45rem 1rem;
+    gap: 0.5rem;
+    font-size: 0.7rem;
+    line-height: 1.25;
+  }
+
+  .ribbon p {
+    margin: 0;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ribbonMuted {
+    display: none;
+  }
+
+  .ribbon a {
+    font-size: 0.68rem;
+    flex-shrink: 0;
+  }
+
+  .ribbonCtaFull {
+    display: none;
+  }
+
+  .ribbonCtaShort {
+    display: inline;
+  }
+
+  .header {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 44px;
+    z-index: 35;
+    padding: 0.55rem 1rem;
+    background: transparent;
+    backdrop-filter: none;
+    color: #fffdf9;
+    border-bottom: none;
+  }
+
+  .header .wordmark {
+    font-size: 1rem;
+    color: #fffdf9;
+  }
+
+  .header .logo {
+    height: 1.75rem;
+    filter: brightness(0) invert(1);
+  }
+
+  .header .btnPrimary {
+    min-height: 2.15rem;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.76rem;
+    max-width: 42vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .headerScrolled {
+    position: fixed;
+    top: 44px;
+    background: color-mix(in srgb, var(--restaurant-primary) 88%, #000);
+    color: #fffdf9;
+    border-bottom-color: transparent;
+    backdrop-filter: blur(10px);
+  }
+
+  .hero {
+    min-height: calc(100svh - 44px);
+  }
+
+  .heroContent {
+    padding-top: clamp(4.5rem, 16vw, 6rem);
+  }
+}
+
 /* Hero */
 .hero {
   position: relative;
@@ -182,7 +280,8 @@
   inset: 0;
 }
 
-.heroMedia img {
+.heroMedia img,
+.heroImg {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -274,13 +373,15 @@
     opacity: 1;
     transform: none;
   }
-  .heroMedia img {
+  .heroMedia img,
+  .heroImg {
     animation: heroDrift 18s ease-in-out infinite alternate;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .heroMedia img {
+  .heroMedia img,
+  .heroImg {
     animation: none;
     transform: scale(1.02);
   }

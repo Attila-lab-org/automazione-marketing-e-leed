@@ -16,5 +16,5 @@ export default function RestaurantV3QaPage() {
     RESTAURANT_PREMIUM_V3_DEFAULTS,
   );
 
-  return <RestaurantPremiumV3 data={data} />;
+  return <RestaurantPremiumV3 data={data} demoSlug="qa-v3" />;
 }

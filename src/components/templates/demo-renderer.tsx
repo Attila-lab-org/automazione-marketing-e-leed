@@ -16,11 +16,18 @@ export type DemoRendererProps = {
   rendererKey: KnownRendererKey;
   data: DemoInstanceData | DemoInstanceDataV2 | DemoInstanceDataV3;
   compact?: boolean;
+  demoSlug?: string;
 };
 
-export default function DemoRenderer({ rendererKey, data, compact }: DemoRendererProps) {
+export default function DemoRenderer({ rendererKey, data, compact, demoSlug }: DemoRendererProps) {
   if (rendererKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) {
-    return <RestaurantPremiumV3 data={data as DemoInstanceDataV3} compact={compact} />;
+    return (
+      <RestaurantPremiumV3
+        data={data as DemoInstanceDataV3}
+        compact={compact}
+        demoSlug={demoSlug}
+      />
+    );
   }
   if (rendererKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY) {
     return <RestaurantPremiumV2 data={data as DemoInstanceDataV2} compact={compact} />;

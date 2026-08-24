@@ -2,11 +2,11 @@
 
 Internal commercial automation tool for Google Places discovery → qualification → demo → email outreach.
 
-## Pipeline (Phase D.2)
+## Pipeline
 
-`Google Places → Qualification → Contact Enrichment → Campaign → Demo (V2) → Email Preview → Review → Sequence 0/3/7 → Resend (mock)`
+`Google Places → Qualification → Contact Enrichment → Campaign → Demo (Restaurant Premium V3) → Email Preview → Review → Sequence 0/3/7 → Resend (mock)`
 
-- **Public:** `/demo/[slug]` and `/demo/[slug]/email-preview` only
+- **Public:** `/demo/[slug]`, `/demo/[slug]/email-preview`, `/demo/[slug]/interesse` (owner CTA → `OWNER_CONTACT_URL`)
 - **Admin:** dashboard + `/api/*` (session cookie; allowlist or workspace OWNER/ADMIN)
 - **Production worker:** `GET|POST /api/cron/jobs` with `Authorization: Bearer $CRON_SECRET` (no admin cookie) — see `vercel.json` (`*/5 * * * *`)
 - **Dev/admin manual flush:** `POST /api/jobs/run` (admin session only; not the production cron)
@@ -43,10 +43,12 @@ QA visuale: `/demo/qa-v3` e `/demo/qa-v3/email-preview`.
 - `RESEND_PROVIDER_MODE=mock|live`, `RESEND_API_KEY` (live only — do not enable until authorized)
 - `CRON_SECRET` for **`/api/cron/jobs`**
 - `NEXT_PUBLIC_APP_URL` for demo/email preview URLs
+- `OWNER_CONTACT_URL` — http(s) destinazione commerciale dopo click owner CTA (`/demo/[slug]/interesse`)
 
 ## Docs
 
 - `docs/MASTER_SPEC.md` — full specification
-- `docs/CURRENT_STATE_AUDIT.md` — post Phase D.2 state
+- `docs/CURRENT_STATE_AUDIT.md` — post V3 commercial polish state
 - `docs/decisions/001-kimi-role.md` — Kimi not in Google pipeline
 - `docs/TEST_REPORT.md` — latest test results
+- `docs/qa/` — Restaurant Premium V3 visual screenshots
