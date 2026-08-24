@@ -8,6 +8,8 @@ import {
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 
 export const runtime = 'nodejs';
+/** Places + insert batch: evita timeout Vercel su ricerche più ampie. */
+export const maxDuration = 60;
 
 export const POST = withAdmin(async (request: Request) => {
   if (!isSupabaseConfigured(process.env) || !process.env.SUPABASE_SERVICE_ROLE_KEY) {

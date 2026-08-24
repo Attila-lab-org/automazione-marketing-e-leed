@@ -182,10 +182,20 @@ export class GooglePlacesLive implements GooglePlacesProvider {
         );
       }
 
-      const data = (await response.json()) as {
-        places?: PlacesApiPlace[];
-        nextPageToken?: string;
-      };
+      const raw = await response.text();
+      if (!raw.trim()) {
+        throw new Error(
+          'GooglePlacesLive.searchMinimal: risposta vuota da Places API (controlla GOOGLE_PLACES_API_KEY e Places API New abilitata)',
+        );
+      }
+      let data: { places?: PlacesApiPlace[]; nextPageToken?: string };
+      try {
+        data = JSON.parse(raw) as { places?: PlacesApiPlace[]; nextPageToken?: string };
+      } catch {
+        throw new Error(
+          `GooglePlacesLive.searchMinimal: JSON non valido — ${sanitizeErrorMessage(raw).slice(0, 200)}`,
+        );
+      }
 
       const batch = (data.places ?? [])
         .map((p) => mapPlaceToDiscovered(p, query))

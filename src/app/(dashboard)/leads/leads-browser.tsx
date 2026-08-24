@@ -13,11 +13,11 @@ import type { LeadRow, QualificationStatus } from "@/lib/types/database";
 import type { QualificationReason } from "@/lib/domain/discovery-qualification";
 
 type DiscoverResponse = {
-  found: number;
-  created: number;
-  duplicates: number;
+  found?: number;
+  created?: number;
+  duplicates?: number;
   qualified?: number;
-  message: string;
+  message?: string;
   error?: string;
   leads?: LeadRow[];
 };
@@ -294,7 +294,21 @@ export default function LeadsBrowser({
           maxResults,
         }),
       });
-      const data = (await res.json()) as DiscoverResponse;
+      const raw = await res.text();
+      let data: DiscoverResponse = {};
+      if (raw.trim()) {
+        try {
+          data = JSON.parse(raw) as DiscoverResponse;
+        } catch {
+          throw new Error(
+            res.ok
+              ? "Risposta discovery non valida"
+              : `Discovery fallita (HTTP ${res.status})`,
+          );
+        }
+      } else if (!res.ok) {
+        throw new Error(`Discovery fallita (HTTP ${res.status})`);
+      }
       if (!res.ok) throw new Error(data.error ?? "Discovery fallita");
       setResultBanner(data.message);
       setModalOpen(false);
