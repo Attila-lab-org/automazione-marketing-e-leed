@@ -14,10 +14,15 @@ import {
   RESTAURANT_PREMIUM_V2_RENDERER_KEY,
   type DemoInstanceDataV2,
 } from './restaurant-premium-v2';
+import {
+  RESTAURANT_PREMIUM_V3_RENDERER_KEY,
+  type DemoInstanceDataV3,
+} from './restaurant-premium-v3';
 
 export const KNOWN_RENDERER_KEYS = [
   RESTAURANT_PREMIUM_RENDERER_KEY,
   RESTAURANT_PREMIUM_V2_RENDERER_KEY,
+  RESTAURANT_PREMIUM_V3_RENDERER_KEY,
 ] as const;
 export type KnownRendererKey = (typeof KNOWN_RENDERER_KEYS)[number];
 
@@ -31,7 +36,8 @@ export class UnsupportedRendererError extends Error {
 export function resolveRendererKey(layoutKey: string | null | undefined): KnownRendererKey {
   if (layoutKey === RESTAURANT_PREMIUM_RENDERER_KEY) return RESTAURANT_PREMIUM_RENDERER_KEY;
   if (layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY) return RESTAURANT_PREMIUM_V2_RENDERER_KEY;
+  if (layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) return RESTAURANT_PREMIUM_V3_RENDERER_KEY;
   throw new UnsupportedRendererError(layoutKey);
 }
 
-export type AnyDemoInstanceData = DemoInstanceData | DemoInstanceDataV2;
+export type AnyDemoInstanceData = DemoInstanceData | DemoInstanceDataV2 | DemoInstanceDataV3;

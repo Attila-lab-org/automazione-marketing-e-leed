@@ -1,9 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { mergeDemoInstanceData } from '@/lib/templates/merge';
 import { mergeDemoInstanceDataV2 } from '@/lib/templates/merge-v2';
+import { mergeDemoInstanceDataV3 } from '@/lib/templates/merge-v3';
 import { resolveRendererKey, UnsupportedRendererError } from '@/lib/templates/registry';
 import type { DemoInstanceData } from '@/lib/templates/restaurant-premium';
-import { RESTAURANT_PREMIUM_V2_RENDERER_KEY, type DemoInstanceDataV2 } from '@/lib/templates/restaurant-premium-v2';
+import {
+  RESTAURANT_PREMIUM_V2_RENDERER_KEY,
+  type DemoInstanceDataV2,
+} from '@/lib/templates/restaurant-premium-v2';
+import {
+  RESTAURANT_PREMIUM_V3_RENDERER_KEY,
+  type DemoInstanceDataV3,
+} from '@/lib/templates/restaurant-premium-v3';
 import type { LeadRow } from '@/lib/types/database';
 
 export interface LoadedDemo {
@@ -24,7 +32,7 @@ export interface LoadedDemo {
     schema: unknown;
     defaultContent: unknown;
   };
-  data: DemoInstanceData | DemoInstanceDataV2;
+  data: DemoInstanceData | DemoInstanceDataV2 | DemoInstanceDataV3;
   rendererKey: ReturnType<typeof resolveRendererKey>;
 }
 
@@ -84,7 +92,7 @@ async function hydrateDemo(
 
   const leadRow = asLead(lead as Record<string, unknown>);
   const rawLead = lead as Record<string, unknown>;
-  const isV2 = version.layout_key === RESTAURANT_PREMIUM_V2_RENDERER_KEY;
+  const layoutKey = version.layout_key as string;
   const leadInput = {
     name: leadRow.name,
     phone: leadRow.phone,
@@ -94,17 +102,24 @@ async function hydrateDemo(
     rating: typeof rawLead.rating === 'number' ? rawLead.rating : null,
     reviewCount: typeof rawLead.review_count === 'number' ? rawLead.review_count : null,
   };
-  const data = isV2
-    ? mergeDemoInstanceDataV2({
-        templateDefaults: version.default_content,
-        lead: leadInput,
-        overrides: stored,
-      })
-    : mergeDemoInstanceData({
-        templateDefaults: version.default_content,
-        lead: leadInput,
-        overrides: stored,
-      });
+  const data =
+    layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY
+      ? mergeDemoInstanceDataV3({
+          templateDefaults: version.default_content,
+          lead: leadInput,
+          overrides: stored,
+        })
+      : layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY
+        ? mergeDemoInstanceDataV2({
+            templateDefaults: version.default_content,
+            lead: leadInput,
+            overrides: stored,
+          })
+        : mergeDemoInstanceData({
+            templateDefaults: version.default_content,
+            lead: leadInput,
+            overrides: stored,
+          });
 
   let rendererKey;
   try {

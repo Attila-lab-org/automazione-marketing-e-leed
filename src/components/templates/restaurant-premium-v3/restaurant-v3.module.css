@@ -1,0 +1,688 @@
+/* Restaurant Premium V3 â€” editorial hospitality tokens + layout */
+
+.rpv3 {
+  --restaurant-bg: #f6f1ea;
+  --restaurant-surface: #fffdf9;
+  --restaurant-text: #2c241e;
+  --restaurant-muted: #7a6f65;
+  --restaurant-primary: #2c241e;
+  --restaurant-accent: #b86a45;
+  --restaurant-border: color-mix(in srgb, var(--restaurant-text) 12%, transparent);
+  --restaurant-overlay: color-mix(in srgb, var(--restaurant-primary) 55%, transparent);
+  --font-display: var(--font-restaurant-display), Georgia, 'Times New Roman', serif;
+  --font-sans: var(--font-restaurant-sans), system-ui, sans-serif;
+  --space-section: clamp(3.5rem, 8vw, 7.5rem);
+  --space-gutter: clamp(1.25rem, 4vw, 3.5rem);
+  --radius-soft: 1.25rem;
+  color: var(--restaurant-text);
+  background: var(--restaurant-bg);
+  font-family: var(--font-sans);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.rpv3 * {
+  box-sizing: border-box;
+}
+
+.rpv3Compact {
+  min-height: auto;
+}
+
+.eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--restaurant-muted);
+  font-weight: 600;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.85rem;
+  padding: 0.85rem 1.55rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 180ms ease, background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btnPrimary {
+  background: var(--restaurant-accent);
+  color: #fffdf9;
+}
+
+.btnGhost {
+  background: transparent;
+  color: var(--restaurant-text);
+  border-color: var(--restaurant-border);
+}
+
+.btnOnDark {
+  background: #fffdf9;
+  color: var(--restaurant-primary);
+}
+
+.btnOnDarkGhost {
+  background: transparent;
+  color: #fffdf9;
+  border-color: color-mix(in srgb, #fff 35%, transparent);
+}
+
+/* Owner ribbon â€” discrete, outside â€œreal siteâ€ feeling */
+.ribbon {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  padding: 0.65rem var(--space-gutter);
+  background: color-mix(in srgb, var(--restaurant-primary) 92%, #000);
+  color: #f6f1ea;
+  font-size: 0.82rem;
+}
+
+.ribbon strong {
+  font-weight: 600;
+}
+
+.ribbonMuted {
+  opacity: 0.72;
+  margin-left: 0.35rem;
+  flex: 1 1 16rem;
+}
+
+.ribbon a {
+  color: #fff;
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, #fff 45%, transparent);
+  padding-bottom: 1px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Header */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem var(--space-gutter);
+  background: color-mix(in srgb, var(--restaurant-bg) 82%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid transparent;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+
+.headerScrolled {
+  border-bottom-color: var(--restaurant-border);
+  background: color-mix(in srgb, var(--restaurant-surface) 90%, transparent);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.logo {
+  height: 2.25rem;
+  width: auto;
+  max-width: 10rem;
+  object-fit: contain;
+}
+
+.nav {
+  display: none;
+  gap: 1.75rem;
+  color: var(--restaurant-muted);
+  font-size: 0.88rem;
+}
+
+@media (min-width: 768px) {
+  .nav {
+    display: flex;
+  }
+}
+
+/* Hero */
+.hero {
+  position: relative;
+  min-height: min(92vh, 58rem);
+  display: grid;
+  align-items: end;
+  overflow: hidden;
+  color: #fffdf9;
+}
+
+.heroMedia {
+  position: absolute;
+  inset: 0;
+}
+
+.heroMedia img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.04);
+  animation: heroDrift 18s ease-in-out infinite alternate;
+}
+
+@keyframes heroDrift {
+  from {
+    transform: scale(1.04) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.1) translate3d(-1.2%, -0.8%, 0);
+  }
+}
+
+.heroOverlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--restaurant-primary) 25%, transparent) 0%, var(--restaurant-overlay) 72%, var(--restaurant-primary) 100%),
+    radial-gradient(ellipse at 20% 20%, color-mix(in srgb, var(--restaurant-accent) 22%, transparent), transparent 55%);
+}
+
+.heroContent {
+  position: relative;
+  z-index: 1;
+  padding: clamp(4rem, 12vh, 7rem) var(--space-gutter) clamp(2.5rem, 6vh, 4rem);
+  max-width: 52rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.heroTitle {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-size: clamp(2.6rem, 7vw, 5.6rem);
+  max-width: 14ch;
+}
+
+.heroSub {
+  font-size: clamp(1.02rem, 2.1vw, 1.28rem);
+  max-width: 36rem;
+  opacity: 0.9;
+  line-height: 1.5;
+}
+
+.heroMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+  font-size: 0.95rem;
+  opacity: 0.92;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+/* Sections common */
+.section {
+  padding: var(--space-section) var(--space-gutter);
+}
+
+.sectionNarrow {
+  max-width: 72rem;
+  margin-inline: auto;
+}
+
+.reveal {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .revealPending {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 700ms ease, transform 700ms ease;
+  }
+  .revealVisible {
+    opacity: 1;
+    transform: none;
+  }
+  .heroMedia img {
+    animation: heroDrift 18s ease-in-out infinite alternate;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroMedia img {
+    animation: none;
+    transform: scale(1.02);
+  }
+}
+
+/* Trust */
+.trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2.5rem;
+  align-items: baseline;
+  justify-content: space-between;
+  border-block: 1px solid var(--restaurant-border);
+  background: var(--restaurant-surface);
+}
+
+.trustScore {
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  line-height: 1;
+}
+
+.trustStars {
+  letter-spacing: 0.12em;
+  color: var(--restaurant-accent);
+  font-size: 1.1rem;
+}
+
+/* Intro editorial */
+.intro {
+  display: grid;
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: center;
+}
+
+@media (min-width: 960px) {
+  .intro {
+    grid-template-columns: 1.05fr 0.95fr;
+  }
+}
+
+.introCopy h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-size: clamp(2.1rem, 4.5vw, 3.6rem);
+  margin: 0.75rem 0 1.25rem;
+}
+
+.introCopy p {
+  color: var(--restaurant-muted);
+  font-size: clamp(1rem, 1.6vw, 1.15rem);
+  max-width: 36rem;
+}
+
+.introFigure {
+  position: relative;
+  border-radius: var(--radius-soft);
+  overflow: hidden;
+  aspect-ratio: 4 / 5;
+  background: var(--restaurant-primary);
+}
+
+.introFigure img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Experience asymmetric */
+.experienceGrid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 900px) {
+  .experienceGrid {
+    grid-template-columns: 1.2fr 1fr 1fr;
+    grid-template-rows: auto auto;
+  }
+  .experienceFeatured {
+    grid-row: span 2;
+    min-height: 28rem;
+  }
+}
+
+.experienceCard {
+  position: relative;
+  border-radius: var(--radius-soft);
+  overflow: hidden;
+  background: var(--restaurant-surface);
+  border: 1px solid var(--restaurant-border);
+  min-height: 14rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 1.5rem;
+}
+
+.experienceFeatured {
+  color: #fffdf9;
+  padding: 2rem;
+}
+
+.experienceFeatured img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.experienceFeatured::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 20%, color-mix(in srgb, var(--restaurant-primary) 78%, transparent));
+}
+
+.experienceFeatured > * {
+  position: relative;
+  z-index: 1;
+}
+
+.experienceIndex {
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  line-height: 1;
+  color: var(--restaurant-accent);
+  margin-bottom: 0.75rem;
+}
+
+.experienceCard h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
+  margin: 0 0 0.5rem;
+}
+
+.experienceCard p {
+  margin: 0;
+  color: var(--restaurant-muted);
+  font-size: 0.98rem;
+}
+
+.experienceFeatured p {
+  color: color-mix(in srgb, #fff 82%, transparent);
+}
+
+/* Split story */
+.story {
+  display: grid;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (min-width: 960px) {
+  .story {
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 3rem;
+  }
+  .storySticky {
+    position: sticky;
+    top: 6rem;
+  }
+}
+
+.storyMedia {
+  border-radius: var(--radius-soft);
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+}
+
+.storyMedia img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.storyCopy h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  margin: 0.6rem 0 1rem;
+}
+
+.storyCopy p {
+  color: var(--restaurant-muted);
+  font-size: 1.05rem;
+}
+
+/* Gallery asymmetric */
+.gallery {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (min-width: 768px) {
+  .gallery {
+    grid-template-columns: 1.4fr 1fr 1fr;
+    grid-auto-rows: minmax(10rem, 18vw);
+  }
+  .galleryItem:nth-child(1) {
+    grid-row: span 2;
+  }
+  .galleryItem:nth-child(4) {
+    grid-column: span 2;
+  }
+}
+
+.galleryItem {
+  border-radius: calc(var(--radius-soft) - 0.15rem);
+  overflow: hidden;
+  background: var(--restaurant-primary);
+  min-height: 10rem;
+}
+
+.galleryItem img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 700ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .galleryItem:hover img {
+    transform: scale(1.04);
+  }
+}
+
+/* Digital value */
+.valueBand {
+  background: var(--restaurant-primary);
+  color: #f6f1ea;
+}
+
+.valueInner {
+  display: grid;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+@media (min-width: 900px) {
+  .valueInner {
+    grid-template-columns: 1.4fr auto;
+  }
+}
+
+.valueInner h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-size: clamp(2rem, 4vw, 3rem);
+  margin: 0.5rem 0 0.75rem;
+}
+
+.valueInner p {
+  opacity: 0.82;
+  max-width: 36rem;
+}
+
+/* Location */
+.location {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (min-width: 800px) {
+  .location {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.locationCard {
+  background: var(--restaurant-surface);
+  border: 1px solid var(--restaurant-border);
+  border-radius: var(--radius-soft);
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+}
+
+.locationCard h3 {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  margin: 0 0 1rem;
+}
+
+.locationCard dl {
+  margin: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.locationCard dt {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--restaurant-muted);
+}
+
+.locationCard dd {
+  margin: 0.2rem 0 0;
+  font-size: 1.05rem;
+}
+
+.locationCard a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid var(--restaurant-border);
+}
+
+/* Final restaurant CTA */
+.finalCta {
+  position: relative;
+  min-height: min(62vh, 32rem);
+  display: grid;
+  place-items: end start;
+  overflow: hidden;
+  color: #fffdf9;
+}
+
+.finalCta img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.finalCtaOverlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--restaurant-primary) 82%, transparent), color-mix(in srgb, var(--restaurant-primary) 35%, transparent));
+}
+
+.finalCtaContent {
+  position: relative;
+  z-index: 1;
+  padding: var(--space-section) var(--space-gutter);
+  max-width: 36rem;
+}
+
+.finalCtaContent h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-size: clamp(2.2rem, 5vw, 3.8rem);
+  margin: 0.5rem 0 1rem;
+}
+
+/* Owner commercial surface */
+.owner {
+  padding: var(--space-section) var(--space-gutter);
+  background: #1a1613;
+  color: #f3ebe3;
+}
+
+.ownerInner {
+  max-width: 48rem;
+  margin: 0 auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+}
+
+.ownerInner h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+  margin: 0;
+}
+
+.ownerInner p {
+  opacity: 0.78;
+  max-width: 38rem;
+  margin: 0;
+}
+
+.ownerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+/* Footer */
+.footer {
+  padding: 2rem var(--space-gutter) 2.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--restaurant-border);
+  color: var(--restaurant-muted);
+  font-size: 0.85rem;
+}

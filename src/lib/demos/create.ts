@@ -1,12 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateShortId, makePublicSlug } from '@/lib/demos/slug';
 import { ensureRestaurantPremiumV2 } from '@/lib/demos/ensure-template-v2';
+import { ensureRestaurantPremiumV3 } from '@/lib/demos/ensure-template-v3';
 import { listPublishedTemplates } from '@/lib/demos/ensure-template';
 import { pickCompatibleTemplateKey } from '@/lib/templates/match';
 import { prefillFromLead, normalizeDemoData } from '@/lib/templates/merge';
 import { prefillFromLeadV2, normalizeDemoDataV2 } from '@/lib/templates/merge-v2';
+import { prefillFromLeadV3, normalizeDemoDataV3 } from '@/lib/templates/merge-v3';
 import { RESTAURANT_PREMIUM_RENDERER_KEY } from '@/lib/templates/restaurant-premium';
 import { RESTAURANT_PREMIUM_V2_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v2';
+import { RESTAURANT_PREMIUM_V3_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v3';
 import type { LeadRow } from '@/lib/types/database';
 
 export interface CreateDemoInput {
@@ -33,8 +36,36 @@ function publicPath(slug: string): string {
   return `/demo/${slug}`;
 }
 
-function isV2Layout(layoutKey: string): boolean {
-  return layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY;
+function normalizeForLayout(layoutKey: string, raw: unknown, defaults: unknown) {
+  if (layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) {
+    return normalizeDemoDataV3(raw, normalizeDemoDataV3(defaults));
+  }
+  if (layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY) {
+    return normalizeDemoDataV2(raw, normalizeDemoDataV2(defaults));
+  }
+  return normalizeDemoData(raw, normalizeDemoData(defaults));
+}
+
+function prefillForLayout(
+  layoutKey: string,
+  leadInput: {
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+    city: string | null;
+    rating: number | null;
+    reviewCount: number | null;
+  },
+  defaults: unknown,
+) {
+  if (layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) {
+    return prefillFromLeadV3(leadInput, normalizeDemoDataV3(defaults));
+  }
+  if (layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY) {
+    return prefillFromLeadV2(leadInput, normalizeDemoDataV2(defaults));
+  }
+  return prefillFromLead(leadInput, normalizeDemoData(defaults));
 }
 
 export async function createDemoFromLead(
@@ -58,6 +89,7 @@ export async function createDemoFromLead(
   }
 
   await ensureRestaurantPremiumV2(admin, workspaceId);
+  await ensureRestaurantPremiumV3(admin, workspaceId);
   const published = await listPublishedTemplates(admin, workspaceId);
 
   let template = input.layoutKey
@@ -77,6 +109,7 @@ export async function createDemoFromLead(
       throw new Error('Demo: nessun template compatibile col verticale del lead');
     }
     template =
+      published.find((t) => t.templateKey === key && t.layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) ??
       published.find((t) => t.templateKey === key && t.layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY) ??
       published.find((t) => t.templateKey === key && t.layoutKey === RESTAURANT_PREMIUM_RENDERER_KEY) ??
       published.find((t) => t.templateKey === key);
@@ -102,9 +135,7 @@ export async function createDemoFromLead(
       .select('data')
       .eq('id', existing.current_version_id)
       .maybeSingle();
-    const data = isV2Layout(template.layoutKey)
-      ? normalizeDemoDataV2(versionRow?.data, normalizeDemoDataV2(template.defaultContent))
-      : normalizeDemoData(versionRow?.data, normalizeDemoData(template.defaultContent));
+    const data = normalizeForLayout(template.layoutKey, versionRow?.data, template.defaultContent);
     return {
       id: existing.id,
       slug: existing.slug,
@@ -130,9 +161,7 @@ export async function createDemoFromLead(
     reviewCount: typedLead.review_count,
   };
 
-  const data = isV2Layout(template.layoutKey)
-    ? prefillFromLeadV2(leadInput, normalizeDemoDataV2(template.defaultContent))
-    : prefillFromLead(leadInput, normalizeDemoData(template.defaultContent));
+  const data = prefillForLayout(template.layoutKey, leadInput, template.defaultContent);
 
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < 4; attempt += 1) {

@@ -4,8 +4,10 @@ import { enrichLeadEmail } from '@/lib/enrichment/enrich-lead-email';
 import { enrichLeadFromGoogleIfNeeded } from '@/lib/leads/google-enrich';
 import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
 import { RESTAURANT_PREMIUM_V2_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v2';
+import { RESTAURANT_PREMIUM_V3_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v3';
 import { pickCompatibleTemplateKey } from '@/lib/templates/match';
 import { listPublishedTemplates } from '@/lib/demos/ensure-template';
+import { ensureRestaurantPremiumV3 } from '@/lib/demos/ensure-template-v3';
 import { buildVisualEmailDraft, buildFollowupDraft } from '@/lib/messaging/visual-email';
 import { buildSendGuardContext } from '@/lib/send-guard/build-context';
 import { runSendGuard } from '@/lib/send-guard';
@@ -132,6 +134,7 @@ async function handleDemoGeneration(
 ) {
   const leadId = String(job.inputSnapshot.leadId ?? '');
   const { data: lead } = await admin.from('leads').select('category').eq('id', leadId).single();
+  await ensureRestaurantPremiumV3(admin, job.workspaceId);
   const published = await listPublishedTemplates(admin, job.workspaceId);
   const matched = pickCompatibleTemplateKey(
     lead?.category,
@@ -148,12 +151,19 @@ async function handleDemoGeneration(
     return { skipped: true, reason: 'TEMPLATE_NOT_COMPATIBLE' };
   }
 
+  const v3 = published.find(
+    (t) => t.templateKey === matched && t.layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY,
+  );
   const v2 = published.find(
     (t) => t.templateKey === matched && t.layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY,
   );
-  const chosen = v2 ?? published.find((t) => t.templateKey === matched);
+  const chosen = v3 ?? v2 ?? published.find((t) => t.templateKey === matched);
 
-  if (!chosen || chosen.layoutKey !== RESTAURANT_PREMIUM_V2_RENDERER_KEY) {
+  if (
+    !chosen ||
+    (chosen.layoutKey !== RESTAURANT_PREMIUM_V3_RENDERER_KEY &&
+      chosen.layoutKey !== RESTAURANT_PREMIUM_V2_RENDERER_KEY)
+  ) {
     await updateCampaignLead(
       admin,
       job.entityId,
@@ -165,7 +175,7 @@ async function handleDemoGeneration(
 
   const demo = await createDemoFromLead(admin, job.workspaceId, {
     leadId,
-    layoutKey: RESTAURANT_PREMIUM_V2_RENDERER_KEY,
+    layoutKey: chosen.layoutKey,
     templateKey: matched,
   });
 

@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { RESTAURANT_PREMIUM_V2_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v2';
+import { RESTAURANT_PREMIUM_V3_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v3';
 import { pickCompatibleTemplateKey } from '@/lib/templates/match';
 import { listPublishedTemplates } from '@/lib/demos/ensure-template';
+import { ensureRestaurantPremiumV3 } from '@/lib/demos/ensure-template-v3';
 import type { PolicyMode } from '@/lib/types/database';
 
 export interface CreateCampaignInput {
@@ -32,8 +33,9 @@ export async function createCampaignWithLeads(
 ) {
   if (!input.leadIds.length) throw new Error('Seleziona almeno un lead');
 
+  await ensureRestaurantPremiumV3(admin, workspaceId);
   const published = await listPublishedTemplates(admin, workspaceId);
-  const layoutKey = input.landingLayoutKey ?? RESTAURANT_PREMIUM_V2_RENDERER_KEY;
+  const layoutKey = input.landingLayoutKey ?? RESTAURANT_PREMIUM_V3_RENDERER_KEY;
 
   const { data: templateVersion, error: tvError } = await admin
     .from('website_template_versions')

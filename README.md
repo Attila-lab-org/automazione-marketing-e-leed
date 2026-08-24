@@ -20,7 +20,10 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Apply migrations **0001–0014** on Supabase (0014 = V2 concept defaults + admin membership bootstrap).
+Apply migrations **0001–0015** on Supabase (0015 = Restaurant Premium V3).
+
+Restaurant demos nuove usano **Restaurant Premium V3** (`restaurant-premium-v3`); V1/V2 restano immutati.
+QA visuale: `/demo/qa-v3` e `/demo/qa-v3/email-preview`.
 
 ## Scripts
 
