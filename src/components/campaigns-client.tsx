@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import EmptyState from "@/components/empty-state";
 
@@ -11,6 +12,7 @@ export default function CampaignsClient() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [devOpen, setDevOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/campaigns")
@@ -52,34 +54,55 @@ export default function CampaignsClient() {
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-stone-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-stone-800">Crea campagna bulk</h2>
-        <p className="mt-1 text-sm text-stone-500">
-          Seleziona lead (UUID separati da virgola). La preparazione esegue enrichment, demo V2 e bozza email in coda job.
+        <p className="text-sm text-stone-600">
+          Seleziona i lead dalla tabella{" "}
+          <Link href="/leads" className="font-medium text-amber-700 hover:underline">
+            Lead
+          </Link>{" "}
+          e usa l&apos;azione bulk «Crea campagna». Qui trovi l&apos;elenco delle campagne
+          operative.
         </p>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <input
-            className="rounded-lg border border-stone-200 px-3 py-2 text-sm"
-            placeholder="Nome campagna"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <textarea
-            className="rounded-lg border border-stone-200 px-3 py-2 text-sm md:col-span-2"
-            placeholder="Lead IDs (uuid1, uuid2, …)"
-            rows={3}
-            value={leadIds}
-            onChange={(e) => setLeadIds(e.target.value)}
-          />
-        </div>
+
         <button
           type="button"
-          disabled={busy}
-          onClick={createCampaign}
-          className="mt-3 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
+          onClick={() => setDevOpen((v) => !v)}
+          className="mt-4 text-xs font-medium text-stone-400 hover:text-stone-600"
         >
-          {busy ? "Creazione…" : "Crea e prepara campagna"}
+          {devOpen ? "▾" : "▸"} Dev: UUIDs
         </button>
-        {message ? <p className="mt-2 text-sm text-stone-600">{message}</p> : null}
+
+        {devOpen ? (
+          <div className="mt-3 rounded-lg border border-dashed border-stone-200 bg-stone-50 p-4">
+            <h2 className="text-sm font-semibold text-stone-800">Crea campagna (UUID)</h2>
+            <p className="mt-1 text-xs text-stone-500">
+              Solo per debug: incolla lead UUID separati da virgola.
+            </p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <input
+                className="rounded-lg border border-stone-200 px-3 py-2 text-sm"
+                placeholder="Nome campagna"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <textarea
+                className="rounded-lg border border-stone-200 px-3 py-2 text-sm md:col-span-2"
+                placeholder="Lead IDs (uuid1, uuid2, …)"
+                rows={3}
+                value={leadIds}
+                onChange={(e) => setLeadIds(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={createCampaign}
+              className="mt-3 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
+            >
+              {busy ? "Creazione…" : "Crea e prepara campagna"}
+            </button>
+            {message ? <p className="mt-2 text-sm text-stone-600">{message}</p> : null}
+          </div>
+        ) : null}
       </section>
 
       {campaigns.length ? (
@@ -88,14 +111,30 @@ export default function CampaignsClient() {
             {campaigns.map((c) => (
               <li key={c.id} className="flex items-center justify-between px-5 py-4 text-sm">
                 <div>
-                  <p className="font-semibold text-stone-900">{c.name}</p>
+                  <Link
+                    href={`/campaigns/${c.id}`}
+                    className="font-semibold text-stone-900 hover:text-amber-800 hover:underline"
+                  >
+                    {c.name}
+                  </Link>
                   <p className="text-xs text-stone-500">
                     {c.mode} · {c.status} · {new Date(c.created_at).toLocaleString("it-IT")}
                   </p>
                 </div>
-                <a href="/review-queue" className="text-xs font-semibold text-amber-700 hover:underline">
-                  Review →
-                </a>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href={`/campaigns/${c.id}`}
+                    className="text-xs font-semibold text-stone-600 hover:underline"
+                  >
+                    Dettaglio
+                  </Link>
+                  <Link
+                    href="/review-queue"
+                    className="text-xs font-semibold text-amber-700 hover:underline"
+                  >
+                    Review →
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>

@@ -1,0 +1,40 @@
+import { NextResponse } from 'next/server';
+import { runJobBatch } from '@/lib/jobs/handlers';
+import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { ensureDefaultWorkspace } from '@/lib/workspace';
+
+export const runtime = 'nodejs';
+
+/**
+ * System/cron worker — NO admin cookie, NO Origin browser.
+ * Auth: Authorization: Bearer $CRON_SECRET only.
+ */
+function authorized(request: Request): boolean {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return false;
+  const header = request.headers.get('authorization');
+  return header === `Bearer ${cronSecret}`;
+}
+
+async function run(request: Request) {
+  if (!authorized(request)) {
+    return NextResponse.json({ error: 'Unauthorized cron' }, { status: 401 });
+  }
+  if (!isSupabaseConfigured(process.env) || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ error: 'Supabase non configurato' }, { status: 503 });
+  }
+  const body = (await request.json().catch(() => ({}))) as { limit?: number; workerId?: string };
+  const admin = createAdminSupabaseClient(process.env);
+  const workspace = await ensureDefaultWorkspace(admin);
+  const results = await runJobBatch(
+    admin,
+    workspace.id,
+    body.workerId ?? `cron-${Date.now()}`,
+    body.limit ?? 20,
+    process.env,
+  );
+  return NextResponse.json({ results, processed: results.length });
+}
+
+export const GET = run;
+export const POST = run;

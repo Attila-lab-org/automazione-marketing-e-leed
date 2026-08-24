@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { loadDemoBySlug } from '@/lib/demos/load';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { RESTAURANT_PREMIUM_V2_DEFAULTS } from '@/lib/templates/restaurant-premium-v2';
 
 export const runtime = 'edge';
 
@@ -18,19 +19,32 @@ export async function GET(
   if (!demo) return new Response('Not found', { status: 404 });
 
   const data = demo.data as {
-    branding?: { business_name?: string | null; accent_color?: string | null };
-    content?: { headline?: string | null; cta?: string | null };
+    branding?: {
+      business_name?: string | null;
+      accent_color?: string | null;
+      primary_color?: string | null;
+      hero_image?: string | null;
+      logo_url?: string | null;
+    };
+    content?: {
+      headline?: string | null;
+      subheadline?: string | null;
+      cta?: string | null;
+    };
     signals?: { rating?: number | null; review_count?: number | null };
     contact?: { city?: string | null };
   };
 
   const name = data.branding?.business_name ?? 'Attività';
-  const headline = data.content?.headline ?? name;
+  const headline = data.content?.headline ?? RESTAURANT_PREMIUM_V2_DEFAULTS.content.headline ?? name;
+  const sub = data.content?.subheadline ?? RESTAURANT_PREMIUM_V2_DEFAULTS.content.subheadline ?? '';
   const cta = data.content?.cta ?? 'Vedi anteprima completa';
   const accent = data.branding?.accent_color ?? '#d97706';
+  const primary = data.branding?.primary_color ?? '#1c1917';
   const city = data.contact?.city ?? '';
   const rating = data.signals?.rating;
   const reviews = data.signals?.review_count;
+  const wordmark = name.toUpperCase();
 
   return new ImageResponse(
     (
@@ -39,40 +53,79 @@ export async function GET(
           width: '100%',
           height: '100%',
           display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          background: 'linear-gradient(135deg, #1c1917 0%, #44403c 100%)',
+          background: primary,
           color: 'white',
-          padding: 48,
-          fontFamily: 'sans-serif',
+          fontFamily: 'Georgia, serif',
+          position: 'relative',
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {city ? (
-            <div style={{ fontSize: 18, letterSpacing: 4, opacity: 0.7, textTransform: 'uppercase' }}>
-              {city}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: `linear-gradient(135deg, ${primary} 0%, #44403c 55%, ${accent} 100%)`,
+            display: 'flex',
+          }}
+        />
+        <div
+          style={{
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            width: '100%',
+            height: '100%',
+            padding: 48,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 18, letterSpacing: 6, fontWeight: 700 }}>{wordmark}</div>
+            <div
+              style={{
+                fontSize: 14,
+                opacity: 0.7,
+                border: '1px solid rgba(255,255,255,0.35)',
+                padding: '8px 14px',
+                borderRadius: 999,
+              }}
+            >
+              Concept demo
             </div>
-          ) : null}
-          <div style={{ fontSize: 56, fontWeight: 700, lineHeight: 1.1 }}>{headline}</div>
-          {rating != null && reviews != null ? (
-            <div style={{ fontSize: 24, opacity: 0.85 }}>
-              ★ {rating.toFixed(1)} · {reviews.toLocaleString('it-IT')} recensioni Google
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 900 }}>
+            {city ? (
+              <div style={{ fontSize: 20, letterSpacing: 4, textTransform: 'uppercase', opacity: 0.75 }}>
+                {city}
+              </div>
+            ) : null}
+            <div style={{ fontSize: 58, fontWeight: 700, lineHeight: 1.05 }}>{headline}</div>
+            {sub ? <div style={{ fontSize: 24, opacity: 0.85, lineHeight: 1.35 }}>{sub}</div> : null}
+            {rating != null && reviews != null ? (
+              <div style={{ fontSize: 22, opacity: 0.9 }}>
+                ★ {rating.toFixed(1)} · {reviews.toLocaleString('it-IT')} recensioni Google
+              </div>
+            ) : null}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ width: 120, height: 72, borderRadius: 12, background: 'rgba(255,255,255,0.15)' }} />
+              <div style={{ width: 120, height: 72, borderRadius: 12, background: 'rgba(255,255,255,0.1)' }} />
+              <div style={{ width: 120, height: 72, borderRadius: 12, background: 'rgba(255,255,255,0.08)' }} />
             </div>
-          ) : null}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: 22, opacity: 0.8 }}>Anteprima / concept dimostrativo</div>
-          <div
-            style={{
-              background: accent,
-              color: 'white',
-              padding: '16px 28px',
-              borderRadius: 999,
-              fontSize: 24,
-              fontWeight: 600,
-            }}
-          >
-            {cta}
+            <div
+              style={{
+                background: accent,
+                color: 'white',
+                padding: '18px 32px',
+                borderRadius: 999,
+                fontSize: 24,
+                fontWeight: 700,
+              }}
+            >
+              {cta}
+            </div>
           </div>
         </div>
       </div>

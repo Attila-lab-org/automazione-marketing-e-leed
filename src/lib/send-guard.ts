@@ -36,6 +36,8 @@ export interface SendGuardContext {
     status: CampaignStatus;
     /** rate limit campaign/workspace disponibile (§11.2, §18). */
     rateLimitAvailable: boolean;
+    /** Finestra oraria campagna (default true se non configurata). */
+    withinSendWindow?: boolean;
     /** Kill switch globale §19.2: OUTREACH_PAUSED_ALL. */
     outreachPausedAll: boolean;
   };
@@ -106,6 +108,9 @@ function checkCampaign(ctx: SendGuardContext): SendGuardCheck {
   }
   if (ctx.campaign.status !== 'ACTIVE') {
     reasons.push(`campaign ${ctx.campaign.status}: richiesta ACTIVE`);
+  }
+  if (ctx.campaign.withinSendWindow === false) {
+    reasons.push('fuori dalla send window della campagna (§18)');
   }
   if (!ctx.campaign.rateLimitAvailable) {
     reasons.push('rate limit campaign/workspace esaurito (§18)');

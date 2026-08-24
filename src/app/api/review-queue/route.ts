@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { withAdmin } from '@/lib/api/with-admin';
-import { listReviewQueue, updateCampaignLeadStatus, approveCampaignLeads } from '@/lib/campaigns/review-queue';
+import {
+  listReviewQueue,
+  updateCampaignLeadStatus,
+  approveCampaignLeads,
+  updateDraftContent,
+} from '@/lib/campaigns/review-queue';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 
@@ -22,13 +27,33 @@ export const PATCH = withAdmin(async (request: Request) => {
     return NextResponse.json({ error: 'Supabase non configurato' }, { status: 503 });
   }
   const body = (await request.json()) as {
-    action?: 'approve' | 'skip' | 'stop';
+    action?: 'approve' | 'skip' | 'stop' | 'updateDraft';
     campaignLeadId?: string;
     campaignId?: string;
     campaignLeadIds?: string[];
+    subject?: string;
+    body?: string;
   };
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
+
+  if (body.action === 'updateDraft') {
+    if (!body.campaignLeadId) {
+      return NextResponse.json({ error: 'campaignLeadId obbligatorio' }, { status: 400 });
+    }
+    try {
+      const draft = await updateDraftContent(admin, workspace.id, body.campaignLeadId, {
+        subject: body.subject,
+        body: body.body,
+      });
+      return NextResponse.json({ ok: true, draft });
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : 'Aggiornamento fallito' },
+        { status: 400 },
+      );
+    }
+  }
 
   if (body.action === 'approve' && body.campaignId) {
     const result = await approveCampaignLeads(
@@ -38,6 +63,26 @@ export const PATCH = withAdmin(async (request: Request) => {
       body.campaignLeadIds,
     );
     return NextResponse.json(result);
+  }
+
+  if (body.action === 'approve' && body.campaignLeadIds?.length) {
+    const { data: rows } = await admin
+      .from('campaign_leads')
+      .select('id, campaign_id')
+      .eq('workspace_id', workspace.id)
+      .in('id', body.campaignLeadIds);
+    const byCampaign = new Map<string, string[]>();
+    for (const row of rows ?? []) {
+      const list = byCampaign.get(row.campaign_id) ?? [];
+      list.push(row.id);
+      byCampaign.set(row.campaign_id, list);
+    }
+    let approved = 0;
+    for (const [campaignId, ids] of byCampaign) {
+      const result = await approveCampaignLeads(admin, workspace.id, campaignId, ids);
+      approved += result.approved;
+    }
+    return NextResponse.json({ approved });
   }
 
   if (!body.campaignLeadId || !body.action) {
@@ -51,7 +96,9 @@ export const PATCH = withAdmin(async (request: Request) => {
       .eq('id', body.campaignLeadId)
       .single();
     if (!cl) return NextResponse.json({ error: 'Lead campagna non trovato' }, { status: 404 });
-    const result = await approveCampaignLeads(admin, workspace.id, cl.campaign_id, [body.campaignLeadId]);
+    const result = await approveCampaignLeads(admin, workspace.id, cl.campaign_id, [
+      body.campaignLeadId,
+    ]);
     return NextResponse.json(result);
   }
 

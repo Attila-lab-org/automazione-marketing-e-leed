@@ -33,16 +33,16 @@ describe('Phase D — template matching', () => {
 });
 
 describe('Phase D — Restaurant Premium V2 data', () => {
-  it('non inventa headline/recensioni testuali', () => {
+  it('usa concept copy template + dati lead reali (no fatti inventati sul prospect)', () => {
     const data = prefillFromLeadV2(
       { name: 'Trattoria Roma', rating: 4.5, reviewCount: 120, city: 'Roma' },
       RESTAURANT_PREMIUM_V2_DEFAULTS,
     );
     expect(data.branding.business_name).toBe('Trattoria Roma');
-    expect(data.content.headline).toBeNull();
-    expect(data.content.description).toBeNull();
+    expect(data.content.headline).toBe(RESTAURANT_PREMIUM_V2_DEFAULTS.content.headline);
     expect(data.signals.rating).toBe(4.5);
     expect(data.signals.review_count).toBe(120);
+    expect(data.contact.city).toBe('Roma');
   });
 
   it('V1 defaults congelati indipendenti da V2 defaults', () => {

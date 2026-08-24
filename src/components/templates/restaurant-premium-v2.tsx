@@ -1,5 +1,6 @@
 import { wordmarkFromName } from '@/lib/templates/wordmark';
 import type { DemoInstanceDataV2 } from '@/lib/templates/restaurant-premium-v2';
+import { RESTAURANT_PREMIUM_V2_DEFAULTS } from '@/lib/templates/restaurant-premium-v2';
 
 export type RestaurantPremiumV2Props = {
   data: DemoInstanceDataV2;
@@ -17,22 +18,36 @@ function Stars({ rating }: { rating: number }) {
 }
 
 /**
- * Restaurant Premium V2 — landing commerciale completa (baseline tecnica).
- * V1 resta congelato nel componente separato restaurant-premium.tsx.
+ * Restaurant Premium V2 — landing commerciale completa.
+ * Con dati lead scarsi usa comunque asset/copy di template (mai inventati sul prospect).
  */
 export default function RestaurantPremiumV2({ data, compact = false }: RestaurantPremiumV2Props) {
+  const defaults = RESTAURANT_PREMIUM_V2_DEFAULTS;
   const name = data.branding.business_name?.trim() || 'Attività';
   const wordmark = wordmarkFromName(name);
-  const primary = data.branding.primary_color || '#1c1917';
-  const accent = data.branding.accent_color || '#d97706';
+  const primary = data.branding.primary_color || defaults.branding.primary_color || '#1c1917';
+  const accent = data.branding.accent_color || defaults.branding.accent_color || '#d97706';
   const logoUrl = data.branding.logo_url?.trim() || null;
-  const hero = data.branding.hero_image?.trim() || null;
-  const gallery = data.branding.gallery.filter(Boolean);
-  const headline = data.content.headline?.trim() || name;
-  const subheadline = data.content.subheadline?.trim() || null;
-  const description = data.content.description?.trim() || data.content.about?.trim() || null;
-  const highlights = data.content.highlights.filter(Boolean);
-  const cta = data.content.cta?.trim() || 'Prenota un tavolo';
+  const hero =
+    data.branding.hero_image?.trim() || defaults.branding.hero_image || null;
+  const gallery =
+    data.branding.gallery.filter(Boolean).length > 0
+      ? data.branding.gallery.filter(Boolean)
+      : defaults.branding.gallery;
+  const headline =
+    data.content.headline?.trim() || defaults.content.headline || name;
+  const subheadline =
+    data.content.subheadline?.trim() || defaults.content.subheadline;
+  const description =
+    data.content.description?.trim() ||
+    data.content.about?.trim() ||
+    defaults.content.description;
+  const about = data.content.about?.trim() || defaults.content.about;
+  const highlights =
+    data.content.highlights.filter(Boolean).length > 0
+      ? data.content.highlights.filter(Boolean)
+      : defaults.content.highlights;
+  const cta = data.content.cta?.trim() || defaults.content.cta || 'Prenota un tavolo';
   const city = data.contact.city?.trim() || null;
   const address = data.contact.address?.trim() || null;
   const phone = data.contact.phone?.trim() || null;
@@ -52,22 +67,28 @@ export default function RestaurantPremiumV2({ data, compact = false }: Restauran
           ) : (
             <p className="text-xs font-semibold tracking-[0.24em]">{wordmark}</p>
           )}
+          <nav className="hidden gap-6 text-sm text-stone-500 sm:flex">
+            <span>Esperienza</span>
+            <span>Ambiente</span>
+            <span>Contatti</span>
+          </nav>
           {phone ? (
             <a href={`tel:${phone}`} className="text-sm font-medium opacity-80 hover:opacity-100">
               {phone}
             </a>
-          ) : null}
+          ) : (
+            <span className="text-sm font-medium" style={{ color: accent }}>
+              {cta}
+            </span>
+          )}
         </div>
       </header>
 
       <section className="relative overflow-hidden">
-        <div
-          className="absolute inset-0 bg-gradient-to-br from-stone-900 via-stone-800 to-stone-700"
-          style={hero ? undefined : { background: `linear-gradient(135deg, ${primary}, ${accent})` }}
-        />
+        <div className="absolute inset-0 bg-stone-900" />
         {hero ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={hero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />
+          <img src={hero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70" />
         ) : null}
         <div className={`relative mx-auto max-w-6xl px-6 ${compact ? 'py-12' : 'py-24 sm:py-32'}`}>
           {city ? (
@@ -86,7 +107,9 @@ export default function RestaurantPremiumV2({ data, compact = false }: Restauran
                 {rating.toFixed(1)} · {reviews.toLocaleString('it-IT')} recensioni Google
               </span>
             </div>
-          ) : null}
+          ) : (
+            <p className="mt-6 text-sm text-white/70">Concept dimostrativo · fiducia e presenza digitale</p>
+          )}
           <div className="mt-8">
             <span
               className="inline-flex rounded-full px-6 py-3 text-sm font-semibold text-white shadow-lg"
@@ -98,62 +121,74 @@ export default function RestaurantPremiumV2({ data, compact = false }: Restauran
         </div>
       </section>
 
-      {description || highlights.length > 0 ? (
-        <section className="mx-auto max-w-6xl px-6 py-16">
-          {description ? (
-            <p className="max-w-3xl text-lg leading-relaxed text-stone-600">{description}</p>
-          ) : null}
-          {highlights.length > 0 ? (
-            <ul className="mt-8 grid gap-4 sm:grid-cols-3">
-              {highlights.map((item) => (
-                <li
-                  key={item}
-                  className="rounded-xl border border-stone-200 bg-white p-5 text-sm font-medium text-stone-800"
-                >
-                  {item}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </section>
-      ) : null}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">Presentazione</p>
+        <p className="mt-4 max-w-3xl text-lg leading-relaxed text-stone-600">{description}</p>
+        {about ? <p className="mt-4 max-w-3xl text-sm leading-relaxed text-stone-500">{about}</p> : null}
+        <ul className="mt-8 grid gap-4 sm:grid-cols-3">
+          {highlights.map((item) => (
+            <li
+              key={item}
+              className="rounded-xl border border-stone-200 bg-white p-5 text-sm font-medium text-stone-800"
+            >
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
 
-      {gallery.length > 0 ? (
-        <section className="border-y border-stone-200 bg-white py-16">
-          <div className="mx-auto grid max-w-6xl gap-4 px-6 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="border-y border-stone-200 bg-white py-16">
+        <div className="mx-auto max-w-6xl px-6">
+          <h2 className="text-lg font-semibold text-stone-900">Ambiente &amp; atmosfera</h2>
+          <p className="mt-2 text-sm text-stone-500">
+            Immagini di template (concept). Non rappresentano foto del locale.
+          </p>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {gallery.map((src) => (
               // eslint-disable-next-line @next/next/no-img-element
-              <img key={src} src={src} alt="" className="h-56 w-full rounded-2xl object-cover" />
+              <img key={src.slice(0, 48)} src={src} alt="" className="h-56 w-full rounded-2xl object-cover" />
             ))}
           </div>
-        </section>
-      ) : null}
+        </div>
+      </section>
 
-      {(rating !== null && reviews !== null) || phone || address ? (
-        <section className="mx-auto max-w-6xl px-6 py-16">
-          <div className="grid gap-8 rounded-2xl border border-stone-200 bg-white p-8 md:grid-cols-2">
-            <div>
-              <h2 className="text-lg font-semibold text-stone-900">Prenota o contattaci</h2>
-              {phone ? <p className="mt-3 text-stone-600">{phone}</p> : null}
-              {address ? <p className="mt-1 text-stone-600">{address}</p> : null}
-              {hours ? (
-                <pre className="mt-4 whitespace-pre-wrap text-sm text-stone-500">{hours}</pre>
-              ) : null}
-            </div>
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div className="grid gap-8 rounded-2xl border border-stone-200 bg-white p-8 md:grid-cols-2">
+          <div>
+            <h2 className="text-lg font-semibold text-stone-900">Perché scegliere questo concept</h2>
+            <p className="mt-3 text-sm leading-relaxed text-stone-600">
+              Una pagina unica che combina fiducia Google, presentazione e contatto — pronta da
+              personalizzare con i dati reali della tua attività.
+            </p>
+            <span
+              className="mt-6 inline-flex rounded-full px-5 py-2.5 text-sm font-semibold text-white"
+              style={{ backgroundColor: accent }}
+            >
+              {cta}
+            </span>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-stone-900">Informazioni</h2>
+            {phone ? <p className="mt-3 text-stone-600">{phone}</p> : null}
+            {address ? <p className="mt-1 text-stone-600">{address}</p> : null}
+            {city && !address ? <p className="mt-1 text-stone-600">{city}</p> : null}
+            {hours ? (
+              <pre className="mt-4 whitespace-pre-wrap text-sm text-stone-500">{hours}</pre>
+            ) : null}
             {rating !== null && reviews !== null ? (
-              <div>
-                <h2 className="text-lg font-semibold text-stone-900">Valutato su Google</h2>
-                <div className="mt-3 flex items-center gap-3">
-                  <Stars rating={rating} />
-                  <span className="text-stone-600">
-                    {rating.toFixed(1)} · {reviews.toLocaleString('it-IT')} recensioni
-                  </span>
-                </div>
+              <div className="mt-4 flex items-center gap-3">
+                <Stars rating={rating} />
+                <span className="text-stone-600">
+                  {rating.toFixed(1)} · {reviews.toLocaleString('it-IT')} recensioni Google
+                </span>
               </div>
             ) : null}
+            {!phone && !address && !hours ? (
+              <p className="mt-3 text-sm text-stone-500">Contatti disponibili dopo enrichment Google.</p>
+            ) : null}
           </div>
-        </section>
-      ) : null}
+        </div>
+      </section>
 
       <footer className="border-t border-stone-200 bg-white px-6 py-10">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 text-sm text-stone-500">

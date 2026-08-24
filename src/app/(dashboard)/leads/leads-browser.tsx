@@ -122,6 +122,13 @@ export default function LeadsBrowser({
   const [resultBanner, setResultBanner] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
+  // Campaign bulk modal
+  const [campaignModalOpen, setCampaignModalOpen] = useState(false);
+  const [campaignLeads, setCampaignLeads] = useState<LeadView[]>([]);
+  const [campaignName, setCampaignName] = useState("");
+  const [campaignMode, setCampaignMode] = useState<"MANUAL" | "SCORE_BASED">("MANUAL");
+  const [creatingCampaign, setCreatingCampaign] = useState(false);
+
   // Filters
   const [minScore, setMinScore] = useState(0);
   const [filterCategory, setFilterCategory] = useState("");
@@ -325,6 +332,49 @@ export default function LeadsBrowser({
     }
   }
 
+  function openCampaignModal(selected: LeadView[]) {
+    const dateLabel = new Date().toLocaleDateString("it-IT");
+    setCampaignLeads(selected);
+    setCampaignName(`Campagna ${dateLabel}`);
+    setCampaignMode("MANUAL");
+    setCampaignModalOpen(true);
+  }
+
+  async function onCreateCampaign(e: FormEvent) {
+    e.preventDefault();
+    if (!campaignLeads.length || !campaignName.trim()) return;
+    setCreatingCampaign(true);
+    setResultBanner(null);
+    try {
+      const res = await fetch("/api/campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: campaignName.trim(),
+          leadIds: campaignLeads.map((l) => l.id),
+          mode: campaignMode,
+          prepare: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Creazione campagna fallita");
+      const campaignId = data.campaignId as string | undefined;
+      setResultBanner(
+        data.message ??
+          `Campagna creata con ${data.leadCount ?? campaignLeads.length} lead — preparazione avviata.`,
+      );
+      setCampaignModalOpen(false);
+      if (campaignId) {
+        router.push(`/campaigns/${campaignId}`);
+      } else {
+        router.push("/review-queue");
+      }
+    } catch (err) {
+      setResultBanner(err instanceof Error ? err.message : "Creazione campagna fallita");
+      setCreatingCampaign(false);
+    }
+  }
+
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -455,7 +505,12 @@ export default function LeadsBrowser({
             `${lead.name} ${lead.category} ${lead.city} ${lead.website ?? ""} ${lead.offerCandidate ?? ""}`
           }
           onRowClick={(lead) => setSelectedLead(lead)}
-          bulkActions={[]}
+          bulkActions={[
+            {
+              label: "Crea campagna",
+              onApply: (rows) => openCampaignModal(rows),
+            },
+          ]}
         />
       )}
 
@@ -568,6 +623,71 @@ export default function LeadsBrowser({
                 className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
                 {searching ? "Ricerca in corso..." : "Cerca"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {campaignModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Chiudi"
+            className="absolute inset-0 bg-stone-900/40"
+            onClick={() => !creatingCampaign && setCampaignModalOpen(false)}
+          />
+          <form
+            onSubmit={onCreateCampaign}
+            className="relative w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl"
+          >
+            <h2 className="text-lg font-semibold text-stone-900">Crea campagna</h2>
+            <p className="mt-1 text-sm text-stone-500">
+              {campaignLeads.length} lead selezionat
+              {campaignLeads.length === 1 ? "o" : "i"} · preparazione automatica
+            </p>
+
+            <label className="mt-5 block text-sm font-medium text-stone-700">
+              Nome campagna
+              <input
+                required
+                value={campaignName}
+                onChange={(e) => setCampaignName(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                disabled={creatingCampaign}
+              />
+            </label>
+
+            <label className="mt-4 block text-sm font-medium text-stone-700">
+              Modalità
+              <select
+                value={campaignMode}
+                onChange={(e) =>
+                  setCampaignMode(e.target.value as "MANUAL" | "SCORE_BASED")
+                }
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                disabled={creatingCampaign}
+              >
+                <option value="MANUAL">MANUAL — review obbligatoria</option>
+                <option value="SCORE_BASED">SCORE_BASED — soglie score</option>
+              </select>
+            </label>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={creatingCampaign}
+                onClick={() => setCampaignModalOpen(false)}
+                className="rounded-lg px-4 py-2 text-sm text-stone-600 hover:bg-stone-100"
+              >
+                Annulla
+              </button>
+              <button
+                type="submit"
+                disabled={creatingCampaign}
+                className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {creatingCampaign ? "Creazione…" : "Crea campagna"}
               </button>
             </div>
           </form>

@@ -1,6 +1,8 @@
+import { TEMPLATE_CONCEPT_COPY, TEMPLATE_GALLERY_SVGS, TEMPLATE_HERO_SVG } from './template-assets';
+
 export const RESTAURANT_PREMIUM_V2_TEMPLATE_KEY = 'restaurant-premium';
 export const RESTAURANT_PREMIUM_V2_RENDERER_KEY = 'restaurant-premium-v2';
-export const RESTAURANT_PREMIUM_V2_COMPONENT_VERSION = '2.0.0';
+export const RESTAURANT_PREMIUM_V2_COMPONENT_VERSION = '2.1.0';
 
 export interface DemoBrandingV2 {
   business_name: string | null;
@@ -40,22 +42,23 @@ export interface DemoInstanceDataV2 {
   signals: DemoSignalsV2;
 }
 
+/** Master template defaults: always a complete commercial landing (concept copy + owned assets). */
 export const RESTAURANT_PREMIUM_V2_DEFAULTS: DemoInstanceDataV2 = {
   branding: {
     business_name: null,
     logo_url: null,
     primary_color: '#1c1917',
     accent_color: '#d97706',
-    hero_image: null,
-    gallery: [],
+    hero_image: TEMPLATE_HERO_SVG,
+    gallery: [...TEMPLATE_GALLERY_SVGS],
   },
   content: {
-    headline: null,
-    subheadline: null,
-    description: null,
-    about: null,
-    highlights: [],
-    cta: 'Prenota un tavolo',
+    headline: TEMPLATE_CONCEPT_COPY.headline,
+    subheadline: TEMPLATE_CONCEPT_COPY.subheadline,
+    description: TEMPLATE_CONCEPT_COPY.description,
+    about: TEMPLATE_CONCEPT_COPY.about,
+    highlights: [...TEMPLATE_CONCEPT_COPY.highlights],
+    cta: TEMPLATE_CONCEPT_COPY.cta,
   },
   contact: {
     phone: null,

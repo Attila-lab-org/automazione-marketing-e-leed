@@ -3,6 +3,7 @@ import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
 
 export interface ReviewQueueItem {
   id: string;
+  campaignId: string;
   status: string;
   companyName: string;
   category: string;
@@ -12,8 +13,10 @@ export interface ReviewQueueItem {
   email: string | null;
   subject: string;
   messagePreview: string;
+  body: string;
   previewImageUrl: string | null;
   demoUrl: string | null;
+  demoSiteId: string | null;
   sequenceStep: number;
   blockers: string[];
 }
@@ -29,7 +32,7 @@ export async function listReviewQueue(
 ): Promise<ReviewQueueItem[]> {
   const { data: rows, error } = await admin
     .from('campaign_leads')
-    .select('id, status, lead_id, demo_site_id, sequence_step, preparation')
+    .select('id, campaign_id, status, lead_id, demo_site_id, sequence_step, preparation')
     .eq('workspace_id', workspaceId)
     .in('status', ['REVIEW', 'READY', 'GENERATING', 'FAILED', 'PENDING'])
     .order('updated_at', { ascending: false })
@@ -77,6 +80,7 @@ export async function listReviewQueue(
 
     return {
       id: row.id,
+      campaignId: row.campaign_id,
       status: row.status,
       companyName: lead?.name ?? 'Lead sconosciuto',
       category: lead?.category ?? '—',
@@ -86,12 +90,53 @@ export async function listReviewQueue(
       email: lead?.email ?? null,
       subject: draft?.subject ?? '(messaggio in preparazione)',
       messagePreview: body ? stripHtml(body).slice(0, 220) : 'Anteprima non ancora generata.',
+      body,
       previewImageUrl,
       demoUrl,
+      demoSiteId: row.demo_site_id ?? null,
       sequenceStep: row.sequence_step ?? 0,
       blockers,
     };
   });
+}
+
+export async function updateDraftContent(
+  admin: SupabaseClient,
+  workspaceId: string,
+  campaignLeadId: string,
+  patch: { subject?: string; body?: string },
+) {
+  const { data: cl, error: clError } = await admin
+    .from('campaign_leads')
+    .select('id, sequence_step')
+    .eq('workspace_id', workspaceId)
+    .eq('id', campaignLeadId)
+    .maybeSingle();
+  if (clError || !cl) throw new Error(clError?.message ?? 'Lead campagna non trovato');
+
+  const step = cl.sequence_step ?? 0;
+  const updates: Record<string, unknown> = {
+    is_override: true,
+    updated_at: new Date().toISOString(),
+  };
+  if (typeof patch.subject === 'string') updates.subject = patch.subject;
+  if (typeof patch.body === 'string') updates.body = patch.body;
+  if (updates.subject === undefined && updates.body === undefined) {
+    throw new Error('Fornire subject e/o body');
+  }
+
+  const { data: draft, error } = await admin
+    .from('message_drafts')
+    .update(updates)
+    .eq('workspace_id', workspaceId)
+    .eq('campaign_lead_id', campaignLeadId)
+    .eq('sequence_step', step)
+    .select('id, subject, body')
+    .maybeSingle();
+
+  if (error) throw new Error(`Draft update fallito — ${error.message}`);
+  if (!draft) throw new Error('Bozza messaggio non trovata');
+  return draft;
 }
 
 export async function approveCampaignLeads(

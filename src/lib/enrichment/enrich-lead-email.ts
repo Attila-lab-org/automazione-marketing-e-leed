@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   defaultEmailEnrichmentProvider,
   type EmailEnrichmentProvider,
+  type EmailEnrichmentResult,
 } from './email-from-website';
 
 export async function enrichLeadEmail(
@@ -9,7 +10,7 @@ export async function enrichLeadEmail(
   workspaceId: string,
   leadId: string,
   provider: EmailEnrichmentProvider = defaultEmailEnrichmentProvider,
-): Promise<{ email: string | null; status: string }> {
+): Promise<EmailEnrichmentResult & { status: string }> {
   const { data: lead, error } = await admin
     .from('leads')
     .select('id, email, website_url, normalized_email')
@@ -18,10 +19,28 @@ export async function enrichLeadEmail(
     .single();
 
   if (error || !lead) throw new Error(`Email enrich: lead non trovato — ${error?.message ?? ''}`);
-  if (lead.email) return { email: lead.email, status: 'ALREADY_PRESENT' };
+  if (lead.email) {
+    return {
+      email: lead.email,
+      sourceUrl: null,
+      sourceType: null,
+      status: 'ALREADY_PRESENT',
+      candidates: [lead.email],
+      confidence: 1,
+    };
+  }
 
   const website = lead.website_url?.trim();
-  if (!website) return { email: null, status: 'NO_WEBSITE' };
+  if (!website) {
+    return {
+      email: null,
+      sourceUrl: null,
+      sourceType: null,
+      status: 'NO_WEBSITE',
+      candidates: [],
+      confidence: 0,
+    };
+  }
 
   const result = await provider.enrichFromWebsite(website);
 
@@ -32,7 +51,7 @@ export async function enrichLeadEmail(
       type: 'EMAIL',
       value: result.email,
       normalized_value: result.email,
-      label: 'website_enrichment',
+      label: result.sourceType ?? 'website_enrichment',
       is_primary: true,
       source: 'WEBSITE_SCRAPE',
     });
@@ -55,11 +74,14 @@ export async function enrichLeadEmail(
       lead_id: leadId,
       quantity: 1,
       estimated_cost_usd: 0,
-      meta: { sourceUrl: result.sourceUrl, candidates: result.candidates },
+      meta: {
+        sourceUrl: result.sourceUrl,
+        sourceType: result.sourceType,
+        confidence: result.confidence,
+        candidates: result.candidates,
+      },
     });
-
-    return { email: result.email, status: 'FOUND' };
   }
 
-  return { email: null, status: 'EMAIL_NOT_FOUND' };
+  return { ...result, status: result.status === 'FOUND' ? 'FOUND' : result.status };
 }

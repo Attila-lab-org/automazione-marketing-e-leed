@@ -12,5 +12,6 @@ export function isPublicPath(pathname: string): boolean {
 
 export function isPublicApi(pathname: string): boolean {
   if (pathname.startsWith('/demo/') && pathname.includes('/email-preview')) return true;
+  if (pathname.startsWith('/api/cron/')) return true;
   return PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p));
 }

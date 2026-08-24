@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { RESTAURANT_PREMIUM_V2_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v2';
+import { pickCompatibleTemplateKey } from '@/lib/templates/match';
+import { listPublishedTemplates } from '@/lib/demos/ensure-template';
 import type { PolicyMode } from '@/lib/types/database';
 
 export interface CreateCampaignInput {
@@ -20,7 +22,7 @@ const DEFAULT_POLICY_ACTIONS = {
   screenshot: 'OFF',
   message_generation: 'AUTO',
   send: 'MANUAL',
-  followup: 'MANUAL',
+  followup: 'AUTO',
 };
 
 export async function createCampaignWithLeads(
@@ -30,6 +32,7 @@ export async function createCampaignWithLeads(
 ) {
   if (!input.leadIds.length) throw new Error('Seleziona almeno un lead');
 
+  const published = await listPublishedTemplates(admin, workspaceId);
   const layoutKey = input.landingLayoutKey ?? RESTAURANT_PREMIUM_V2_RENDERER_KEY;
 
   const { data: templateVersion, error: tvError } = await admin
@@ -46,21 +49,46 @@ export async function createCampaignWithLeads(
     throw new Error(`Template ${layoutKey} non pubblicato`);
   }
 
-  const { data: msgVersion } = await admin
-    .from('message_template_versions')
-    .select('id, template_id')
+  const { data: templateMeta } = await admin
+    .from('website_templates')
+    .select('id, key, vertical')
+    .eq('id', templateVersion.template_id)
+    .single();
+
+  // Explicit visual-intro + Standard 0-3-7 (not "latest global")
+  const { data: msgTemplate } = await admin
+    .from('message_templates')
+    .select('id')
     .eq('workspace_id', workspaceId)
-    .order('created_at', { ascending: false })
-    .limit(1)
+    .eq('key', 'visual-intro-v1')
     .maybeSingle();
 
-  const { data: seqVersion } = await admin
-    .from('followup_sequence_versions')
-    .select('id, sequence_id')
+  const { data: msgVersion } = msgTemplate
+    ? await admin
+        .from('message_template_versions')
+        .select('id, template_id')
+        .eq('template_id', msgTemplate.id)
+        .order('version', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
+
+  const { data: seq } = await admin
+    .from('followup_sequences')
+    .select('id')
     .eq('workspace_id', workspaceId)
-    .order('version', { ascending: false })
-    .limit(1)
+    .eq('name', 'Standard 0-3-7')
     .maybeSingle();
+
+  const { data: seqVersion } = seq
+    ? await admin
+        .from('followup_sequence_versions')
+        .select('id, sequence_id')
+        .eq('sequence_id', seq.id)
+        .order('version', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
 
   const { data: campaign, error: cError } = await admin
     .from('campaigns')
@@ -119,19 +147,74 @@ export async function createCampaignWithLeads(
     landingLayoutKey: layoutKey,
   };
 
-  const rows = input.leadIds.map((leadId) => ({
-    workspace_id: workspaceId,
-    campaign_id: campaign.id,
-    lead_id: leadId,
-    status: 'PENDING',
-    policy_version_id: policy.id,
-    policy_snapshot: policySnapshot,
-    sequence_step: 0,
-    preparation: {},
+  const { data: leads } = await admin
+    .from('leads')
+    .select('id, category')
+    .eq('workspace_id', workspaceId)
+    .in('id', input.leadIds);
+
+  const leadById = new Map((leads ?? []).map((l) => [l.id, l]));
+  const candidates = published.map((t) => ({
+    key: t.templateKey,
+    vertical: t.vertical,
+    published: true,
   }));
+
+  const rows = input.leadIds.map((leadId) => {
+    const lead = leadById.get(leadId);
+    const matched = pickCompatibleTemplateKey(lead?.category, candidates);
+    const compatible =
+      matched != null &&
+      matched === (templateMeta?.key ?? matched) &&
+      (templateMeta?.vertical == null ||
+        pickCompatibleTemplateKey(lead?.category, [
+          {
+            key: templateMeta.key,
+            vertical: templateMeta.vertical,
+            published: true,
+          },
+        ]) === templateMeta.key);
+
+    if (!compatible) {
+      return {
+        workspace_id: workspaceId,
+        campaign_id: campaign.id,
+        lead_id: leadId,
+        status: 'SKIPPED',
+        policy_version_id: policy.id,
+        policy_snapshot: policySnapshot,
+        sequence_step: 0,
+        preparation: {
+          blockers: ['TEMPLATE_NOT_COMPATIBLE'],
+          leadCategory: lead?.category ?? null,
+          requiredLayoutKey: layoutKey,
+        },
+      };
+    }
+
+    return {
+      workspace_id: workspaceId,
+      campaign_id: campaign.id,
+      lead_id: leadId,
+      status: 'PENDING',
+      policy_version_id: policy.id,
+      policy_snapshot: policySnapshot,
+      sequence_step: 0,
+      preparation: { templateMatch: matched },
+    };
+  });
 
   const { error: clError } = await admin.from('campaign_leads').insert(rows);
   if (clError) throw new Error(`Campagna: materializzazione lead fallita — ${clError.message}`);
 
-  return { campaignId: campaign.id, leadCount: input.leadIds.length, layoutKey };
+  const eligible = rows.filter((r) => r.status === 'PENDING').length;
+  const skipped = rows.filter((r) => r.status === 'SKIPPED').length;
+
+  return {
+    campaignId: campaign.id,
+    leadCount: input.leadIds.length,
+    eligible,
+    skipped,
+    layoutKey,
+  };
 }
