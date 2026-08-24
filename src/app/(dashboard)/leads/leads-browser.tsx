@@ -49,6 +49,69 @@ const STATUS_STYLE: Record<QualificationStatus, string> = {
   REJECTED: "border-red-200 bg-red-50 text-red-700",
 };
 
+const CATEGORY_GROUPS: Array<{
+  label: string;
+  values: string[];
+}> = [
+  {
+    label: "Ristoranti",
+    values: [
+      "restaurant",
+      "italian_restaurant",
+      "mediterranean_restaurant",
+      "seafood_restaurant",
+      "family_restaurant",
+      "fusion_restaurant",
+    ],
+  },
+  { label: "Pizzerie", values: ["pizza_restaurant"] },
+  { label: "Bar ed enoteche", values: ["bar", "wine_bar"] },
+  {
+    label: "Cibo da asporto",
+    values: ["meal_takeaway", "sandwich_shop", "deli"],
+  },
+  { label: "Agriturismi", values: ["farmstay"] },
+];
+
+const DISCOVERY_CATEGORIES = [
+  "Ristoranti",
+  "Pizzerie",
+  "Bar ed enoteche",
+  "Agriturismi",
+  "Gelaterie",
+  "Pasticcerie",
+  "Hotel",
+  "Parrucchieri",
+  "Centri estetici",
+  "Palestre",
+];
+
+function categoryLabel(raw: string | null): string {
+  const value = raw?.trim().toLowerCase() ?? "";
+  if (!value) return "Altro settore";
+  const group = CATEGORY_GROUPS.find((item) => item.values.includes(value));
+  if (group) return group.label;
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function cityLabel(raw: string | null): string {
+  const value = raw?.trim().replace(/\s+/g, " ") ?? "";
+  if (!value) return "Località non indicata";
+  return value
+    .toLocaleLowerCase("it-IT")
+    .replace(/(^|[\s'-])\p{L}/gu, (match) => match.toLocaleUpperCase("it-IT"));
+}
+
+function searchKey(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toLocaleLowerCase("it-IT");
+}
+
 function parseReasons(raw: LeadRow["qualification_reasons"]): QualificationReason[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((item) => {
@@ -72,8 +135,8 @@ function toView(lead: LeadRow): LeadView {
   return {
     id: lead.id,
     name: lead.name,
-    category: lead.category ?? "—",
-    city: lead.city ?? "—",
+    category: categoryLabel(lead.category),
+    city: cityLabel(lead.city),
     website: lead.website_url ?? undefined,
     email: lead.email ?? undefined,
     phone: lead.phone ?? undefined,
@@ -178,20 +241,34 @@ export default function LeadsBrowser({
 
   const categories = useMemo(
     () =>
-      Array.from(new Set(rows.map((r) => r.category).filter((c) => c && c !== "—"))).sort(),
+      Array.from(
+        new Set(rows.map((r) => r.category).filter((c) => c && c !== "Altro settore")),
+      ).sort(),
     [rows],
   );
   const cities = useMemo(
     () =>
-      Array.from(new Set(rows.map((r) => r.city).filter((c) => c && c !== "—"))).sort(),
+      Array.from(
+        new Set(
+          rows
+            .map((r) => r.city)
+            .filter((c) => c && c !== "Località non indicata"),
+        ),
+      ).sort(),
     [rows],
   );
+  const activeFilterCount =
+    Number(minScore > 0) +
+    Number(Boolean(filterCategory)) +
+    Number(Boolean(filterCity)) +
+    Number(filterWebsite !== "all") +
+    Number(Boolean(filterStatus));
 
   const filtered = useMemo(() => {
     return rows
       .filter((r) => (r.discoveryScore ?? 0) >= minScore)
       .filter((r) => !filterCategory || r.category === filterCategory)
-      .filter((r) => !filterCity || r.city === filterCity)
+      .filter((r) => !filterCity || searchKey(r.city).includes(searchKey(filterCity)))
       .filter((r) => {
         if (filterWebsite === "yes") return r.hasWebsite;
         if (filterWebsite === "no") return !r.hasWebsite;
@@ -319,6 +396,20 @@ export default function LeadsBrowser({
     } finally {
       setSearching(false);
     }
+  }
+
+  function openDiscoverModal() {
+    if (filterCategory) setCategory(filterCategory);
+    if (filterCity) setLocation(filterCity);
+    setModalOpen(true);
+  }
+
+  function resetFilters() {
+    setMinScore(0);
+    setFilterCategory("");
+    setFilterCity("");
+    setFilterWebsite("all");
+    setFilterStatus("");
   }
 
   async function onCreateDemo(leadId: string) {
@@ -471,34 +562,55 @@ export default function LeadsBrowser({
           <button
             type="button"
             title="Cerca nuove attività su Google per categoria e località."
-            onClick={() => setModalOpen(true)}
+            onClick={openDiscoverModal}
             className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
           >
-            Cerca attività
+            Cerca nuove attività
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 rounded-xl border border-stone-200 bg-white p-4 md:grid-cols-5">
-        <label className="text-xs font-medium text-stone-600">
-          Punteggio minimo
+      <div className="rounded-xl border border-stone-200 bg-white p-4">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-stone-800">Filtra le attività salvate</h2>
+            <p className="mt-0.5 text-xs text-stone-500">
+              Questi filtri cambiano soltanto l’elenco qui sotto. La ricerca di nuove attività
+              usa invece i dati inseriti nella finestra «Cerca nuove attività».
+            </p>
+          </div>
+          <button
+            type="button"
+            title="Rimuovi tutti i filtri e mostra l’elenco completo."
+            disabled={activeFilterCount === 0}
+            onClick={resetFilters}
+            className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Azzera filtri{activeFilterCount ? ` (${activeFilterCount})` : ""}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-12">
+        <label className="text-xs font-medium text-stone-600 md:col-span-2">
+          Punteggio da
           <input
             type="number"
             min={0}
             max={100}
             value={minScore}
             onChange={(e) => setMinScore(Number(e.target.value) || 0)}
+            title="Mostra solo le attività con un punteggio uguale o superiore."
             className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
           />
         </label>
-        <label className="text-xs font-medium text-stone-600">
-          Categoria
+        <label className="text-xs font-medium text-stone-600 md:col-span-3">
+          Settore
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
+            title="Mostra solo le attività già salvate appartenenti a questo settore."
             className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
           >
-            <option value="">Tutte</option>
+            <option value="">Tutti i settori</option>
             {categories.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -506,22 +618,23 @@ export default function LeadsBrowser({
             ))}
           </select>
         </label>
-        <label className="text-xs font-medium text-stone-600">
-          Città
-          <select
+        <label className="text-xs font-medium text-stone-600 md:col-span-3">
+          Città nell’elenco
+          <input
+            list="lead-city-options"
             value={filterCity}
             onChange={(e) => setFilterCity(e.target.value)}
+            placeholder="Tutte le città"
+            title="Scrivi o scegli una città tra quelle già presenti nell’elenco."
             className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-          >
-            <option value="">Tutte</option>
+          />
+          <datalist id="lead-city-options">
             {cities.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
+              <option key={c} value={c} />
             ))}
-          </select>
+          </datalist>
         </label>
-        <label className="text-xs font-medium text-stone-600">
+        <label className="text-xs font-medium text-stone-600 md:col-span-2">
           Sito
           <select
             value={filterWebsite}
@@ -530,12 +643,12 @@ export default function LeadsBrowser({
             }
             className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
           >
-            <option value="all">Tutti</option>
+            <option value="all">Con o senza sito</option>
             <option value="yes">Presente</option>
             <option value="no">Assente</option>
           </select>
         </label>
-        <label className="text-xs font-medium text-stone-600">
+        <label className="text-xs font-medium text-stone-600 md:col-span-2">
           Stato
           <select
             value={filterStatus}
@@ -544,7 +657,7 @@ export default function LeadsBrowser({
             }
             className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
           >
-            <option value="">Tutti</option>
+            <option value="">Tutti gli stati</option>
             {(Object.keys(STATUS_LABELS) as QualificationStatus[]).map((s) => (
               <option key={s} value={s}>
                 {STATUS_LABELS[s]}
@@ -552,6 +665,11 @@ export default function LeadsBrowser({
             ))}
           </select>
         </label>
+        </div>
+        <p className="mt-3 text-xs text-stone-500">
+          Mostrate <strong className="text-stone-700">{filtered.length}</strong> attività su{" "}
+          {rows.length}.
+        </p>
       </div>
 
       {loadError ? (
@@ -641,25 +759,36 @@ export default function LeadsBrowser({
           >
             <h2 className="text-lg font-semibold text-stone-900">Cerca attività</h2>
             <p className="mt-1 text-sm text-stone-500">
-              Cerca su Google per categoria e località. I duplicati vengono esclusi automaticamente.
+              Questa è una nuova ricerca su Google. Se avevi filtrato settore o città, li abbiamo
+              copiati qui come punto di partenza. Puoi cambiarli prima di cercare.
             </p>
 
             <label className="mt-5 block text-sm font-medium text-stone-700">
-              Tipo di attività
+              Settore da cercare
               <input
                 required
+                list="discovery-category-options"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
+                placeholder="Esempio: Ristoranti"
+                title="Scegli un settore oppure scrivine uno diverso."
                 className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 disabled={searching}
               />
+              <datalist id="discovery-category-options">
+                {DISCOVERY_CATEGORIES.map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
             </label>
             <label className="mt-4 block text-sm font-medium text-stone-700">
-              Località
+              Città o zona della nuova ricerca
               <input
                 required
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
+                placeholder="Esempio: Milano centro"
+                title="Google cercherà nuove attività soltanto in questa città o zona."
                 className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 disabled={searching}
               />
@@ -680,6 +809,10 @@ export default function LeadsBrowser({
                 disabled={searching}
               />
             </label>
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Cercherò <strong>{category || "il settore indicato"}</strong> in{" "}
+              <strong>{location || "la località indicata"}</strong>.
+            </div>
 
             <div className="mt-6 flex justify-end gap-3">
               <button
