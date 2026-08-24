@@ -14,6 +14,7 @@ import { RestaurantV3Hero } from './RestaurantV3Hero';
 import { RestaurantV3Intro } from './RestaurantV3Intro';
 import { RestaurantV3Location } from './RestaurantV3Location';
 import { RestaurantV3OwnerCTA } from './RestaurantV3OwnerCTA';
+import { RestaurantV3OwnerFab } from './RestaurantV3OwnerFab';
 import { RestaurantV3OwnerRibbon } from './RestaurantV3OwnerRibbon';
 import { RestaurantV3Story } from './RestaurantV3Story';
 import { RestaurantV3Trust } from './RestaurantV3Trust';
@@ -72,10 +73,14 @@ export default function RestaurantPremiumV3({
     phone: data.contact.phone,
   });
   const ownerCta =
-    data.content.owner_cta_label?.trim() || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCta;
-  const ownerHref = resolveOwnerCtaHref({
+    data.content.owner_cta_label?.trim() || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaSite;
+  const ownerWhatsAppHref = resolveOwnerCtaHref({
     demoSlug,
-    ownerCtaUrl: data.content.owner_cta_url,
+    channel: 'whatsapp',
+  });
+  const siteHref = resolveOwnerCtaHref({
+    demoSlug,
+    channel: 'site',
   });
 
   const tokenStyle = {
@@ -93,8 +98,8 @@ export default function RestaurantPremiumV3({
       {!compact ? (
         <RestaurantV3OwnerRibbon
           businessName={name}
-          ownerCtaHref={ownerHref}
-          ownerCtaLabel={RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ribbonCta}
+          whatsappHref={ownerWhatsAppHref}
+          siteHref={siteHref}
         />
       ) : null}
       <RestaurantV3Header
@@ -132,7 +137,14 @@ export default function RestaurantPremiumV3({
         openingHours={data.contact.opening_hours}
       />
       <RestaurantV3FinalCTA ctaLabel={cta} ctaHref={ctaHref} />
-      {!compact ? <RestaurantV3OwnerCTA ownerCtaLabel={ownerCta} ownerCtaHref={ownerHref} /> : null}
+      {!compact ? (
+        <RestaurantV3OwnerCTA
+          ownerCtaLabel={ownerCta}
+          whatsappHref={ownerWhatsAppHref}
+          siteHref={siteHref}
+        />
+      ) : null}
+      {!compact && demoSlug ? <RestaurantV3OwnerFab href={ownerWhatsAppHref} /> : null}
       <footer className={styles.footer}>
         <span>{name}</span>
         <span>Concept demo · Restaurant Premium V3</span>

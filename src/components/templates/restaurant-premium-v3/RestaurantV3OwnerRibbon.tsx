@@ -3,11 +3,11 @@ import { RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '@/lib/templates/v3-assets';
 
 type Props = {
   businessName: string;
-  ownerCtaHref: string;
-  ownerCtaLabel: string;
+  whatsappHref: string;
+  siteHref: string;
 };
 
-export function RestaurantV3OwnerRibbon({ businessName, ownerCtaHref, ownerCtaLabel }: Props) {
+export function RestaurantV3OwnerRibbon({ businessName, whatsappHref, siteHref }: Props) {
   return (
     <aside className={styles.ribbon} aria-label="Anteprima dimostrativa">
       <p>
@@ -16,12 +16,20 @@ export function RestaurantV3OwnerRibbon({ businessName, ownerCtaHref, ownerCtaLa
         </strong>
         <span className={styles.ribbonMuted}>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ribbonBody}</span>
       </p>
-      <a href={ownerCtaHref}>
-        <span className={styles.ribbonCtaFull}>
-          {ownerCtaLabel || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ribbonCta}
-        </span>
-        <span className={styles.ribbonCtaShort}>Parliamone</span>
-      </a>
+      <div className={styles.ribbonActions}>
+        <a className={styles.ribbonWa} href={whatsappHref}>
+          <span className={styles.ribbonCtaFull}>
+            {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaWhatsApp}
+          </span>
+          <span className={styles.ribbonCtaShort}>
+            {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ribbonCtaWhatsApp}
+          </span>
+        </a>
+        <a className={styles.ribbonSite} href={siteHref}>
+          <span className={styles.ribbonCtaFull}>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ribbonCta}</span>
+          <span className={styles.ribbonCtaShort}>Info</span>
+        </a>
+      </div>
     </aside>
   );
 }

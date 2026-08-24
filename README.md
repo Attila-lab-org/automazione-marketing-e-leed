@@ -43,7 +43,8 @@ QA visuale: `/demo/qa-v3` e `/demo/qa-v3/email-preview`.
 - `RESEND_PROVIDER_MODE=mock|live`, `RESEND_API_KEY` (live only — do not enable until authorized)
 - `CRON_SECRET` for **`/api/cron/jobs`**
 - `NEXT_PUBLIC_APP_URL` for demo/email preview URLs
-- `OWNER_CONTACT_URL` — http(s) destinazione commerciale dopo click owner CTA (`/demo/[slug]/interesse`). Se assente (es. Production env locked su Vercel), fallback: `https://www.attila-lab.net/`
+- `OWNER_CONTACT_URL` — http(s) destinazione commerciale (`?channel=site`). Fallback: `https://www.attila-lab.net/`
+- `OWNER_WHATSAPP` — numero internazionale o URL `wa.me` (`?channel=whatsapp`). Messaggio precompilato con nome demo.
 
 ## Deploy canonico
 

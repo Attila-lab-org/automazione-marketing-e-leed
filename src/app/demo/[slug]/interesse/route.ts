@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import {
+  buildWhatsAppUrl,
+  isWhatsAppContactTarget,
+  type OwnerContactChannel,
+} from '@/lib/templates/v3-cta';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const STUDIO_FALLBACK = 'https://www.attila-lab.net/';
 
 /**
  * Commercial owner contact destination.
@@ -15,40 +22,76 @@ export function resolveOwnerContactUrl(env: NodeJS.ProcessEnv = process.env): st
   if (fromEnv) return fromEnv;
   const fromPublic = env.NEXT_PUBLIC_OWNER_CONTACT_URL?.trim();
   if (fromPublic) return fromPublic;
-  // Built-in commercial fallback (studio site — not a personal mailbox)
-  return 'https://www.attila-lab.net/';
+  return STUDIO_FALLBACK;
+}
+
+function parseChannel(raw: string | null): OwnerContactChannel {
+  const v = (raw ?? 'auto').toLowerCase();
+  if (v === 'whatsapp' || v === 'wa') return 'whatsapp';
+  if (v === 'site' || v === 'web') return 'site';
+  return 'auto';
+}
+
+function resolveDestination(args: {
+  env: NodeJS.ProcessEnv;
+  channel: OwnerContactChannel;
+  businessName?: string | null;
+  slug: string;
+}): { url: string; channel: 'whatsapp' | 'site' } | { error: string } {
+  const { env, channel, businessName, slug } = args;
+  const whatsappSource =
+    env.OWNER_WHATSAPP?.trim() ||
+    (env.OWNER_CONTACT_URL && isWhatsAppContactTarget(env.OWNER_CONTACT_URL)
+      ? env.OWNER_CONTACT_URL.trim()
+      : null) ||
+    (env.NEXT_PUBLIC_OWNER_CONTACT_URL &&
+    isWhatsAppContactTarget(env.NEXT_PUBLIC_OWNER_CONTACT_URL)
+      ? env.NEXT_PUBLIC_OWNER_CONTACT_URL.trim()
+      : null);
+
+  const wantWhatsApp =
+    channel === 'whatsapp' || (channel === 'auto' && Boolean(whatsappSource));
+
+  if (wantWhatsApp && whatsappSource) {
+    const wa = buildWhatsAppUrl({
+      phoneOrUrl: whatsappSource,
+      businessName,
+      slug,
+    });
+    if (wa) return { url: wa, channel: 'whatsapp' };
+    if (channel === 'whatsapp') {
+      return { error: 'OWNER_WHATSAPP non valido' };
+    }
+  }
+
+  const siteCandidate = resolveOwnerContactUrl(env) ?? STUDIO_FALLBACK;
+  const contactUrl = isWhatsAppContactTarget(siteCandidate) ? STUDIO_FALLBACK : siteCandidate;
+
+  try {
+    const dest = new URL(contactUrl);
+    if (dest.protocol !== 'http:' && dest.protocol !== 'https:') {
+      return { error: 'OWNER_CONTACT_URL non valido' };
+    }
+    return { url: dest.toString(), channel: 'site' };
+  } catch {
+    return { error: 'OWNER_CONTACT_URL non valido' };
+  }
 }
 
 /**
  * Public owner CTA endpoint.
- * Logs OWNER_CTA_CLICKED then redirects to OWNER_CONTACT_URL (workspace commercial contact).
- * Never embeds a personal mailbox in the demo renderer.
+ * Logs OWNER_CTA_CLICKED then redirects to WhatsApp or commercial site.
+ * Query: ?channel=whatsapp|site|auto
  */
 export async function GET(
   request: Request,
   ctx: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await ctx.params;
-  const contactUrl = resolveOwnerContactUrl(process.env);
-  if (!contactUrl) {
-    return NextResponse.json(
-      {
-        error:
-          'OWNER_CONTACT_URL non configurato sul server. Imposta la destinazione commerciale owner.',
-      },
-      { status: 503 },
-    );
-  }
+  const channel = parseChannel(new URL(request.url).searchParams.get('channel'));
 
-  let dest: URL;
-  try {
-    dest = new URL(contactUrl);
-    if (dest.protocol !== 'http:' && dest.protocol !== 'https:') {
-      return NextResponse.json({ error: 'OWNER_CONTACT_URL non valido' }, { status: 503 });
-    }
-  } catch {
-    return NextResponse.json({ error: 'OWNER_CONTACT_URL non valido' }, { status: 503 });
-  }
+  let businessName: string | null = null;
+  let tracked = false;
 
   if (isSupabaseConfigured(process.env) && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
@@ -60,6 +103,13 @@ export async function GET(
         .maybeSingle();
 
       if (site && site.status !== 'DISABLED' && site.status !== 'EXPIRED') {
+        const { data: lead } = await admin
+          .from('leads')
+          .select('name')
+          .eq('id', site.lead_id)
+          .maybeSingle();
+        businessName = lead?.name ?? null;
+
         const referer = request.headers.get('referer');
         await admin.from('activity_log').insert({
           workspace_id: site.workspace_id,
@@ -74,17 +124,42 @@ export async function GET(
             slug,
             demoId: site.id,
             leadId: site.lead_id,
+            channel,
             referer,
             path: `/demo/${slug}/interesse`,
           },
         });
+        tracked = true;
       }
     } catch {
       // Tracking best-effort — never block the commercial redirect
     }
   }
 
-  dest.searchParams.set('demo', slug);
-  dest.searchParams.set('source', 'restaurant-premium-v3-owner-cta');
+  const resolved = resolveDestination({
+    env: process.env,
+    channel,
+    businessName,
+    slug,
+  });
+
+  if ('error' in resolved) {
+    return NextResponse.json({ error: resolved.error }, { status: 503 });
+  }
+
+  let dest: URL;
+  try {
+    dest = new URL(resolved.url);
+  } catch {
+    return NextResponse.json({ error: 'Destinazione non valida' }, { status: 503 });
+  }
+
+  // Site redirects get attribution query; WhatsApp keeps its own text payload
+  if (resolved.channel === 'site') {
+    dest.searchParams.set('demo', slug);
+    dest.searchParams.set('source', 'restaurant-premium-v3-owner-cta');
+    if (tracked) dest.searchParams.set('tracked', '1');
+  }
+
   return NextResponse.redirect(dest.toString(), 302);
 }

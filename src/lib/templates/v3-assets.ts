@@ -53,10 +53,14 @@ export const RESTAURANT_PREMIUM_V3_CONCEPT_COPY = {
   finalCtaBody: 'Quando siete pronti, riservate il vostro momento.',
   ownerHeadline: 'Ti piacerebbe una presenza digitale così per il tuo locale?',
   ownerBody:
-    'Questa è una proposta dimostrativa. Possiamo personalizzarla completamente sulla tua identità, sui tuoi contenuti e sui tuoi obiettivi.',
+    'Questa è solo l’anteprima. Un tap e ne parliamo: ti prepariamo la versione completa sul tuo brand, senza moduli lunghi.',
   ownerCta: 'Parliamone',
+  ownerCtaWhatsApp: 'Scrivici su WhatsApp',
+  ownerCtaSite: 'Apri il sito Attila Lab',
+  ownerMicro: 'Risposta rapida · Nessun impegno · Demo già pronta',
   cta: 'Prenota un tavolo',
   ribbonTitle: 'Anteprima riservata',
   ribbonBody: 'Concept dimostrativo realizzato per mostrarti una possibile nuova presenza digitale.',
   ribbonCta: 'Richiedi la versione completa',
+  ribbonCtaWhatsApp: 'WhatsApp',
 } as const;
