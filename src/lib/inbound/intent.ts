@@ -1,61 +1,8 @@
 import type { IntentMatch, NormalizedInboundMessage } from './types';
-
-const RULES: Array<{ intent: IntentMatch['intent']; keywords: string[] }> = [
-  {
-    intent: 'ECOMMERCE_REQUEST',
-    keywords: [
-      'ecommerce',
-      'e-commerce',
-      'e commerce',
-      'negozio online',
-      'shop online',
-      'vendere online',
-      'carrello',
-      'woocommerce',
-      'shopify',
-    ],
-  },
-  {
-    intent: 'WEBSITE_REQUEST',
-    keywords: [
-      'sito web',
-      'sito internet',
-      'fare un sito',
-      'creare un sito',
-      'realizzare un sito',
-      'nuovo sito',
-      'rifare il sito',
-      'rifacimento sito',
-      'landing page',
-      'pagina web',
-    ],
-  },
-  {
-    intent: 'DIGITAL_PRESENCE',
-    keywords: [
-      'presenza online',
-      'presenza digitale',
-      'vetrina online',
-      'visibilita online',
-      'visibilità online',
-      'google business',
-      'profilo online',
-    ],
-  },
-  {
-    intent: 'QUOTE_REQUEST',
-    keywords: [
-      'preventivo',
-      'quanto costa',
-      'costo sito',
-      'prezzo sito',
-      'consigliate',
-      'qualcuno conosce',
-      'mi serve un',
-      'cerco qualcuno',
-    ],
-  },
-];
+import {
+  DEFAULT_TELEGRAM_SETTINGS,
+  type TelegramKeywordGroups,
+} from './telegram-settings';
 
 const IGNORE = [
   'crypto',
@@ -80,7 +27,10 @@ function normalizeText(text: string): string {
  * Classificatore keyword-based prudente.
  * Nessuna risposta aggressiva: se non matcha → UNKNOWN.
  */
-export function classifyInboundIntent(message: NormalizedInboundMessage): IntentMatch {
+export function classifyInboundIntent(
+  message: NormalizedInboundMessage,
+  keywords: TelegramKeywordGroups = DEFAULT_TELEGRAM_SETTINGS.keywords,
+): IntentMatch {
   const text = normalizeText(message.text);
   if (!text || text.length < 8) {
     return { intent: 'UNKNOWN', matched: false, keywords: [], confidence: 0 };
@@ -89,7 +39,14 @@ export function classifyInboundIntent(message: NormalizedInboundMessage): Intent
     return { intent: 'UNKNOWN', matched: false, keywords: [], confidence: 0 };
   }
 
-  for (const rule of RULES) {
+  const rules: Array<{ intent: IntentMatch['intent']; keywords: string[] }> = [
+    { intent: 'ECOMMERCE_REQUEST', keywords: keywords.ecommerce },
+    { intent: 'WEBSITE_REQUEST', keywords: keywords.website },
+    { intent: 'DIGITAL_PRESENCE', keywords: keywords.digitalPresence },
+    { intent: 'QUOTE_REQUEST', keywords: keywords.quote },
+  ];
+
+  for (const rule of rules) {
     const hits = rule.keywords.filter((k) => text.includes(normalizeText(k)));
     if (hits.length > 0) {
       const confidence = Math.min(95, 55 + hits.length * 15);

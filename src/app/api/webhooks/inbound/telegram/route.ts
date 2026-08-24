@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import { processTelegramInbound } from '@/lib/inbound/process';
-import {
-  getTelegramProvider,
-  isTelegramEnabled,
-} from '@/lib/providers/telegram';
+import { getTelegramInboundSettings } from '@/lib/inbound/telegram-settings';
+import { getTelegramProvider } from '@/lib/providers/telegram';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 
@@ -14,12 +12,15 @@ export const runtime = 'nodejs';
  * Header richiesto in live: X-Telegram-Bot-Api-Secret-Token
  */
 export async function POST(request: Request) {
-  if (!isTelegramEnabled(process.env)) {
-    return NextResponse.json({ ok: true, skipped: true, reason: 'TELEGRAM_DISABLED' });
-  }
-
   if (!isSupabaseConfigured(process.env) || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json({ error: 'Supabase non configurato' }, { status: 503 });
+  }
+
+  const admin = createAdminSupabaseClient(process.env);
+  const workspace = await ensureDefaultWorkspace(admin);
+  const settings = await getTelegramInboundSettings(admin, workspace.id);
+  if (!settings.enabled) {
+    return NextResponse.json({ ok: true, skipped: true, reason: 'TELEGRAM_DISABLED' });
   }
 
   const rawBody = await request.text();
@@ -40,13 +41,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const admin = createAdminSupabaseClient(process.env);
-    const workspace = await ensureDefaultWorkspace(admin);
     const result = await processTelegramInbound({
       admin,
       workspaceId: workspace.id,
       message,
       provider,
+      settings,
       env: process.env,
     });
     return NextResponse.json({ ok: true, ...result });
@@ -60,9 +60,15 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  let enabled = false;
+  if (isSupabaseConfigured(process.env) && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const admin = createAdminSupabaseClient(process.env);
+    const workspace = await ensureDefaultWorkspace(admin);
+    enabled = (await getTelegramInboundSettings(admin, workspace.id)).enabled;
+  }
   return NextResponse.json({
     channel: 'telegram',
-    enabled: isTelegramEnabled(process.env),
+    enabled,
     mode: (process.env.TELEGRAM_PROVIDER_MODE ?? 'mock').toLowerCase(),
   });
 }

@@ -1,4 +1,4 @@
-import { getTelegramProvider, isTelegramEnabled } from '@/lib/providers/telegram';
+import { getTelegramProvider } from '@/lib/providers/telegram';
 import type { InboundChannelAdapter, InboundChannelId } from './types';
 import { getChannelRegistryEntry } from './channels';
 
@@ -30,9 +30,6 @@ export function getInboundAdapter(
   if (!entry) throw new Error(`Canale sconosciuto: ${channel}`);
 
   if (channel === 'telegram') {
-    if (!isTelegramEnabled(env)) {
-      throw new Error('Telegram disabilitato (TELEGRAM_ENABLED)');
-    }
     return getTelegramProvider(env);
   }
 

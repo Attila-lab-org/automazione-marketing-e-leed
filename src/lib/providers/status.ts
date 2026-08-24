@@ -5,7 +5,7 @@
 
 import { getAppUrlStatus } from '@/lib/app-url';
 import { getGooglePlacesProvider } from '@/lib/providers/google-places';
-import { isTelegramEnabled } from '@/lib/providers/telegram';
+import { getTelegramCredentialStatus } from '@/lib/providers/telegram/webhook';
 import { getOwnerCommercialStatus } from '@/lib/templates/owner-commercial';
 import { getTestDeliveryStatus } from '@/lib/campaigns/test-delivery';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
@@ -240,44 +240,20 @@ function probeResend(env: NodeJS.ProcessEnv): ProviderStatusItem {
 }
 
 function probeTelegram(env: NodeJS.ProcessEnv): ProviderStatusItem {
-  if (!isTelegramEnabled(env)) {
+  const connection = getTelegramCredentialStatus(env);
+  if (!connection.ready) {
     return {
       id: 'telegram',
       name: 'Telegram',
-      status: 'not_configured',
-      detail: 'TELEGRAM_ENABLED off · inbound disabilitato',
-    };
-  }
-  const mode = modeOf(env, 'TELEGRAM_PROVIDER_MODE');
-  if (mode === 'mock') {
-    return {
-      id: 'telegram',
-      name: 'Telegram',
-      status: 'mock',
-      detail: 'TELEGRAM MOCK · webhook locale senza API reale',
-    };
-  }
-  if (mode === 'live') {
-    if (!env.TELEGRAM_BOT_TOKEN?.trim() || !env.TELEGRAM_WEBHOOK_SECRET?.trim()) {
-      return {
-        id: 'telegram',
-        name: 'Telegram',
-        status: 'not_configured',
-        detail: 'live senza TELEGRAM_BOT_TOKEN / TELEGRAM_WEBHOOK_SECRET',
-      };
-    }
-    return {
-      id: 'telegram',
-      name: 'Telegram',
-      status: 'ready',
-      detail: 'TELEGRAM LIVE · webhook /api/webhooks/inbound/telegram',
+      status: connection.mode === 'mock' ? 'mock' : 'not_configured',
+      detail: `configurazione incompleta: ${connection.missing.join(', ')}`,
     };
   }
   return {
     id: 'telegram',
     name: 'Telegram',
-    status: 'error',
-    detail: `TELEGRAM_PROVIDER_MODE non valido: ${mode}`,
+    status: 'ready',
+    detail: 'credenziali pronte · avvio e arresto dalla pagina Messaggi',
   };
 }
 

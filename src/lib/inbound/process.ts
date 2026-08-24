@@ -3,6 +3,7 @@ import { ensureInboundThread } from '@/lib/messaging/persist';
 import { buildAutoReplyText } from '@/lib/inbound/auto-reply';
 import { upsertLeadFromInbound } from '@/lib/inbound/create-lead';
 import { classifyInboundIntent } from '@/lib/inbound/intent';
+import type { TelegramInboundSettings } from '@/lib/inbound/telegram-settings';
 import type { IntentMatch, NormalizedInboundMessage } from '@/lib/inbound/types';
 import type { TelegramProvider } from '@/lib/providers/telegram';
 
@@ -36,10 +37,11 @@ export async function processTelegramInbound(args: {
   workspaceId: string;
   message: NormalizedInboundMessage;
   provider: TelegramProvider;
+  settings: TelegramInboundSettings;
   env?: NodeJS.ProcessEnv;
 }): Promise<ProcessInboundResult> {
   const env = args.env ?? process.env;
-  const { admin, workspaceId, message, provider } = args;
+  const { admin, workspaceId, message, provider, settings } = args;
 
   if (message.isFromBot) {
     return { skipped: true, reason: 'FROM_BOT' };
@@ -59,7 +61,7 @@ export async function processTelegramInbound(args: {
     return { skipped: true, reason: 'DUPLICATE_MESSAGE', inboundMessageId: existingMsg.id };
   }
 
-  const intent = classifyInboundIntent(message);
+  const intent = classifyInboundIntent(message, settings.keywords);
   if (!intent.matched) {
     return { skipped: true, reason: 'NO_INTENT', intent };
   }
@@ -126,11 +128,14 @@ export async function processTelegramInbound(args: {
     },
   });
 
-  const replyText = buildAutoReplyText({
-    message,
-    intent,
-    studioName: env.OWNER_SENDER_NAME,
-  });
+  const replyText = settings.replyEnabled
+    ? buildAutoReplyText({
+        message,
+        intent,
+        studioName: env.OWNER_SENDER_NAME,
+        template: settings.replyTemplate,
+      })
+    : null;
   if (!replyText) {
     return {
       leadId: lead.leadId,

@@ -4,6 +4,7 @@ import EmptyState from "@/components/empty-state";
 import PageHeader from "@/components/page-header";
 import ProvidersRuntimeList from "@/components/providers-runtime-list";
 import SectionSubnav from "@/components/section-subnav";
+import TelegramControlPanel from "@/components/telegram-control-panel";
 import { SETTINGS_SUBNAV } from "@/lib/navigation";
 
 export default function SettingsPage() {
@@ -21,6 +22,8 @@ export default function SettingsPage() {
         </h2>
         <ProvidersRuntimeList layout="stack" />
       </section>
+
+      <TelegramControlPanel />
 
       <EmptyState
         title="Invio di prova sicuro"
