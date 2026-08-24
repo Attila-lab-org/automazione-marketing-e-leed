@@ -1,12 +1,9 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { ADMIN_SESSION_COOKIE } from './constants';
+import type { AdminSessionPayload } from './session-types';
+import { SESSION_TTL_MS } from './session-types';
 
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-export interface AdminSessionPayload {
-  sub: string;
-  exp: number;
-}
+export type { AdminSessionPayload } from './session-types';
 
 function secret(env: NodeJS.ProcessEnv = process.env): string {
   const value = env.ADMIN_SESSION_SECRET ?? env.SUPABASE_SERVICE_ROLE_KEY;

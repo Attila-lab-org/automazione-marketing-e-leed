@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { verifyAdminSessionTokenEdge } from '@/lib/auth/admin-session-edge';
 import { ADMIN_SESSION_COOKIE, isPublicPath } from '@/lib/auth/constants';
-import { verifyAdminSessionToken } from '@/lib/auth/admin-session';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (isPublicPath(pathname)) {
@@ -14,7 +14,7 @@ export function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-  const session = verifyAdminSessionToken(token);
+  const session = await verifyAdminSessionTokenEdge(token);
   if (!session) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';
