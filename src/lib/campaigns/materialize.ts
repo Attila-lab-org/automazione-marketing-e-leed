@@ -127,7 +127,8 @@ export async function createCampaignWithLeads(
       test_recipient: testRecipient,
       rate_limit_per_hour: input.rateLimitPerHour ?? 20,
       daily_send_limit: input.dailySendLimit ?? 100,
-      send_window: input.sendWindow ?? { timezone: 'Europe/Rome', start: '09:00', end: '18:00' },
+      // Empty window = no time-of-day limit (isWithinSendWindow → always true).
+      send_window: input.sendWindow ?? {},
     })
     .select('id')
     .single();
