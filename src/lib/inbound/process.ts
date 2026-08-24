@@ -25,7 +25,7 @@ export type ProcessInboundResult = {
   intent?: IntentMatch;
 };
 
-const RATE_LIMIT_HOURS = 24;
+const REPLY_COOLDOWN_MINUTES = 5;
 
 function botAddress(env: NodeJS.ProcessEnv): string {
   const u = env.TELEGRAM_BOT_USERNAME?.trim();
@@ -183,8 +183,8 @@ export async function processTelegramInbound(args: {
     };
   }
 
-  // Rate limit: max 1 auto-reply outbound telegram per lead nelle ultime 24h
-  const since = new Date(Date.now() - RATE_LIMIT_HOURS * 60 * 60 * 1000).toISOString();
+  // Protezione anti-raffica: una risposta automatica per contatto ogni 5 minuti.
+  const since = new Date(Date.now() - REPLY_COOLDOWN_MINUTES * 60 * 1000).toISOString();
   const { data: recentOutbound } = await admin
     .from('messages')
     .select('id')
@@ -203,7 +203,7 @@ export async function processTelegramInbound(args: {
       lead_id: lead.leadId,
       category: 'DECISION',
       event_type: 'TELEGRAM_REPLY_SKIPPED',
-      message: 'Risposta Telegram non inviata: limite di una risposta in 24 ore',
+      message: 'Risposta Telegram non inviata: attendi 5 minuti dall’ultima risposta',
       data: {
         reason: 'RATE_LIMITED',
         chat_id: message.chatId,
