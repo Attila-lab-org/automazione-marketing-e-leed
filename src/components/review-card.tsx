@@ -26,6 +26,10 @@ export type ReviewCardProps = {
   selected?: boolean;
   onSelectChange?: (selected: boolean) => void;
   onApprove?: () => void;
+  approveLabel?: string;
+  approveHint?: string;
+  headerBadge?: string | null;
+  deliveryNote?: string | null;
   onEditDraft?: () => void;
   onSkip?: () => void;
   onReject?: () => void;
@@ -58,6 +62,10 @@ export default function ReviewCard({
   selected = false,
   onSelectChange,
   onApprove,
+  approveLabel = "Approva",
+  approveHint = "Autorizza l'invio di questo messaggio al lead.",
+  headerBadge = null,
+  deliveryNote = null,
   onEditDraft,
   onSkip,
   onReject,
@@ -79,8 +87,8 @@ export default function ReviewCard({
   }[] = [
     {
       key: "approve",
-      label: "Approva",
-      hint: "Autorizza l'invio di questo messaggio al lead.",
+      label: approveLabel,
+      hint: approveHint,
       callback: onApprove,
       className: "bg-emerald-600 text-white hover:bg-emerald-700 border border-transparent",
     },
@@ -157,6 +165,11 @@ export default function ReviewCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold text-stone-900">{companyName}</h3>
+            {headerBadge ? (
+              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-800">
+                {headerBadge}
+              </span>
+            ) : null}
             <span className="text-xs text-stone-400">
               {category} · {city}
             </span>
@@ -167,6 +180,12 @@ export default function ReviewCard({
               </span>
             ) : null}
           </div>
+
+          {deliveryNote ? (
+            <p className="mt-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
+              {deliveryNote}
+            </p>
+          ) : null}
 
           <p className="mt-2 truncate text-sm font-medium text-stone-700">{subject}</p>
           <p className="mt-0.5 line-clamp-2 text-sm text-stone-500">{messagePreview}</p>

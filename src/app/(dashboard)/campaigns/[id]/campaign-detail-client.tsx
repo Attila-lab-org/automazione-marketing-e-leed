@@ -9,6 +9,8 @@ type CampaignDetail = {
   name: string;
   status: string;
   mode: string;
+  delivery_mode?: "PRODUCTION" | "TEST";
+  test_recipient?: string | null;
   created_at: string;
   updated_at?: string;
   rate_limit_per_hour?: number;
@@ -35,6 +37,8 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deliveryMode, setDeliveryMode] = useState<"PRODUCTION" | "TEST">("PRODUCTION");
+  const [testRecipient, setTestRecipient] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +51,8 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
         setCampaign(data.campaign);
         setCounts(data.counts ?? {});
         setTotals(data.totals ?? null);
+        setDeliveryMode(data.campaign.delivery_mode === "TEST" ? "TEST" : "PRODUCTION");
+        setTestRecipient(data.campaign.test_recipient ?? "");
       } catch (err: unknown) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Errore");
       }
@@ -63,14 +69,20 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
     setCampaign(data.campaign);
     setCounts(data.counts ?? {});
     setTotals(data.totals ?? null);
+    setDeliveryMode(data.campaign.delivery_mode === "TEST" ? "TEST" : "PRODUCTION");
+    setTestRecipient(data.campaign.test_recipient ?? "");
   }, [campaignId]);
+
   async function runAction(action: "prepare" | "approve" | "pause" | "resume") {
     if (action === "approve") {
       const n = (totals?.review ?? 0) + (totals?.ready ?? 0);
+      const isTest = campaign?.delivery_mode === "TEST";
       const ok = window.confirm(
-        `Approvare e avviare l'invio per i lead in REVIEW/READY di questa campagna${
-          n ? ` (${n})` : ""
-        }?`,
+        isTest
+          ? `Approvare e avviare TEST per i lead in REVIEW/READY${n ? ` (${n})` : ""}?\nNessun prospect reale verrà contattato — invio solo a ${campaign?.test_recipient ?? "test recipient"}.`
+          : `Approvare e avviare l'invio per i lead in REVIEW/READY di questa campagna${
+              n ? ` (${n})` : ""
+            }?`,
       );
       if (!ok) return;
     }
@@ -92,7 +104,11 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
             : "Preparazione avviata.",
         );
       } else if (action === "approve") {
-        setMessage(`Approvati ${data.approved ?? 0} lead — invio in coda.`);
+        setMessage(
+          campaign?.delivery_mode === "TEST"
+            ? `Approvati ${data.approved ?? 0} lead — invio TEST in coda.`
+            : `Approvati ${data.approved ?? 0} lead — invio in coda.`,
+        );
       } else if (action === "pause") {
         setMessage("Campagna in pausa (i follow-up dovuti restano in attesa).");
       } else {
@@ -104,6 +120,35 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
             : "Campagna ripresa.",
         );
       }
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Errore");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveDelivery() {
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_delivery",
+          deliveryMode,
+          testRecipient: deliveryMode === "TEST" ? testRecipient : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Salvataggio fallito");
+      setMessage(
+        deliveryMode === "TEST"
+          ? "Modalità TEST salvata — nessun prospect reale verrà contattato."
+          : "Modalità Produzione salvata.",
+      );
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Errore");
@@ -124,6 +169,8 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
     return <p className="text-sm text-stone-500">Caricamento campagna…</p>;
   }
 
+  const isTest = campaign.delivery_mode === "TEST";
+
   const statCards: { label: string; value: number }[] = [
     { label: "Totale lead", value: totals.leads },
     { label: "Pending", value: totals.pending },
@@ -143,8 +190,16 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">
               {campaign.mode} · {campaign.status}
+              {isTest ? " · TEST" : ""}
             </p>
-            <h2 className="mt-1 text-xl font-semibold text-stone-900">{campaign.name}</h2>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-semibold text-stone-900">{campaign.name}</h2>
+              {isTest ? (
+                <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-bold uppercase text-violet-800">
+                  TEST
+                </span>
+              ) : null}
+            </div>
             <p className="mt-1 text-sm text-stone-500">
               Creata {new Date(campaign.created_at).toLocaleString("it-IT")}
             </p>
@@ -152,6 +207,66 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
           <Link href="/campaigns" className="text-sm text-stone-500 hover:text-stone-800">
             ← Tutte le campagne
           </Link>
+        </div>
+
+        {isTest ? (
+          <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+            <p className="font-semibold">🧪 CAMPAGNA TEST</p>
+            <p className="mt-1">
+              Nessun prospect reale verrà contattato. Destinatario effettivo:{" "}
+              <strong>{campaign.test_recipient ?? "—"}</strong>
+            </p>
+            <p className="mt-1 text-xs text-violet-700">
+              Follow-up accelerati: +5 min / +10 min. Pause/Resume restano attivi.
+            </p>
+          </div>
+        ) : null}
+
+        <div className="mt-5 rounded-lg border border-stone-200 bg-stone-50 p-4">
+          <p className="text-sm font-semibold text-stone-800">Modalità invio</p>
+          <div className="mt-3 flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-sm text-stone-700">
+              <input
+                type="radio"
+                name="delivery"
+                checked={deliveryMode === "PRODUCTION"}
+                onChange={() => setDeliveryMode("PRODUCTION")}
+                disabled={busy}
+              />
+              Produzione
+            </label>
+            <label className="flex items-center gap-2 text-sm text-stone-700">
+              <input
+                type="radio"
+                name="delivery"
+                checked={deliveryMode === "TEST"}
+                onChange={() => setDeliveryMode("TEST")}
+                disabled={busy}
+              />
+              Test
+            </label>
+          </div>
+          {deliveryMode === "TEST" ? (
+            <label className="mt-3 block text-sm text-stone-700">
+              Email destinatario test
+              <input
+                type="email"
+                value={testRecipient}
+                onChange={(e) => setTestRecipient(e.target.value)}
+                className="mt-1 w-full max-w-md rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                placeholder="tua@email.it"
+                disabled={busy}
+              />
+            </label>
+          ) : null}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void saveDelivery()}
+            className="mt-3 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-100 disabled:opacity-50"
+          >
+            Salva modalità invio
+          </button>
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
@@ -177,7 +292,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
             onClick={() => void runAction("approve")}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
           >
-            Approva e avvia
+            {isTest ? "Approva e avvia test" : "Approva e avvia"}
           </button>
           {campaign.status === "PAUSED" ? (
             <button

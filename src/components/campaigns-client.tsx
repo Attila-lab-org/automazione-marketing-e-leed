@@ -4,7 +4,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import EmptyState from "@/components/empty-state";
 
-type Campaign = { id: string; name: string; status: string; mode: string; created_at: string };
+type Campaign = {
+  id: string;
+  name: string;
+  status: string;
+  mode: string;
+  delivery_mode?: string;
+  created_at: string;
+};
 
 export default function CampaignsClient() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -118,7 +125,9 @@ export default function CampaignsClient() {
                     {c.name}
                   </Link>
                   <p className="text-xs text-stone-500">
-                    {c.mode} · {c.status} · {new Date(c.created_at).toLocaleString("it-IT")}
+                    {c.mode} · {c.status}
+                    {c.delivery_mode === "TEST" ? " · TEST" : ""} ·{" "}
+                    {new Date(c.created_at).toLocaleString("it-IT")}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">

@@ -14,6 +14,8 @@ export interface ReviewQueueItem {
   email: string | null;
   /** Discreet provenance for selected email, e.g. "trovata su /contatti · mailto · confidence alta" */
   emailEvidenceLabel: string | null;
+  deliveryMode: 'PRODUCTION' | 'TEST';
+  testRecipient: string | null;
   subject: string;
   messagePreview: string;
   body: string;
@@ -47,8 +49,9 @@ export async function listReviewQueue(
   const leadIds = [...new Set(rows.map((r) => r.lead_id))];
   const demoIds = rows.map((r) => r.demo_site_id).filter(Boolean) as string[];
   const clIds = rows.map((r) => r.id);
+  const campaignIds = [...new Set(rows.map((r) => r.campaign_id))];
 
-  const [{ data: leads }, { data: demos }, { data: drafts }] = await Promise.all([
+  const [{ data: leads }, { data: demos }, { data: drafts }, { data: campaigns }] = await Promise.all([
     admin.from('leads').select('id, name, category, city, email, discovery_score, confidence').in('id', leadIds),
     demoIds.length
       ? admin.from('demo_sites').select('id, slug, public_url').in('id', demoIds)
@@ -57,6 +60,10 @@ export async function listReviewQueue(
       .from('message_drafts')
       .select('campaign_lead_id, subject, body, sequence_step')
       .in('campaign_lead_id', clIds),
+    admin
+      .from('campaigns')
+      .select('id, delivery_mode, test_recipient, name')
+      .in('id', campaignIds),
   ]);
 
   const leadById = new Map((leads ?? []).map((l) => [l.id, l]));
@@ -64,6 +71,7 @@ export async function listReviewQueue(
   const draftByCl = new Map(
     (drafts ?? []).map((d) => [`${d.campaign_lead_id}:${d.sequence_step ?? 0}`, d]),
   );
+  const campaignById = new Map((campaigns ?? []).map((c) => [c.id, c]));
 
   return rows.map((row) => {
     const lead = leadById.get(row.lead_id);
@@ -97,6 +105,12 @@ export async function listReviewQueue(
     if (!row.demo_site_id) blockers.push('DEMO_NOT_READY');
     if (row.status === 'FAILED') blockers.push('PREPARATION_FAILED');
 
+    const campaign = campaignById.get(row.campaign_id);
+    const deliveryMode =
+      campaign?.delivery_mode === 'TEST' ? ('TEST' as const) : ('PRODUCTION' as const);
+    const testRecipient =
+      typeof campaign?.test_recipient === 'string' ? campaign.test_recipient : null;
+
     return {
       id: row.id,
       campaignId: row.campaign_id,
@@ -108,6 +122,8 @@ export async function listReviewQueue(
       confidence: lead?.confidence ?? 0,
       email: lead?.email ?? null,
       emailEvidenceLabel,
+      deliveryMode,
+      testRecipient,
       subject: draft?.subject ?? '(messaggio in preparazione)',
       messagePreview: body ? stripHtml(body).slice(0, 220) : 'Anteprima non ancora generata.',
       body,

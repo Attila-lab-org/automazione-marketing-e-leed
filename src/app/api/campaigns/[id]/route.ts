@@ -3,6 +3,10 @@ import { withAdmin } from '@/lib/api/with-admin';
 import { enqueueCampaignPreparation } from '@/lib/campaigns/prepare';
 import { resumeCampaign } from '@/lib/campaigns/resume';
 import { approveCampaignLeads } from '@/lib/campaigns/review-queue';
+import {
+  isValidEmailShape,
+  normalizeEmailAddress,
+} from '@/lib/campaigns/test-delivery';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 
@@ -20,7 +24,9 @@ export const GET = withAdmin(async (_request: Request, ctx?: unknown) => {
 
   const { data: campaign, error } = await admin
     .from('campaigns')
-    .select('id, name, status, mode, created_at, updated_at, rate_limit_per_hour, daily_send_limit')
+    .select(
+      'id, name, status, mode, delivery_mode, test_recipient, created_at, updated_at, rate_limit_per_hour, daily_send_limit',
+    )
     .eq('workspace_id', workspace.id)
     .eq('id', id)
     .maybeSingle();
@@ -63,7 +69,12 @@ export const GET = withAdmin(async (_request: Request, ctx?: unknown) => {
 
 export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
   const { id } = await (ctx as RouteCtx).params;
-  const body = (await request.json()) as { action?: string; campaignLeadIds?: string[] };
+  const body = (await request.json()) as {
+    action?: string;
+    campaignLeadIds?: string[];
+    deliveryMode?: 'PRODUCTION' | 'TEST';
+    testRecipient?: string | null;
+  };
   if (!isSupabaseConfigured(process.env) || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json({ error: 'Supabase non configurato' }, { status: 503 });
   }
@@ -96,6 +107,31 @@ export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
       const status = message === 'Campagna non trovata' ? 404 : 500;
       return NextResponse.json({ error: message }, { status });
     }
+  }
+  if (body.action === 'update_delivery') {
+    const deliveryMode = body.deliveryMode === 'TEST' ? 'TEST' : 'PRODUCTION';
+    let testRecipient: string | null = null;
+    if (deliveryMode === 'TEST') {
+      const raw = body.testRecipient?.trim() ?? '';
+      if (!raw || !isValidEmailShape(raw)) {
+        return NextResponse.json(
+          { error: 'Campagna TEST: email destinatario test obbligatoria' },
+          { status: 400 },
+        );
+      }
+      testRecipient = normalizeEmailAddress(raw);
+    }
+    const { error } = await admin
+      .from('campaigns')
+      .update({
+        delivery_mode: deliveryMode,
+        test_recipient: testRecipient,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('workspace_id', workspace.id)
+      .eq('id', id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, deliveryMode, testRecipient });
   }
   return NextResponse.json({ error: 'action non supportata' }, { status: 400 });
 });

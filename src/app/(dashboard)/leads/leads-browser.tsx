@@ -127,6 +127,17 @@ export default function LeadsBrowser({
   const [campaignLeads, setCampaignLeads] = useState<LeadView[]>([]);
   const [campaignName, setCampaignName] = useState("");
   const [campaignMode, setCampaignMode] = useState<"MANUAL" | "SCORE_BASED">("MANUAL");
+  const [deliveryMode, setDeliveryMode] = useState<"PRODUCTION" | "TEST">("PRODUCTION");
+  const [testRecipient, setTestRecipient] = useState("");
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualForm, setManualForm] = useState({
+    businessName: "",
+    email: "",
+    websiteUrl: "",
+    phone: "",
+    city: "",
+  });
   const [creatingCampaign, setCreatingCampaign] = useState(false);
 
   // Filters
@@ -337,12 +348,18 @@ export default function LeadsBrowser({
     setCampaignLeads(selected);
     setCampaignName(`Campagna ${dateLabel}`);
     setCampaignMode("MANUAL");
+    setDeliveryMode("PRODUCTION");
+    setTestRecipient("");
     setCampaignModalOpen(true);
   }
 
   async function onCreateCampaign(e: FormEvent) {
     e.preventDefault();
     if (!campaignLeads.length || !campaignName.trim()) return;
+    if (deliveryMode === "TEST" && !testRecipient.trim()) {
+      setResultBanner("Campagna TEST: inserisci l'email destinatario test.");
+      return;
+    }
     setCreatingCampaign(true);
     setResultBanner(null);
     try {
@@ -353,6 +370,8 @@ export default function LeadsBrowser({
           name: campaignName.trim(),
           leadIds: campaignLeads.map((l) => l.id),
           mode: campaignMode,
+          deliveryMode,
+          testRecipient: deliveryMode === "TEST" ? testRecipient.trim() : undefined,
           prepare: true,
         }),
       });
@@ -375,6 +394,36 @@ export default function LeadsBrowser({
     }
   }
 
+  async function onCreateManualLead(e: FormEvent) {
+    e.preventDefault();
+    setManualBusy(true);
+    setResultBanner(null);
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessName: manualForm.businessName,
+          email: manualForm.email,
+          websiteUrl: manualForm.websiteUrl || undefined,
+          phone: manualForm.phone || undefined,
+          city: manualForm.city || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Creazione lead fallita");
+      setResultBanner(`Lead manuale creato: ${data.lead?.name ?? manualForm.businessName}`);
+      setManualOpen(false);
+      setManualForm({ businessName: "", email: "", websiteUrl: "", phone: "", city: "" });
+      setLoading(true);
+      setReloadToken((n) => n + 1);
+    } catch (err) {
+      setResultBanner(err instanceof Error ? err.message : "Creazione lead fallita");
+    } finally {
+      setManualBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -388,6 +437,13 @@ export default function LeadsBrowser({
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setManualOpen(true)}
+            className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
+          >
+            Aggiungi lead manualmente
+          </button>
           <button
             type="button"
             onClick={() => void onRequalify()}
@@ -673,6 +729,52 @@ export default function LeadsBrowser({
               </select>
             </label>
 
+            <fieldset className="mt-4">
+              <legend className="text-sm font-medium text-stone-700">Modalità invio</legend>
+              <div className="mt-2 flex gap-4 text-sm text-stone-700">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="deliveryMode"
+                    checked={deliveryMode === "PRODUCTION"}
+                    onChange={() => setDeliveryMode("PRODUCTION")}
+                    disabled={creatingCampaign}
+                  />
+                  Produzione
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="deliveryMode"
+                    checked={deliveryMode === "TEST"}
+                    onChange={() => setDeliveryMode("TEST")}
+                    disabled={creatingCampaign}
+                  />
+                  Test
+                </label>
+              </div>
+            </fieldset>
+
+            {deliveryMode === "TEST" ? (
+              <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2">
+                <p className="text-xs font-semibold text-violet-900">
+                  🧪 CAMPAGNA TEST — Nessun prospect reale verrà contattato.
+                </p>
+                <label className="mt-2 block text-sm font-medium text-stone-700">
+                  Email destinatario test
+                  <input
+                    required
+                    type="email"
+                    value={testRecipient}
+                    onChange={(e) => setTestRecipient(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                    disabled={creatingCampaign}
+                    placeholder="tua@email.it"
+                  />
+                </label>
+              </div>
+            ) : null}
+
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
@@ -688,6 +790,97 @@ export default function LeadsBrowser({
                 className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
                 {creatingCampaign ? "Creazione…" : "Crea campagna"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {manualOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Chiudi"
+            className="absolute inset-0 bg-stone-900/40"
+            onClick={() => !manualBusy && setManualOpen(false)}
+          />
+          <form
+            onSubmit={onCreateManualLead}
+            className="relative w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl"
+          >
+            <h2 className="text-lg font-semibold text-stone-900">Aggiungi lead manualmente</h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Entra nella stessa pipeline: Lead → Campaign → Demo → Review → Send.
+            </p>
+            <label className="mt-4 block text-sm font-medium text-stone-700">
+              Nome attività
+              <input
+                required
+                value={manualForm.businessName}
+                onChange={(e) =>
+                  setManualForm((f) => ({ ...f, businessName: e.target.value }))
+                }
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                disabled={manualBusy}
+              />
+            </label>
+            <label className="mt-3 block text-sm font-medium text-stone-700">
+              Email
+              <input
+                required
+                type="email"
+                value={manualForm.email}
+                onChange={(e) => setManualForm((f) => ({ ...f, email: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                disabled={manualBusy}
+              />
+            </label>
+            <label className="mt-3 block text-sm font-medium text-stone-700">
+              Sito (opzionale)
+              <input
+                value={manualForm.websiteUrl}
+                onChange={(e) =>
+                  setManualForm((f) => ({ ...f, websiteUrl: e.target.value }))
+                }
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                disabled={manualBusy}
+              />
+            </label>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <label className="block text-sm font-medium text-stone-700">
+                Telefono
+                <input
+                  value={manualForm.phone}
+                  onChange={(e) => setManualForm((f) => ({ ...f, phone: e.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                  disabled={manualBusy}
+                />
+              </label>
+              <label className="block text-sm font-medium text-stone-700">
+                Città
+                <input
+                  value={manualForm.city}
+                  onChange={(e) => setManualForm((f) => ({ ...f, city: e.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                  disabled={manualBusy}
+                />
+              </label>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={manualBusy}
+                onClick={() => setManualOpen(false)}
+                className="rounded-lg px-4 py-2 text-sm text-stone-600 hover:bg-stone-100"
+              >
+                Annulla
+              </button>
+              <button
+                type="submit"
+                disabled={manualBusy}
+                className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {manualBusy ? "Salvataggio…" : "Crea lead"}
               </button>
             </div>
           </form>

@@ -4,6 +4,10 @@ import { pickCompatibleTemplateKey } from '@/lib/templates/match';
 import { listPublishedTemplates } from '@/lib/demos/ensure-template';
 import { ensureRestaurantPremiumV3 } from '@/lib/demos/ensure-template-v3';
 import type { PolicyMode } from '@/lib/types/database';
+import {
+  isValidEmailShape,
+  normalizeEmailAddress,
+} from '@/lib/campaigns/test-delivery';
 
 export interface CreateCampaignInput {
   name: string;
@@ -13,6 +17,10 @@ export interface CreateCampaignInput {
   dailySendLimit?: number;
   sendWindow?: Record<string, unknown>;
   landingLayoutKey?: string;
+  /** PRODUCTION (default) | TEST — TEST never sends to lead email. */
+  deliveryMode?: 'PRODUCTION' | 'TEST';
+  /** Required when deliveryMode=TEST. Not written to leads.email. */
+  testRecipient?: string | null;
 }
 
 const DEFAULT_POLICY_ACTIONS = {
@@ -92,6 +100,16 @@ export async function createCampaignWithLeads(
         .maybeSingle()
     : { data: null };
 
+  const deliveryMode = input.deliveryMode === 'TEST' ? 'TEST' : 'PRODUCTION';
+  let testRecipient: string | null = null;
+  if (deliveryMode === 'TEST') {
+    const raw = input.testRecipient?.trim() ?? '';
+    if (!raw || !isValidEmailShape(raw)) {
+      throw new Error('Campagna TEST: email destinatario test obbligatoria e valida');
+    }
+    testRecipient = normalizeEmailAddress(raw);
+  }
+
   const { data: campaign, error: cError } = await admin
     .from('campaigns')
     .insert({
@@ -105,6 +123,8 @@ export async function createCampaignWithLeads(
       followup_sequence_version_id: seqVersion?.id ?? null,
       mode: input.mode ?? 'MANUAL',
       status: 'DRAFT',
+      delivery_mode: deliveryMode,
+      test_recipient: testRecipient,
       rate_limit_per_hour: input.rateLimitPerHour ?? 20,
       daily_send_limit: input.dailySendLimit ?? 100,
       send_window: input.sendWindow ?? { timezone: 'Europe/Rome', start: '09:00', end: '18:00' },

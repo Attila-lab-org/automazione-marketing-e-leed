@@ -15,7 +15,7 @@ export const GET = withAdmin(async () => {
   const workspace = await ensureDefaultWorkspace(admin);
   const { data, error } = await admin
     .from('campaigns')
-    .select('id, name, status, mode, created_at')
+    .select('id, name, status, mode, delivery_mode, test_recipient, created_at')
     .eq('workspace_id', workspace.id)
     .order('created_at', { ascending: false });
   if (error) return NextResponse.json({ error: error.message, campaigns: [] }, { status: 500 });
@@ -31,19 +31,30 @@ export const POST = withAdmin(async (request: Request) => {
     leadIds?: string[];
     mode?: 'MANUAL' | 'SCORE_BASED' | 'FULL_AUTO';
     prepare?: boolean;
+    deliveryMode?: 'PRODUCTION' | 'TEST';
+    testRecipient?: string;
   };
   if (!body.name?.trim() || !body.leadIds?.length) {
     return NextResponse.json({ error: 'name e leadIds obbligatori' }, { status: 400 });
   }
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
-  const created = await createCampaignWithLeads(admin, workspace.id, {
-    name: body.name.trim(),
-    leadIds: body.leadIds,
-    mode: body.mode,
-  });
-  if (body.prepare !== false) {
-    await enqueueCampaignPreparation(admin, workspace.id, created.campaignId);
+  try {
+    const created = await createCampaignWithLeads(admin, workspace.id, {
+      name: body.name.trim(),
+      leadIds: body.leadIds,
+      mode: body.mode,
+      deliveryMode: body.deliveryMode,
+      testRecipient: body.testRecipient,
+    });
+    if (body.prepare !== false) {
+      await enqueueCampaignPreparation(admin, workspace.id, created.campaignId);
+    }
+    return NextResponse.json({ ...created, message: 'Campagna creata' });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Creazione fallita' },
+      { status: 400 },
+    );
   }
-  return NextResponse.json({ ...created, message: 'Campagna creata' });
 });

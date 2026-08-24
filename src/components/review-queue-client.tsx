@@ -20,6 +20,8 @@ type QueueItem = {
   demoSiteId: string | null;
   email: string | null;
   emailEvidenceLabel?: string | null;
+  deliveryMode?: "PRODUCTION" | "TEST";
+  testRecipient?: string | null;
   blockers: string[];
 };
 
@@ -99,6 +101,11 @@ export default function ReviewQueueClient() {
     await refresh();
   }
 
+  const hasTestItems = useMemo(
+    () => items.some((i) => i.deliveryMode === "TEST"),
+    [items],
+  );
+
   async function bulkApprove() {
     const ids = approvableSelected.map((i) => i.id);
     const skippedBlockers = selectedItems.length - ids.length;
@@ -110,10 +117,15 @@ export default function ReviewQueueClient() {
       );
       return;
     }
+    const testSelected = approvableSelected.filter((i) => i.deliveryMode === "TEST");
     const ok = window.confirm(
-      `Approvare e avviare l'invio per ${ids.length} lead?${
-        skippedBlockers ? `\n(${skippedBlockers} con blocchi verranno ignorati)` : ""
-      }`,
+      testSelected.length
+        ? `Approvare e avviare TEST per ${ids.length} lead?\nDestinatario effettivo: casella TEST (non il prospect).${
+            skippedBlockers ? `\n(${skippedBlockers} con blocchi verranno ignorati)` : ""
+          }`
+        : `Approvare e avviare l'invio per ${ids.length} lead?${
+            skippedBlockers ? `\n(${skippedBlockers} con blocchi verranno ignorati)` : ""
+          }`,
     );
     if (!ok) return;
     setBusy(true);
@@ -126,7 +138,11 @@ export default function ReviewQueueClient() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Approvazione fallita");
-      setMessage(`Approvati ${data.approved ?? ids.length} lead — invio in coda.`);
+      setMessage(
+        testSelected.length
+          ? `Approvati ${data.approved ?? ids.length} lead — invio TEST in coda.`
+          : `Approvati ${data.approved ?? ids.length} lead — invio in coda.`,
+      );
       setSelected(new Set());
       await refresh();
     } catch (err) {
@@ -206,7 +222,9 @@ export default function ReviewQueueClient() {
           onClick={() => void bulkApprove()}
           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          Approva e avvia {approvableSelected.length || ""}
+          {hasTestItems || approvableSelected.some((i) => i.deliveryMode === "TEST")
+            ? `Approva e avvia test ${approvableSelected.length || ""}`
+            : `Approva e avvia ${approvableSelected.length || ""}`}
         </button>
       </div>
 
@@ -252,7 +270,12 @@ export default function ReviewQueueClient() {
         </div>
       ) : null}
 
-      {items.map((item) => (
+      {items.map((item) => {
+        const isTest = item.deliveryMode === "TEST";
+        const deliveryNote = isTest
+          ? `Lead: ${item.companyName} · Destinatario commerciale: ${item.email ?? "n/d"} · Destinatario effettivo TEST: ${item.testRecipient ?? "n/d"}`
+          : null;
+        return (
         <ReviewCard
           key={item.id}
           companyName={item.companyName}
@@ -268,6 +291,14 @@ export default function ReviewQueueClient() {
           thumbnailLabel={item.previewImageUrl ? "Anteprima email" : undefined}
           selected={selected.has(item.id)}
           onSelectChange={(checked) => toggle(item.id, checked)}
+          headerBadge={isTest ? "TEST" : null}
+          deliveryNote={deliveryNote}
+          approveLabel={isTest ? "Approva e avvia test" : "Approva"}
+          approveHint={
+            isTest
+              ? "Autorizza l'invio TEST verso la casella allowlisted (non il prospect)."
+              : "Autorizza l'invio di questo messaggio al lead."
+          }
           signals={[
             {
               label: item.email ? "Email trovata" : "Email mancante",
@@ -300,7 +331,8 @@ export default function ReviewQueueClient() {
           onSkip={() => void act(item.id, "skip")}
           onReject={() => void act(item.id, "stop")}
         />
-      ))}
+        );
+      })}
     </div>
   );
 }

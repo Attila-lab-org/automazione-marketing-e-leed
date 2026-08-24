@@ -667,6 +667,8 @@ export interface CampaignRow {
   followup_sequence_id: string | null;
   followup_sequence_version_id: string | null;
   mode: PolicyMode;
+  delivery_mode: 'PRODUCTION' | 'TEST';
+  test_recipient: string | null;
   active_policy_version_id: string | null;
   status: CampaignStatus;
   rate_limit_per_hour: number | null;
@@ -692,6 +694,8 @@ export interface CampaignInsert {
   followup_sequence_id?: string | null;
   followup_sequence_version_id?: string | null;
   mode?: PolicyMode;
+  delivery_mode?: 'PRODUCTION' | 'TEST';
+  test_recipient?: string | null;
   active_policy_version_id?: string | null;
   status?: CampaignStatus;
   rate_limit_per_hour?: number | null;
@@ -895,6 +899,8 @@ export interface MessageRow {
   provider_message_id: string | null;
   from_address: string;
   to_address: string;
+  intended_recipient: string | null;
+  actual_delivery_recipient: string | null;
   subject: string | null;
   body_snapshot: string;
   sequence_step: number;
@@ -914,6 +920,8 @@ export interface MessageInsert {
   provider_message_id?: string | null;
   from_address: string;
   to_address: string;
+  intended_recipient?: string | null;
+  actual_delivery_recipient?: string | null;
   subject?: string | null;
   body_snapshot: string;
   sequence_step?: number;

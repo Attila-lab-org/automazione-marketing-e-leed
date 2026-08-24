@@ -5,6 +5,7 @@
 
 import { getGooglePlacesProvider } from '@/lib/providers/google-places';
 import { getOwnerCommercialStatus } from '@/lib/templates/owner-commercial';
+import { getTestDeliveryStatus } from '@/lib/campaigns/test-delivery';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 export type RuntimeProviderHealth = 'ready' | 'mock' | 'error' | 'not_configured';
@@ -17,7 +18,13 @@ export type ProviderStatusItem = {
 };
 
 export type CommercialConfigItem = {
-  id: 'owner_whatsapp' | 'owner_contact_url' | 'owner_offer_price' | 'owner_show_bridge';
+  id:
+    | 'owner_whatsapp'
+    | 'owner_contact_url'
+    | 'owner_offer_price'
+    | 'owner_show_bridge'
+    | 'resend_test_allowlist'
+    | 'test_campaign_safety';
   name: string;
   /** READY / MISSING — never include secret values. */
   status: 'READY' | 'MISSING';
@@ -142,6 +149,7 @@ function staticMockProvider(
 
 function commercialConfig(env: NodeJS.ProcessEnv): CommercialConfigItem[] {
   const st = getOwnerCommercialStatus(env);
+  const test = getTestDeliveryStatus(env);
   return [
     {
       id: 'owner_whatsapp',
@@ -171,7 +179,49 @@ function commercialConfig(env: NodeJS.ProcessEnv): CommercialConfigItem[] {
       status: st.showBridge ? 'READY' : 'MISSING',
       detail: st.showBridge ? 'mid-page OwnerBridge ON' : 'default OFF (85% restaurant)',
     },
+    {
+      id: 'resend_test_allowlist',
+      name: 'RESEND_TEST_RECIPIENT_ALLOWLIST',
+      status: test.allowlist,
+      detail:
+        test.allowlist === 'READY'
+          ? `${test.allowlistCount} indirizzo/i allowlisted (valori non mostrati)`
+          : 'mancante — campagne TEST bloccate server-side',
+    },
+    {
+      id: 'test_campaign_safety',
+      name: 'Test Campaign Safety',
+      status: test.safety,
+      detail:
+        test.safety === 'READY'
+          ? 'allowlist attiva · BLOCKED_TEST_RECIPIENT enforced'
+          : 'configura RESEND_TEST_RECIPIENT_ALLOWLIST',
+    },
   ];
+}
+
+function probeResend(env: NodeJS.ProcessEnv): ProviderStatusItem {
+  const mode = modeOf(env, 'RESEND_PROVIDER_MODE');
+  if (mode === 'mock') {
+    return { id: 'resend', name: 'Resend', status: 'mock', detail: 'RESEND_PROVIDER_MODE=mock' };
+  }
+  if (mode === 'live') {
+    if (!env.RESEND_API_KEY?.trim() || !env.RESEND_FROM?.trim()) {
+      return {
+        id: 'resend',
+        name: 'Resend',
+        status: 'not_configured',
+        detail: 'live senza RESEND_API_KEY / RESEND_FROM',
+      };
+    }
+    return {
+      id: 'resend',
+      name: 'Resend',
+      status: 'ready',
+      detail: 'RESEND_PROVIDER_MODE=live · key/from present (TEST campaigns only until authorized)',
+    };
+  }
+  return { id: 'resend', name: 'Resend', status: 'error', detail: `mode non valido: ${mode}` };
 }
 
 export async function getProvidersStatus(
@@ -187,7 +237,7 @@ export async function getProvidersStatus(
     providers: [
       supabase,
       googlePlaces,
-      staticMockProvider('resend', 'Resend', 'RESEND_PROVIDER_MODE', env),
+      probeResend(env),
       staticMockProvider(
         'browser_worker',
         'Browser Worker',

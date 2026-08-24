@@ -41,6 +41,7 @@ QA visuale: `/demo/qa-v3` e `/demo/qa-v3/email-preview`.
 - `ADMIN_EMAIL` (allowlist) and/or workspace membership; `ADMIN_SESSION_SECRET` preferred in production
 - `GOOGLE_PLACES_PROVIDER_MODE=live|mock`, `GOOGLE_PLACES_API_KEY` (live only)
 - `RESEND_PROVIDER_MODE=mock|live`, `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_WEBHOOK_SECRET` (live only — do not enable until authorized)
+- `RESEND_TEST_RECIPIENT_ALLOWLIST` — exact emails allowed as Campaign TEST delivery targets (server-side; no fallback to lead)
 - `CRON_SECRET` for **`/api/cron/jobs`**
 - `NEXT_PUBLIC_APP_URL` for demo/email preview URLs
 - `OWNER_CONTACT_URL` — http(s) destinazione commerciale (`?channel=site`). Se mancante: nessun redirect arbitrario

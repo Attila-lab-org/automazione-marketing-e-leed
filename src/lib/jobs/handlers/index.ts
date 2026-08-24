@@ -19,6 +19,11 @@ import {
 
 import { getResendProvider } from '@/lib/providers/resend';
 import { mergePreparation } from '@/lib/campaigns/preparation';
+import {
+  BlockedTestRecipientError,
+  resolveTestDelivery,
+  testSequenceDelayMs,
+} from '@/lib/campaigns/test-delivery';
 import { ensureMessageThread } from '@/lib/messaging/persist';
 
 type JobRef = {
@@ -242,7 +247,7 @@ async function scheduleNextFollowup(
 ) {
   const { data: campaign } = await admin
     .from('campaigns')
-    .select('followup_sequence_version_id')
+    .select('followup_sequence_version_id, delivery_mode')
     .eq('id', campaignId)
     .single();
   if (!campaign?.followup_sequence_version_id) {
@@ -269,6 +274,7 @@ async function scheduleNextFollowup(
   }
 
   // Standard 0-3-7: delay_days are absolute offsets from first outbound (step 0).
+  // TEST campaigns: accelerated branch — step1 +5m, step2 +10m (same engine).
   const { data: originMsg } = await admin
     .from('messages')
     .select('sent_at')
@@ -279,9 +285,13 @@ async function scheduleNextFollowup(
     .limit(1)
     .maybeSingle();
   const origin = originMsg?.sent_at ? new Date(originMsg.sent_at) : new Date();
-  const notBefore = new Date(origin.getTime() + (next.delay_days ?? 0) * 24 * 60 * 60 * 1000);
+  const isTest = campaign.delivery_mode === 'TEST';
+  const testMs = isTest ? testSequenceDelayMs(next.step) : null;
+  const notBefore = new Date(
+    origin.getTime() +
+      (testMs != null ? testMs : (next.delay_days ?? 0) * 24 * 60 * 60 * 1000),
+  );
   if (notBefore.getTime() < Date.now()) {
-    // Already due (e.g. delayed worker): claim ASAP
     notBefore.setTime(Date.now());
   }
 
@@ -289,7 +299,12 @@ async function scheduleNextFollowup(
     admin,
     campaignLeadId,
     { sequence_step: next.step, next_action_at: notBefore.toISOString(), status: 'SENT' },
-    { nextStep: next.step, nextActionAt: notBefore.toISOString() },
+    {
+      nextStep: next.step,
+      nextActionAt: notBefore.toISOString(),
+      deliveryMode: campaign.delivery_mode ?? 'PRODUCTION',
+      acceleratedTest: isTest,
+    },
   );
 
   const queue = new SupabaseJobQueue(admin);
@@ -304,7 +319,7 @@ async function scheduleNextFollowup(
     notBefore,
   });
 
-  return { done: false, nextStep: next.step, notBefore: notBefore.toISOString() };
+  return { done: false, nextStep: next.step, notBefore: notBefore.toISOString(), acceleratedTest: isTest };
 }
 
 async function handleSendMessage(
@@ -313,8 +328,27 @@ async function handleSendMessage(
   env: NodeJS.ProcessEnv,
 ) {
   const sequenceStep = Number(job.inputSnapshot.sequenceStep ?? 0);
-  if (env.RESEND_PROVIDER_MODE?.toLowerCase() === 'live') {
-    throw new Error('Invio live disabilitato finché non autorizzato esplicitamente');
+  const providerMode = (env.RESEND_PROVIDER_MODE ?? 'mock').toLowerCase();
+
+  const { data: cl } = await admin
+    .from('campaign_leads')
+    .select('id, lead_id, campaign_id, demo_site_id')
+    .eq('id', job.entityId)
+    .single();
+  if (!cl) throw new Error('Send: campaign_lead missing');
+
+  const { data: campaign } = await admin
+    .from('campaigns')
+    .select('id, delivery_mode, test_recipient, status')
+    .eq('id', cl.campaign_id)
+    .single();
+  if (!campaign) throw new Error('Send: campaign missing');
+
+  // Live Resend unlocked only for TEST campaigns (PRODUCTION stays hard-blocked).
+  if (providerMode === 'live' && campaign.delivery_mode !== 'TEST') {
+    throw new Error(
+      'Invio live disabilitato per campagne PRODUCTION — usa Campaign TEST oppure RESEND_PROVIDER_MODE=mock',
+    );
   }
 
   const ctx = await buildSendGuardContext(admin, job.workspaceId, job.entityId, sequenceStep);
@@ -327,12 +361,55 @@ async function handleSendMessage(
     throw new Error(disposition.detail);
   }
 
-  const { data: cl } = await admin
-    .from('campaign_leads')
-    .select('id, lead_id, campaign_id, demo_site_id')
-    .eq('id', job.entityId)
-    .single();
-  if (!cl) throw new Error('Send: campaign_lead missing');
+  let delivery;
+  try {
+    delivery = resolveTestDelivery({
+      deliveryMode: campaign.delivery_mode,
+      testRecipient: campaign.test_recipient,
+      leadEmail: ctx.recipient.email,
+      env,
+    });
+  } catch (err) {
+    if (err instanceof BlockedTestRecipientError) {
+      await updateCampaignLead(
+        admin,
+        cl.id,
+        { status: 'FAILED' },
+        {
+          sendError: err.code,
+          sendErrorDetail: err.message,
+          blockedAt: new Date().toISOString(),
+          sequenceStep,
+        },
+      );
+      throw err;
+    }
+    throw err;
+  }
+
+  // Retry safety: never change recipient mid-flight — pin from first successful send if present
+  const { data: prior } = await admin
+    .from('messages')
+    .select('intended_recipient, actual_delivery_recipient, to_address')
+    .eq('campaign_lead_id', cl.id)
+    .eq('direction', 'OUTBOUND')
+    .order('sent_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (prior?.actual_delivery_recipient || prior?.to_address) {
+    const pinnedActual = (prior.actual_delivery_recipient ?? prior.to_address)!.toLowerCase();
+    if (pinnedActual !== delivery.actualDeliveryRecipient) {
+      throw new BlockedTestRecipientError(
+        `retry recipient mismatch: pinned=${pinnedActual} resolved=${delivery.actualDeliveryRecipient}`,
+      );
+    }
+    delivery = {
+      ...delivery,
+      intendedRecipient: prior.intended_recipient ?? delivery.intendedRecipient,
+      actualDeliveryRecipient: pinnedActual,
+    };
+  }
 
   const { data: draft } = await admin
     .from('message_drafts')
@@ -345,7 +422,7 @@ async function handleSendMessage(
   const idempotencyKey = `SEND_MESSAGE:campaign_lead:${cl.id}:step:${sequenceStep}`;
   const sendResult = await resend.send({
     from: env.RESEND_FROM ?? 'onboarding@resend.dev',
-    to: ctx.recipient.email!,
+    to: delivery.actualDeliveryRecipient,
     subject: draft!.subject!,
     html: draft!.body!,
     text: draft!.body!.replace(/<[^>]+>/g, ' '),
@@ -365,7 +442,9 @@ async function handleSendMessage(
       provider: 'resend',
       provider_message_id: sendResult.providerMessageId,
       from_address: env.RESEND_FROM ?? 'onboarding@resend.dev',
-      to_address: ctx.recipient.email!,
+      to_address: delivery.actualDeliveryRecipient,
+      intended_recipient: delivery.intendedRecipient,
+      actual_delivery_recipient: delivery.actualDeliveryRecipient,
       subject: draft!.subject!,
       body_snapshot: draft!.body!,
       sequence_step: sequenceStep,
@@ -379,8 +458,13 @@ async function handleSendMessage(
     workspace_id: job.workspaceId,
     message_id: message!.id,
     event_type: 'SENT',
-    provider_event_id: `mock-sent:${sendResult.providerMessageId}`,
-    payload: { mocked: true },
+    provider_event_id: `${providerMode}-sent:${sendResult.providerMessageId}`,
+    payload: {
+      mocked: providerMode !== 'live',
+      deliveryMode: delivery.deliveryMode,
+      intended_recipient: delivery.intendedRecipient,
+      actual_delivery_recipient: delivery.actualDeliveryRecipient,
+    },
     occurred_at: sendResult.sentAt,
   });
 
@@ -393,7 +477,13 @@ async function handleSendMessage(
     admin,
     cl.id,
     { status: 'SENT', sequence_step: sequenceStep },
-    { lastSentAt: sendResult.sentAt, lastProviderMessageId: sendResult.providerMessageId },
+    {
+      lastSentAt: sendResult.sentAt,
+      lastProviderMessageId: sendResult.providerMessageId,
+      intended_recipient: delivery.intendedRecipient,
+      actual_delivery_recipient: delivery.actualDeliveryRecipient,
+      deliveryMode: delivery.deliveryMode,
+    },
   );
 
   const followup = await scheduleNextFollowup(
@@ -405,10 +495,13 @@ async function handleSendMessage(
   );
 
   return {
-    mocked: true,
+    mocked: providerMode !== 'live',
     sequenceStep,
-    provider: env.RESEND_PROVIDER_MODE ?? 'mock',
+    provider: providerMode,
     messageId: message!.id,
+    intended_recipient: delivery.intendedRecipient,
+    actual_delivery_recipient: delivery.actualDeliveryRecipient,
+    deliveryMode: delivery.deliveryMode,
     followup,
   };
 }
@@ -505,7 +598,9 @@ export async function runJobBatch(
         continue;
       }
       const message = err instanceof Error ? err.message : 'job failed';
-      await queue.fail(job.id, { errorCode: 'JOB_FAILED', errorDetail: message, workerId });
+      const errorCode =
+        err instanceof BlockedTestRecipientError ? 'BLOCKED_TEST_RECIPIENT' : 'JOB_FAILED';
+      await queue.fail(job.id, { errorCode, errorDetail: message, workerId });
       results.push({ jobId: job.id, ok: false, error: message });
     }
   }
