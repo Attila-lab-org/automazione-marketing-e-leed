@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
-import {
-  adminSessionCookieOptions,
-  createAdminSessionToken,
-  validateAdminCredentials,
-} from '@/lib/auth/admin-session';
+import { authenticateAdmin } from '@/lib/auth/authenticate';
+import { adminSessionCookieOptions } from '@/lib/auth/admin-session';
 
 export const runtime = 'nodejs';
 
@@ -13,20 +10,15 @@ export async function POST(request: Request) {
     if (!body.email || !body.password) {
       return NextResponse.json({ error: 'Email e password obbligatorie' }, { status: 400 });
     }
-    if (!process.env.ADMIN_PASSWORD) {
-      return NextResponse.json(
-        { error: 'ADMIN_PASSWORD non configurata sul server' },
-        { status: 503 },
-      );
-    }
-    if (!validateAdminCredentials(body.email, body.password)) {
-      return NextResponse.json({ error: 'Credenziali non valide' }, { status: 401 });
+
+    const result = await authenticateAdmin(body.email, body.password);
+    if ('error' in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
-    const token = createAdminSessionToken(body.email.trim().toLowerCase());
     const opts = adminSessionCookieOptions();
-    const res = NextResponse.json({ ok: true, email: body.email.trim().toLowerCase() });
-    res.cookies.set(opts.name, token, opts);
+    const res = NextResponse.json({ ok: true, email: result.email });
+    res.cookies.set(opts.name, result.token, opts);
     return res;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Login fallito';
