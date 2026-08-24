@@ -5,6 +5,7 @@
 
 import { getAppUrlStatus } from '@/lib/app-url';
 import { getGooglePlacesProvider } from '@/lib/providers/google-places';
+import { isTelegramEnabled } from '@/lib/providers/telegram';
 import { getOwnerCommercialStatus } from '@/lib/templates/owner-commercial';
 import { getTestDeliveryStatus } from '@/lib/campaigns/test-delivery';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
@@ -12,7 +13,7 @@ import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/
 export type RuntimeProviderHealth = 'ready' | 'mock' | 'error' | 'not_configured';
 
 export type ProviderStatusItem = {
-  id: 'supabase' | 'google_places' | 'resend' | 'browser_worker' | 'ai';
+  id: 'supabase' | 'google_places' | 'resend' | 'telegram' | 'browser_worker' | 'ai';
   name: string;
   status: RuntimeProviderHealth;
   detail: string;
@@ -238,6 +239,48 @@ function probeResend(env: NodeJS.ProcessEnv): ProviderStatusItem {
   return { id: 'resend', name: 'Resend', status: 'error', detail: `mode non valido: ${mode}` };
 }
 
+function probeTelegram(env: NodeJS.ProcessEnv): ProviderStatusItem {
+  if (!isTelegramEnabled(env)) {
+    return {
+      id: 'telegram',
+      name: 'Telegram',
+      status: 'not_configured',
+      detail: 'TELEGRAM_ENABLED off · inbound disabilitato',
+    };
+  }
+  const mode = modeOf(env, 'TELEGRAM_PROVIDER_MODE');
+  if (mode === 'mock') {
+    return {
+      id: 'telegram',
+      name: 'Telegram',
+      status: 'mock',
+      detail: 'TELEGRAM MOCK · webhook locale senza API reale',
+    };
+  }
+  if (mode === 'live') {
+    if (!env.TELEGRAM_BOT_TOKEN?.trim() || !env.TELEGRAM_WEBHOOK_SECRET?.trim()) {
+      return {
+        id: 'telegram',
+        name: 'Telegram',
+        status: 'not_configured',
+        detail: 'live senza TELEGRAM_BOT_TOKEN / TELEGRAM_WEBHOOK_SECRET',
+      };
+    }
+    return {
+      id: 'telegram',
+      name: 'Telegram',
+      status: 'ready',
+      detail: 'TELEGRAM LIVE · webhook /api/webhooks/inbound/telegram',
+    };
+  }
+  return {
+    id: 'telegram',
+    name: 'Telegram',
+    status: 'error',
+    detail: `TELEGRAM_PROVIDER_MODE non valido: ${mode}`,
+  };
+}
+
 /** Single source of truth for header / operator badge. */
 export function getResendRuntimeBadge(env: NodeJS.ProcessEnv = process.env): {
   label: 'RESEND MOCK' | 'RESEND LIVE · TEST ONLY' | 'RESEND ERROR';
@@ -283,6 +326,7 @@ export async function getProvidersStatus(
       supabase,
       googlePlaces,
       probeResend(env),
+      probeTelegram(env),
       staticMockProvider(
         'browser_worker',
         'Browser Worker',

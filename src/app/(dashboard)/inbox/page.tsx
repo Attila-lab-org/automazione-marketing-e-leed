@@ -1,6 +1,6 @@
-import EmptyState from "@/components/empty-state";
 import PageHeader from "@/components/page-header";
 import SectionSubnav from "@/components/section-subnav";
+import InboxClient from "@/components/inbox-client";
 import { MESSAGE_SUBNAV } from "@/lib/navigation";
 
 export default function InboxPage() {
@@ -9,16 +9,9 @@ export default function InboxPage() {
       <SectionSubnav items={[...MESSAGE_SUBNAV]} />
       <PageHeader
         title="Messaggi"
-        description="Qui leggerai le risposte dei clienti. Quando un cliente risponde, i messaggi automatici successivi si fermano."
+        description="Qui trovi le risposte email e i contatti nati da Telegram. I messaggi automatici restano brevi: la trattativa la gestisci tu."
       />
-      <EmptyState
-        title="Nessuna conversazione"
-        description="Le conversazioni compariranno quando il collegamento per ricevere le risposte email sarà attivo."
-        nextAction={{
-          label: "Controlla il collegamento email",
-          href: "/settings",
-        }}
-      />
+      <InboxClient />
     </div>
   );
 }

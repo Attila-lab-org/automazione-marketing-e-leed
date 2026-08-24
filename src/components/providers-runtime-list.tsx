@@ -24,6 +24,7 @@ const TOOLTIPS: Record<string, string> = {
   supabase: "Database principale: conserva attività, campagne, anteprime e messaggi.",
   google_places: "Servizio usato per cercare nuove attività su Google.",
   resend: "Servizio usato per inviare le email. In modalità prova scrive solo agli indirizzi autorizzati.",
+  telegram: "Bot Telegram per intercettare richieste (sito/e-commerce) e creare contatti da gestire.",
   browser_worker: "Servizio che analizza i siti e crea le immagini quando sarà attivato.",
   ai: "Servizio che aiuta a preparare i testi quando sarà attivato.",
 };
@@ -32,6 +33,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   supabase: "Database",
   google_places: "Ricerca Google",
   resend: "Invio email",
+  telegram: "Telegram inbound",
   browser_worker: "Analisi siti",
   ai: "Scrittura assistita",
 };

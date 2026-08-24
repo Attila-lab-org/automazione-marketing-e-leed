@@ -156,7 +156,7 @@ export type ConnectionStatus = 'NOT_CONFIGURED' | 'CONNECTED' | 'DEGRADED' | 'DI
 /** 0002 — check constraint su lead_contacts.type */
 export type LeadContactType = 'EMAIL' | 'PHONE' | 'PERSON' | 'OTHER';
 
-/** 0002 — check constraint su lead_sources.source_type */
+/** 0002 / 0012 / 0021 — check constraint su lead_sources.source_type */
 export type LeadSourceType =
   | 'GOOGLE_PLACES_DISCOVERY'
   | 'GOOGLE_PLACES_ENRICHMENT'
@@ -164,7 +164,12 @@ export type LeadSourceType =
   | 'MANUAL'
   | 'IMPORT'
   /** Riservato: Social Lead Scout futuro. Non implementato in Phase C. */
-  | 'FACEBOOK';
+  | 'FACEBOOK'
+  /** Inbound multi-canale (0021) */
+  | 'TELEGRAM_INBOUND'
+  | 'DISCORD_INBOUND'
+  | 'MASTODON_INBOUND'
+  | 'BLUESKY_INBOUND';
 
 /** 0011 — qualification status Phase B */
 export type QualificationStatus =
