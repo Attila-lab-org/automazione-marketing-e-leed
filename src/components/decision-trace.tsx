@@ -27,9 +27,9 @@ const ACTOR_META: Record<
     className: "bg-stone-100 text-stone-600 border-stone-200",
   },
   policy: {
-    label: "Policy",
+    label: "Regola automatica",
     tooltip:
-      "Decisione presa dal Policy Engine in base a score, confidence e soglie configurate (§5.2).",
+      "Decisione presa automaticamente in base al punteggio, all’affidabilità dei dati e ai valori minimi configurati.",
     className: "bg-amber-50 text-amber-800 border-amber-200",
   },
   user: {
@@ -50,17 +50,19 @@ export default function DecisionTrace({
   policyVersion,
 }: DecisionTraceProps) {
   return (
-    <section className="rounded-xl border border-stone-200 bg-white">
+    <section
+      title="Mostra in ordine le ragioni che hanno portato il sistema a prendere una decisione."
+      className="rounded-xl border border-stone-200 bg-white"
+    >
       <header className="border-b border-stone-100 px-5 py-4">
         <h3 className="text-sm font-semibold text-stone-800">
-          Decision Trace — perché il sistema ha agito
+          Perché il sistema ha agito
         </h3>
         <p className="mt-1 text-sm text-stone-500">{summary}</p>
         {policyVersion ? (
           <p className="mt-1 text-xs text-stone-400">
-            Policy applicata:{" "}
-            <span className="font-mono">{policyVersion}</span> (snapshot al
-            momento della decisione, §4.1)
+            Versione della regola usata:{" "}
+            <span className="font-mono">{policyVersion}</span>
           </p>
         ) : null}
       </header>

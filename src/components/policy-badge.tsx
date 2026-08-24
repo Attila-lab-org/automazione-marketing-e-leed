@@ -16,25 +16,25 @@ const POLICY_META: Record<
   }
 > = {
   MANUAL: {
-    label: "Manuale",
+    label: "Controllo manuale",
     tooltip:
-      "Modalità MANUAL: demo e messaggi possono essere generati automaticamente, ma ogni invio richiede approvazione umana (§4).",
+      "Il sistema prepara anteprime e messaggi, ma nessuna email parte finché non la approvi tu.",
     className: "border-stone-300 bg-stone-100 text-stone-700",
     dotClassName: "bg-stone-500",
     pulse: false,
   },
   SCORE_BASED: {
-    label: "Score-Based",
+    label: "In base al punteggio",
     tooltip:
-      "Modalità SCORE_BASED: i gate si aprono solo quando score e confidence superano le soglie definite; la fascia intermedia va in Review Queue (§4).",
+      "Il sistema propone automaticamente le attività con dati sufficienti. I casi dubbi restano da controllare.",
     className: "border-amber-300 bg-amber-50 text-amber-800",
     dotClassName: "bg-amber-500",
     pulse: false,
   },
   FULL_AUTO: {
-    label: "Full Auto",
+    label: "Completamente automatica",
     tooltip:
-      "Modalità FULL_AUTO: pipeline completa senza blocchi manuali, sempre con preview, rate limit, Send Guard e kill switch (§4). Eliminato il click di approvazione, non la verifica.",
+      "Il sistema prepara e avvia le attività senza approvazione manuale. I controlli di sicurezza restano sempre attivi.",
     className: "border-emerald-400 bg-emerald-50 text-emerald-800",
     dotClassName: "bg-emerald-500",
     pulse: true,
@@ -55,7 +55,7 @@ export default function PolicyBadge({ mode, size = "md" }: PolicyBadgeProps) {
   return (
     <span
       title={meta.tooltip}
-      aria-label={`Policy operativa: ${meta.label}. ${meta.tooltip}`}
+      aria-label={`Modalità operativa: ${meta.label}. ${meta.tooltip}`}
       className={`inline-flex cursor-help items-center gap-1.5 rounded-full border font-semibold uppercase tracking-wide ${meta.className} ${sizing}`}
     >
       <span className="relative flex h-2 w-2">

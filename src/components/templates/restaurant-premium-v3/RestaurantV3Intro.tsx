@@ -11,8 +11,8 @@ export function RestaurantV3Intro({ description, imageSrc }: Props) {
     <section className={`${styles.section} ${styles.sectionNarrow}`} data-reveal>
       <div className={styles.intro}>
         <div className={styles.introCopy}>
-          <p className={styles.eyebrow}>Editoriale</p>
-          <h2>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.storyHeadline}</h2>
+          <p className={styles.eyebrow}>Il locale</p>
+          <h2>Un luogo da vivere e raccontare.</h2>
           <p>{description || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.description}</p>
         </div>
         <figure className={styles.introFigure}>

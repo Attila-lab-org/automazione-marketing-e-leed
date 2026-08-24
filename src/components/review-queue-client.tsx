@@ -25,6 +25,19 @@ type QueueItem = {
   blockers: string[];
 };
 
+const BLOCKER_LABELS: Record<string, string> = {
+  EMAIL_NOT_FOUND: "Email del cliente non trovata",
+  TEST_RECIPIENT_MISSING: "Indirizzo di prova mancante",
+  TEST_RECIPIENT_NOT_ALLOWED: "Indirizzo di prova non autorizzato",
+  DEMO_NOT_READY: "Anteprima non ancora pronta",
+  PREPARATION_FAILED: "Preparazione non riuscita",
+  TEMPLATE_NOT_COMPATIBLE: "Nessun modello compatibile",
+};
+
+function blockerLabel(code: string): string {
+  return BLOCKER_LABELS[code] ?? "Problema da risolvere";
+}
+
 export default function ReviewQueueClient() {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,18 +100,34 @@ export default function ReviewQueueClient() {
     setSelected(new Set(items.map((i) => i.id)));
   }
 
-  async function act(id: string, action: "approve" | "skip" | "stop") {
-    await fetch("/api/review-queue", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ campaignLeadId: id, action }),
-    });
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-    await refresh();
+  async function act(
+    id: string,
+    action: "approve" | "skip" | "stop",
+  ): Promise<boolean> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/review-queue", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignLeadId: id, action }),
+      });
+      const raw = await res.text();
+      const data = raw ? (JSON.parse(raw) as { error?: string }) : {};
+      if (!res.ok) throw new Error(data.error ?? "Operazione non riuscita");
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      await refresh();
+      return true;
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Operazione non riuscita");
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
 
   const hasTestItems = useMemo(
@@ -112,19 +141,19 @@ export default function ReviewQueueClient() {
     if (!ids.length) {
       setMessage(
         skippedBlockers
-          ? "Nessun lead selezionato senza blocchi."
-          : "Seleziona almeno un lead senza blocchi.",
+          ? "Nessuna attività selezionata è pronta."
+          : "Seleziona almeno un’attività senza problemi da risolvere.",
       );
       return;
     }
     const testSelected = approvableSelected.filter((i) => i.deliveryMode === "TEST");
     const ok = window.confirm(
       testSelected.length
-        ? `Approvare e avviare TEST per ${ids.length} lead?\nDestinatario effettivo: casella TEST (non il prospect).${
-            skippedBlockers ? `\n(${skippedBlockers} con blocchi verranno ignorati)` : ""
+        ? `Approvare e avviare la prova per ${ids.length} attività?\nLe email arriveranno soltanto all'indirizzo di prova, non ai clienti.${
+            skippedBlockers ? `\n(${skippedBlockers} attività con problemi verranno ignorate)` : ""
           }`
-        : `Approvare e avviare l'invio per ${ids.length} lead?${
-            skippedBlockers ? `\n(${skippedBlockers} con blocchi verranno ignorati)` : ""
+        : `Approvare e avviare l'invio per ${ids.length} attività?${
+            skippedBlockers ? `\n(${skippedBlockers} attività con problemi verranno ignorate)` : ""
           }`,
     );
     if (!ok) return;
@@ -140,8 +169,8 @@ export default function ReviewQueueClient() {
       if (!res.ok) throw new Error(data.error ?? "Approvazione fallita");
       setMessage(
         testSelected.length
-          ? `Approvati ${data.approved ?? ids.length} lead — invio TEST in coda.`
-          : `Approvati ${data.approved ?? ids.length} lead — invio in coda.`,
+          ? `Approvate ${data.approved ?? ids.length} attività. La prova è in attesa di invio.`
+          : `Approvate ${data.approved ?? ids.length} attività. Le email sono in attesa di invio.`,
       );
       setSelected(new Set());
       await refresh();
@@ -186,14 +215,14 @@ export default function ReviewQueueClient() {
   }
 
   if (loading) {
-    return <p className="text-sm text-stone-500">Caricamento coda review…</p>;
+    return <p className="text-sm text-stone-500">Caricamento degli elementi da controllare…</p>;
   }
 
   if (!items.length) {
     return (
       <EmptyState
-        title="Nessun lead in review"
-        description="Crea una campagna e avvia la preparazione bulk per popolare la coda con demo ed email reali."
+        title="Niente da controllare"
+        description="Crea una campagna e avvia la preparazione. Qui compariranno le anteprime e i messaggi prima dell’invio."
         nextAction={{ label: "Vai alle campagne", href: "/campaigns" }}
       />
     );
@@ -218,12 +247,13 @@ export default function ReviewQueueClient() {
         </label>
         <button
           type="button"
+          title="Approva tutte le attività selezionate che non hanno problemi e avvia gli invii previsti."
           disabled={busy || approvableSelected.length === 0}
           onClick={() => void bulkApprove()}
           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
         >
           {hasTestItems || approvableSelected.some((i) => i.deliveryMode === "TEST")
-            ? `Approva e avvia test ${approvableSelected.length || ""}`
+            ? `Approva e avvia la prova ${approvableSelected.length || ""}`
             : `Approva e avvia ${approvableSelected.length || ""}`}
         </button>
       </div>
@@ -253,6 +283,7 @@ export default function ReviewQueueClient() {
           <div className="mt-3 flex gap-2">
             <button
               type="button"
+              title="Salva le modifiche apportate al messaggio."
               disabled={busy}
               onClick={() => void saveDraft()}
               className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
@@ -261,6 +292,7 @@ export default function ReviewQueueClient() {
             </button>
             <button
               type="button"
+              title="Chiudi senza salvare le modifiche."
               onClick={() => setEditingId(null)}
               className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700"
             >
@@ -273,7 +305,7 @@ export default function ReviewQueueClient() {
       {items.map((item) => {
         const isTest = item.deliveryMode === "TEST";
         const deliveryNote = isTest
-          ? `Lead: ${item.companyName} · Destinatario commerciale: ${item.email ?? "n/d"} · Destinatario effettivo TEST: ${item.testRecipient ?? "n/d"}`
+          ? `Attività: ${item.companyName} · Email del cliente: ${item.email ?? "non disponibile"} · La prova arriverà a: ${item.testRecipient ?? "non disponibile"}`
           : null;
         return (
         <ReviewCard
@@ -291,13 +323,16 @@ export default function ReviewQueueClient() {
           thumbnailLabel={item.previewImageUrl ? "Anteprima email" : undefined}
           selected={selected.has(item.id)}
           onSelectChange={(checked) => toggle(item.id, checked)}
-          headerBadge={isTest ? "TEST" : null}
+          headerBadge={isTest ? "PROVA" : null}
           deliveryNote={deliveryNote}
           approveLabel={isTest ? "Approva e avvia test" : "Approva"}
+          approveDisabled={busy || item.blockers.length > 0}
           approveHint={
-            isTest
-              ? "Autorizza l'invio TEST verso la casella allowlisted (non il prospect)."
-              : "Autorizza l'invio di questo messaggio al lead."
+            item.blockers.length > 0
+              ? `Prima risolvi: ${item.blockers.map(blockerLabel).join(", ")}.`
+              : isTest
+              ? "Autorizza la prova verso l'indirizzo consentito. Il cliente non riceverà nulla."
+              : "Autorizza l'invio di questo messaggio al cliente."
           }
           signals={[
             {
@@ -316,13 +351,13 @@ export default function ReviewQueueClient() {
                 ]
               : []),
             {
-              label: item.previewImageUrl ? "Preview pronta" : "Preview assente",
+              label: item.previewImageUrl ? "Anteprima pronta" : "Anteprima assente",
               ok: Boolean(item.previewImageUrl),
             },
             {
               label: item.blockers.length
-                ? `Blocchi: ${item.blockers.join(", ")}`
-                : "Pronto per review",
+                ? `Problemi: ${item.blockers.map(blockerLabel).join(", ")}`
+                : "Pronto da controllare",
               ok: item.blockers.length === 0,
             },
           ]}

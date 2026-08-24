@@ -95,17 +95,19 @@ export function buildWhatsAppUrl(args: {
   if (!raw) return null;
 
   const priceLine = args.offerPrice?.trim()
-    ? `Mi interessa cambiare e rinnovare la presenza digitale da ${args.offerPrice.trim()}.`
-    : 'Mi interessa cambiare e rinnovare la presenza digitale.';
+    ? `Vorrei capire cosa comprende la proposta da ${args.offerPrice.trim()}.`
+    : 'Vorrei capire come trasformarla in un sito reale.';
+
+  const proposalName =
+    args.businessName?.trim() || args.slug?.trim().replace(/[-_]+/g, ' ') || null;
 
   const text = [
     'Ciao Attila Lab,',
-    args.businessName?.trim()
-      ? `ho visto l'anteprima demo per ${args.businessName.trim()}.`
-      : "ho visto l'anteprima demo del mio locale.",
+    proposalName
+      ? `ho visto la proposta per ${proposalName}.`
+      : "ho visto la proposta per il mio locale.",
     priceLine,
     'Possiamo parlarne?',
-    args.slug?.trim() ? `(rif: ${args.slug.trim()})` : '',
   ]
     .filter(Boolean)
     .join(' ');

@@ -13,8 +13,8 @@ export default async function DemoEditorPage({
     <div className="mx-auto max-w-6xl space-y-2">
       <SectionSubnav items={[...CAMPAIGN_SUBNAV]} />
       <PageHeader
-        title="Editor demo"
-        description="Campi controllati sul Master Template. Salva e rinfresca: le modifiche restano sulla demo, non sul template."
+        title="Modifica anteprima"
+        description="Modifica testi, colori, immagini e contatti di questa anteprima. Le modifiche valgono soltanto per questa attività."
       />
       <DemoEditor demoId={id} />
     </div>

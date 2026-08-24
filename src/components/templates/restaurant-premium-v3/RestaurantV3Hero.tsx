@@ -36,7 +36,7 @@ export function RestaurantV3Hero({
   phone,
 }: Props) {
   return (
-    <section className={styles.hero} aria-label="Hero">
+    <section className={styles.hero} aria-label="Presentazione">
       <div className={styles.heroMedia}>
         {isLocalAsset(heroSrc) ? (
           <Image
@@ -56,11 +56,13 @@ export function RestaurantV3Hero({
       </div>
       <div className={styles.heroContent}>
         {city ? <p className={styles.eyebrow}>{city}</p> : null}
-        <p className={styles.eyebrow} style={{ opacity: 0.85 }}>
-          {name}
-        </p>
-        <h1 className={styles.heroTitle}>{headline}</h1>
-        {subheadline ? <p className={styles.heroSub}>{subheadline}</p> : null}
+        <h1 className={styles.heroTitle}>{name}</h1>
+        <p className={styles.heroSub}>{headline}</p>
+        {subheadline && subheadline !== headline ? (
+          <p className={styles.heroSub} style={{ fontSize: '0.95rem', opacity: 0.88 }}>
+            {subheadline}
+          </p>
+        ) : null}
         <div className={styles.heroMeta}>
           {rating != null ? (
             <span>

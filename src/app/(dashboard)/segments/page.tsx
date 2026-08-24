@@ -8,14 +8,14 @@ export default function SegmentsPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <SectionSubnav items={[...LEAD_SUBNAV]} />
       <PageHeader
-        title="Filtri"
-        description="Segmenti salvati per categoria, score e territorio. Non è più una voce principale: resta sotto Lead."
+        title="Filtri salvati"
+        description="Salva combinazioni di categoria, punteggio e città per ritrovare velocemente le attività che ti interessano."
       />
       <EmptyState
-        title="Nessun segmento salvato"
-        description="Un segmento nasce dai filtri della lead list (categoria, score minimo, città). Flusso corretto: Trova lead → Qualifica → Salva segmento → Crea campagna. I segmenti saranno disponibili in Phase 2."
+        title="Nessun filtro salvato"
+        description="Questa funzione non è ancora disponibile. Per ora usa i filtri presenti nella pagina Attività."
         nextAction={{
-          label: "Apri la lead list per definire un filtro",
+          label: "Apri la pagina Attività",
           href: "/leads",
         }}
       />

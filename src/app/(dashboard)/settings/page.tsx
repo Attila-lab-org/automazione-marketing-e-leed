@@ -12,21 +12,21 @@ export default function SettingsPage() {
       <SectionSubnav items={[...SETTINGS_SUBNAV]} />
       <PageHeader
         title="Impostazioni"
-        description="Stato provider e config commerciale owner (READY/MISSING/INVALID, senza valori/secrets). Resend MOCK oppure LIVE · TEST ONLY secondo runtime."
+        description="Controlla se database, ricerca, email e contatti sono collegati e pronti all’uso."
       />
 
-      <section aria-label="Stato provider" className="space-y-3">
+      <section aria-label="Stato dei collegamenti" className="space-y-3">
         <h2 className="text-sm font-semibold text-stone-800">
-          Stato provider (runtime)
+          Stato dei collegamenti
         </h2>
         <ProvidersRuntimeList layout="stack" />
       </section>
 
       <EmptyState
-        title="Safe live test"
-        description="Produzione outreach resta bloccata. Campagne TEST possono usare Resend live solo verso destinatari allowlisted. Verifica APP URL + allowlist sopra."
+        title="Invio di prova sicuro"
+        description="Le campagne di prova possono inviare email reali soltanto agli indirizzi autorizzati. I clienti veri non vengono contattati."
         nextAction={{
-          label: "Vai ai Leads",
+          label: "Vai alle attività",
           href: "/leads",
         }}
       />

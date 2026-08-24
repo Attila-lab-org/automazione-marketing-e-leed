@@ -196,7 +196,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
     );
   }
   if (!draft || !demo || !previewData) {
-    return <p className="text-sm text-stone-500">Caricamento editor…</p>;
+    return <p className="text-sm text-stone-500">Caricamento modifica anteprima…</p>;
   }
 
   const modern = isModern ? (draft as DemoInstanceDataV2 | DemoInstanceDataV3) : null;
@@ -213,7 +213,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
         }}
       >
         <div>
-          <p className="text-xs uppercase tracking-wide text-stone-500">Editor</p>
+          <p className="text-xs uppercase tracking-wide text-stone-500">Modifica anteprima</p>
           <h1 className="text-lg font-semibold text-stone-900">{demo.template.name}</h1>
           <p className="text-xs text-stone-500">
             {demo.rendererKey} · v{demo.template.version}
@@ -234,7 +234,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                 }
               />
             </Field>
-            <Field label="Logo URL">
+            <Field label="Indirizzo del logo">
               <input
                 className={inputClass}
                 value={modern.branding.logo_url ?? ""}
@@ -247,7 +247,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
               />
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Primary">
+              <Field label="Colore principale">
                 <input
                   type="color"
                   className="h-10 w-full cursor-pointer rounded-lg border border-stone-200"
@@ -260,7 +260,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                   }
                 />
               </Field>
-              <Field label="Accent">
+              <Field label="Colore dei pulsanti">
                 <input
                   type="color"
                   className="h-10 w-full cursor-pointer rounded-lg border border-stone-200"
@@ -274,7 +274,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                 />
               </Field>
             </div>
-            <Field label="Hero image URL">
+            <Field label="Indirizzo dell’immagine principale">
               <input
                 className={inputClass}
                 value={modern.branding.hero_image ?? ""}
@@ -286,14 +286,14 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                 }
               />
             </Field>
-            <Field label="Gallery (una URL per riga)">
+            <Field label="Galleria (un indirizzo immagine per riga)">
               <textarea
                 className={`${inputClass} min-h-24`}
                 value={galleryText}
                 onChange={(e) => setGalleryText(e.target.value)}
               />
             </Field>
-            <Field label="Headline">
+            <Field label="Titolo principale">
               <input
                 className={inputClass}
                 value={modern.content.headline ?? ""}
@@ -305,7 +305,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                 }
               />
             </Field>
-            <Field label="Subheadline">
+            <Field label="Sottotitolo">
               <textarea
                 className={`${inputClass} min-h-20`}
                 value={modern.content.subheadline ?? ""}
@@ -317,7 +317,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                 }
               />
             </Field>
-            <Field label="Description">
+            <Field label="Descrizione">
               <textarea
                 className={`${inputClass} min-h-24`}
                 value={modern.content.description ?? ""}
@@ -329,7 +329,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                 }
               />
             </Field>
-            <Field label="CTA label">
+            <Field label="Testo del pulsante">
               <input
                 className={inputClass}
                 value={modern.content.cta ?? ""}
@@ -343,7 +343,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
             </Field>
             {v3 ? (
               <>
-                <Field label="CTA URL">
+                <Field label="Dove porta il pulsante">
                   <input
                     className={inputClass}
                     value={v3.content.cta_url ?? ""}
@@ -355,7 +355,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                     }
                   />
                 </Field>
-                <Field label="Owner CTA label">
+                <Field label="Testo del contatto commerciale">
                   <input
                     className={inputClass}
                     value={v3.content.owner_cta_label ?? ""}
@@ -367,7 +367,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                     }
                   />
                 </Field>
-                <Field label="Owner CTA URL">
+                <Field label="Dove porta il contatto commerciale">
                   <input
                     className={inputClass}
                     value={v3.content.owner_cta_url ?? ""}
@@ -381,7 +381,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                 </Field>
               </>
             ) : null}
-            <Field label="Phone">
+            <Field label="Telefono">
               <input
                 className={inputClass}
                 value={modern.contact.phone ?? ""}
@@ -393,7 +393,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                 }
               />
             </Field>
-            <Field label="Address">
+            <Field label="Indirizzo">
               <input
                 className={inputClass}
                 value={modern.contact.address ?? ""}
@@ -405,7 +405,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                 }
               />
             </Field>
-            <Field label="City">
+            <Field label="Città">
               <input
                 className={inputClass}
                 value={modern.contact.city ?? ""}
@@ -417,7 +417,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                 }
               />
             </Field>
-            <Field label="Opening hours">
+            <Field label="Orari di apertura">
               <textarea
                 className={`${inputClass} min-h-20`}
                 value={modern.contact.opening_hours ?? ""}
@@ -436,7 +436,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
           </>
         ) : v1 ? (
           <>
-            <Field label="Business name">
+            <Field label="Nome attività">
               <input
                 className={inputClass}
                 value={v1.branding.business_name ?? ""}
@@ -448,7 +448,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
                 }
               />
             </Field>
-            <Field label="Images">
+            <Field label="Immagini">
               <textarea
                 className={`${inputClass} min-h-24`}
                 value={imagesText}
@@ -462,6 +462,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
         <div className="flex flex-wrap gap-2">
           <button
             type="submit"
+            title="Salva tutte le modifiche fatte all’anteprima."
             disabled={saving}
             className="rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           >
@@ -489,7 +490,7 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
 
       <div className="overflow-hidden rounded-xl border border-stone-200 bg-stone-100">
         <div className="border-b border-stone-200 bg-white px-4 py-2 text-xs text-stone-500">
-          Live preview · {demo.rendererKey}
+          Anteprima in tempo reale · modello {demo.rendererKey}
         </div>
         <div className="max-h-[80vh] overflow-auto">
           <DemoRenderer rendererKey={demo.rendererKey} data={previewData as AnyData} compact />

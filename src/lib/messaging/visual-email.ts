@@ -2,9 +2,19 @@ import { resolveAppUrl } from '@/lib/app-url';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadDemoById } from '@/lib/demos/load';
 import { isOwnerWhatsAppConfigured } from '@/lib/templates/owner-commercial';
+import { EMAIL_PREVIEW_CACHE_VERSION } from '@/lib/messaging/constants';
 
 function resolveTemplate(body: string, vars: Record<string, string>): string {
   return body.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 async function upsertDraft(
@@ -50,11 +60,11 @@ async function upsertDraft(
 /** Intro HTML v2 — CTA chiari, WhatsApp opzionale. Firma studio (non il destinatario). */
 export const VISUAL_INTRO_BODY_V2 = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 auto;font-family:Georgia,serif">
 <tr><td style="padding:0 0 16px;font-size:16px;line-height:1.55;color:#2c241e">Buongiorno,</td></tr>
-<tr><td style="padding:0 0 20px;font-size:16px;line-height:1.55;color:#2c241e">abbiamo preparato un'anteprima personalizzata per <strong>{{business_name}}</strong>.</td></tr>
+<tr><td style="padding:0 0 20px;font-size:16px;line-height:1.55;color:#2c241e">abbiamo immaginato come potrebbe presentarsi online <strong>{{business_name}}</strong>{{city_phrase}}, partendo dalle informazioni pubbliche dell'attività.</td></tr>
 <tr><td style="padding:0">{{preview_image_block}}</td></tr>
 <tr><td style="padding:24px 0 8px">{{cta_block}}</td></tr>
 <tr><td style="padding:0">{{whatsapp_block}}</td></tr>
-<tr><td style="padding:24px 0 0;font-family:system-ui,-apple-system,sans-serif;font-size:12px;line-height:1.45;color:#7a6f65">Concept dimostrativo — non è ancora il sito definitivo.</td></tr>
+<tr><td style="padding:24px 0 0;font-family:system-ui,-apple-system,sans-serif;font-size:13px;line-height:1.5;color:#6b625a">È solo una proposta dimostrativa, senza alcun impegno.</td></tr>
 <tr><td style="padding:20px 0 0;font-size:15px;line-height:1.55;color:#2c241e">Cordiali saluti,<br/>{{sender_name}}</td></tr>
 </table>`;
 
@@ -110,20 +120,20 @@ export async function buildVisualEmailDraft(
 
   const appUrl = resolveAppUrl(env);
   const demoUrl = `${appUrl}${demo.publicPath}`;
-  const previewImageUrl = `${appUrl}${demo.publicPath}/email-preview?v=5`;
+  const previewImageUrl = `${appUrl}${demo.publicPath}/email-preview?v=${EMAIL_PREVIEW_CACHE_VERSION}`;
   // Preferisci il nome branding della demo (locale), non un contatto test
   const brandingName =
     (demo.data as { branding?: { business_name?: string | null } })?.branding?.business_name?.trim() ||
     '';
   const businessName = brandingName || lead?.name || 'la tua attività';
-  const senderName = 'Sales Automation OS';
+  const senderName = env.OWNER_SENDER_NAME?.trim() || 'Attila Lab';
   const whatsappEnabled = isOwnerWhatsAppConfigured(env);
   const whatsappUrl = whatsappEnabled
     ? `${appUrl}${demo.publicPath}/interesse?channel=whatsapp`
     : null;
 
   // Table wrapper: Gmail non allarga/zoomma l'immagine oltre 600px
-  const previewImageBlock = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 0 8px 0"><tr><td style="padding:0"><a href="${demoUrl}" style="display:block;text-decoration:none;border:0;outline:none"><img src="${previewImageUrl}" alt="Anteprima ${businessName}" width="600" height="340" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:10px;outline:none" /></a></td></tr></table>`;
+  const previewImageBlock = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 0 8px 0"><tr><td style="padding:0"><a href="${demoUrl}" style="display:block;text-decoration:none;border:0;outline:none"><img src="${previewImageUrl}" alt="Anteprima ${escapeHtml(businessName)}" width="600" height="340" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:10px;outline:none" /></a></td></tr></table>`;
   const ctaBlock = buildCtaBlock(demoUrl);
   const whatsappBlock = buildWhatsAppBlock(whatsappUrl);
 
@@ -136,20 +146,32 @@ export async function buildVisualEmailDraft(
     whatsapp_block: whatsappBlock,
     sender_name: senderName,
     city: lead?.city ?? '',
+    city_phrase: lead?.city?.trim() ? `, attività di ${lead.city.trim()}` : '',
   };
 
   const subjectTpl =
-    templateVersion?.subject ?? "{{business_name}} — abbiamo preparato un'anteprima per te";
+    templateVersion?.subject ?? "Una proposta visiva per {{business_name}}";
   const rawBody = templateVersion?.body ?? VISUAL_INTRO_BODY_V2;
   const bodyTpl = isLegacyPlainIntro(rawBody) ? VISUAL_INTRO_BODY_V2 : rawBody;
 
   const subject = resolveTemplate(subjectTpl, vars);
-  let body = resolveTemplate(bodyTpl, vars);
+  let body = resolveTemplate(bodyTpl, {
+    ...vars,
+    business_name: escapeHtml(businessName),
+    sender_name: escapeHtml(senderName),
+    city: escapeHtml(lead?.city ?? ''),
+    city_phrase: lead?.city?.trim()
+      ? `, attività di ${escapeHtml(lead.city.trim())}`
+      : '',
+  });
   if (!body.includes('<')) {
     body = body
       .split(/\n\n+/)
       .map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
       .join('');
+  }
+  if (/\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(subject) || /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(body)) {
+    throw new Error('Draft: il modello contiene variabili non riconosciute');
   }
 
   const draft = await upsertDraft(admin, workspaceId, {
@@ -190,13 +212,16 @@ export async function buildFollowupDraft(
   ]);
 
   const demo = cl.demo_site_id ? await loadDemoById(admin, workspaceId, cl.demo_site_id) : null;
+  if (!demo) throw new Error('Follow-up: anteprima non disponibile');
   const appUrl = resolveAppUrl(env);
   const demoUrl = demo ? `${appUrl}${demo.publicPath}` : appUrl;
   const brandingName =
     (demo?.data as { branding?: { business_name?: string | null } } | undefined)?.branding
       ?.business_name?.trim() || '';
   const businessName = brandingName || lead?.name || 'la tua attività';
-  const senderName = 'Sales Automation OS';
+  const senderName = env.OWNER_SENDER_NAME?.trim() || 'Attila Lab';
+  const safeBusinessName = escapeHtml(businessName);
+  const safeSenderName = escapeHtml(senderName);
   const whatsappUrl =
     demo && isOwnerWhatsAppConfigured(env)
       ? `${appUrl}${demo.publicPath}/interesse?channel=whatsapp`
@@ -207,12 +232,12 @@ export async function buildFollowupDraft(
 
   const templates: Record<number, { subject: string; body: string }> = {
     1: {
-      subject: `${businessName} — un breve follow-up`,
-      body: `<p>Buongiorno,</p><p>riprendo brevemente riguardo all'anteprima preparata per <strong>${businessName}</strong>.</p><p><a href="${demoUrl}" style="display:inline-block;padding:12px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:999px;font-weight:600">Vedi l'anteprima</a></p>${waHtml}<p>Cordiali saluti,<br/>${senderName}</p>`,
+      subject: `${businessName} — la proposta che abbiamo preparato`,
+      body: `<p>Buongiorno,</p><p>volevo sapere se ha avuto modo di vedere la proposta preparata per <strong>${safeBusinessName}</strong>.</p><p><a href="${demoUrl}" style="display:inline-block;padding:12px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:999px;font-weight:600">Rivedi la proposta</a></p>${waHtml}<p>È una proposta dimostrativa: se vuole, possiamo parlarne senza impegno.</p><p>Cordiali saluti,<br/>${safeSenderName}</p>`,
     },
     2: {
-      subject: `${businessName} — ultimo messaggio`,
-      body: `<p>Buongiorno,</p><p>questo è l'ultimo follow-up riguardo all'anteprima per <strong>${businessName}</strong>.</p><p><a href="${demoUrl}" style="display:inline-block;padding:12px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:999px;font-weight:600">Vedi l'anteprima</a></p>${waHtml}<p>Se non è di interesse, non riceverete altri messaggi automatici.</p><p>Cordiali saluti,<br/>${senderName}</p>`,
+      subject: `${businessName} — ultimo promemoria sulla proposta`,
+      body: `<p>Buongiorno,</p><p>le lascio un ultimo promemoria sulla proposta dimostrativa per <strong>${safeBusinessName}</strong>.</p><p><a href="${demoUrl}" style="display:inline-block;padding:12px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:999px;font-weight:600">Rivedi la proposta</a></p>${waHtml}<p>Se non le interessa, non riceverà altri messaggi.</p><p>Cordiali saluti,<br/>${safeSenderName}</p>`,
     },
   };
 

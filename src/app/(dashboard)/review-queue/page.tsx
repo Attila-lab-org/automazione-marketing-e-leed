@@ -8,8 +8,8 @@ export default function ReviewQueuePage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <SectionSubnav items={[...CAMPAIGN_SUBNAV]} />
       <PageHeader
-        title="Review Queue"
-        description="Valida lead reali da campagne: demo, anteprima email, segnali Send Guard e azioni bulk."
+        title="Da controllare"
+        description="Controlla le attività, le anteprime e i messaggi preparati. Da qui puoi approvare o scartare prima dell’invio."
       />
       <ReviewQueueClient />
     </div>

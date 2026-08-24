@@ -78,7 +78,7 @@ describe('Owner interesse route — no hardcoded fallbacks', () => {
     const loc = res.headers.get('location') ?? '';
     expect(loc.startsWith('https://wa.me/393462689082')).toBe(true);
     expect(decodeURIComponent(loc)).not.toMatch(/350/);
-    expect(decodeURIComponent(loc)).toContain('trattoria-duomo');
+    expect(decodeURIComponent(loc)).toContain('trattoria duomo');
   });
 
   it('OWNER_CONTACT_URL non http(s) → 503', async () => {

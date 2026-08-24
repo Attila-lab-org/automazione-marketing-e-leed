@@ -42,18 +42,19 @@ export default function DemoPreview({
       <header className="flex flex-wrap items-center gap-3 border-b border-stone-100 px-4 py-3">
         <div
           role="group"
-          aria-label="Viewport anteprima"
+          aria-label="Formato anteprima"
           className="inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5"
         >
           {(
             [
-              { key: "desktop", label: "Desktop" },
-              { key: "mobile", label: "Mobile" },
+              { key: "desktop", label: "Computer" },
+              { key: "mobile", label: "Telefono" },
             ] as const
           ).map((option) => (
             <button
               key={option.key}
               type="button"
+              title={`Mostra l’anteprima nel formato ${option.label.toLowerCase()}.`}
               onClick={() => setViewport(option.key)}
               aria-pressed={viewport === option.key}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -68,7 +69,7 @@ export default function DemoPreview({
         </div>
         {templateName ? (
           <p className="text-xs text-stone-500">
-            Template <span className="font-medium">{templateName}</span>
+            Modello <span className="font-medium">{templateName}</span>
             {templateVersion ? (
               <>
                 {" "}
@@ -85,8 +86,8 @@ export default function DemoPreview({
             aria-disabled={!demoUrl}
             title={
               demoUrl
-                ? "Apre la demo pubblica in una nuova scheda (route noindex, §10)."
-                : "Nessuna demo pubblicata ancora."
+                ? "Apre l’anteprima pubblica in una nuova scheda."
+                : "Nessuna anteprima pubblicata."
             }
             className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
               demoUrl
@@ -94,10 +95,11 @@ export default function DemoPreview({
                 : "pointer-events-none border-stone-200 text-stone-300"
             }`}
           >
-            Apri demo pubblica ↗
+            Apri anteprima pubblica ↗
           </a>
           <button
             type="button"
+            title="Copia l’indirizzo pubblico dell’anteprima."
             onClick={copyUrl}
             disabled={!demoUrl}
             className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-300"
@@ -135,8 +137,7 @@ export default function DemoPreview({
                 <div className="h-24 w-full rounded-lg bg-stone-100" />
                 <div className="h-9 w-40 rounded-lg bg-amber-200" />
                 <p className="pt-2 text-center text-xs text-stone-400">
-                  Il rendering reale del template demo sarà disponibile con il
-                  Template Engine (§9, Phase 4).
+                  L’anteprima completa sarà disponibile quando il modello sarà pronto.
                 </p>
               </div>
             )}

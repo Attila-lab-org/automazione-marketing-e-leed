@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sales Automation OS",
+  title: "Gestione contatti",
   description:
-    "Piattaforma lead-centrica per discovery, scoring, demo personalizzate e outreach controllato.",
+    "Ricerca attività, crea proposte personalizzate e controlla l’invio dei messaggi.",
 };
 
 export default function RootLayout({

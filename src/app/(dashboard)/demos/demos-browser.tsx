@@ -25,7 +25,7 @@ export default function DemosBrowser() {
     fetch("/api/demos")
       .then(async (res) => {
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Elenco demo fallito");
+        if (!res.ok) throw new Error(data.error ?? "Caricamento anteprime fallito");
         if (!cancelled) setRows(data.demos ?? []);
       })
       .catch((err: unknown) => {
@@ -39,7 +39,7 @@ export default function DemosBrowser() {
     };
   }, []);
 
-  if (loading) return <p className="text-sm text-stone-500">Caricamento demo…</p>;
+  if (loading) return <p className="text-sm text-stone-500">Caricamento anteprime…</p>;
   if (error) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -50,9 +50,9 @@ export default function DemosBrowser() {
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-stone-300 bg-white px-6 py-10 text-center">
-        <p className="text-sm font-medium text-stone-800">Nessuna demo ancora</p>
+        <p className="text-sm font-medium text-stone-800">Nessuna anteprima</p>
         <p className="mt-1 text-sm text-stone-500">
-          Apri un lead e usa «Crea demo». Non vengono generate automaticamente.
+          Apri un’attività e scegli «Crea anteprima».
         </p>
       </div>
     );
@@ -63,8 +63,8 @@ export default function DemosBrowser() {
       <table className="w-full text-left text-sm">
         <thead className="border-b border-stone-100 bg-stone-50 text-xs uppercase tracking-wide text-stone-500">
           <tr>
-            <th className="px-4 py-3 font-medium">Lead</th>
-            <th className="px-4 py-3 font-medium">Template</th>
+            <th className="px-4 py-3 font-medium">Attività</th>
+            <th className="px-4 py-3 font-medium">Modello</th>
             <th className="px-4 py-3 font-medium">Stato</th>
             <th className="px-4 py-3 font-medium">URL</th>
             <th className="px-4 py-3 font-medium" />
@@ -72,7 +72,11 @@ export default function DemosBrowser() {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id} className="border-b border-stone-100 last:border-0">
+            <tr
+              key={row.id}
+              title={`Anteprima creata per ${row.leadName}. Apri per controllarla o modificarla.`}
+              className="border-b border-stone-100 last:border-0"
+            >
               <td className="px-4 py-3">
                 <p className="font-medium text-stone-900">{row.leadName}</p>
                 <p className="text-xs text-stone-400">{row.leadCity ?? "—"}</p>
@@ -85,6 +89,7 @@ export default function DemosBrowser() {
               <td className="px-4 py-3 text-right">
                 <Link
                   href={`/demos/${row.id}`}
+                  title="Apri e modifica questa anteprima."
                   className="text-sm font-medium text-amber-700 hover:text-amber-800"
                 >
                   Apri

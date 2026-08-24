@@ -108,15 +108,16 @@ export default function RestaurantPremiumV2({ data, compact = false }: Restauran
               </span>
             </div>
           ) : (
-            <p className="mt-6 text-sm text-white/70">Concept dimostrativo · fiducia e presenza digitale</p>
+            <p className="mt-6 text-sm text-white/70">Proposta dimostrativa · fiducia e presenza online</p>
           )}
           <div className="mt-8">
-            <span
+            <a
+              href={phone ? `tel:${phone}` : '#informazioni'}
               className="inline-flex rounded-full px-6 py-3 text-sm font-semibold text-white shadow-lg"
               style={{ backgroundColor: accent }}
             >
               {cta}
-            </span>
+            </a>
           </div>
         </div>
       </section>
@@ -141,7 +142,7 @@ export default function RestaurantPremiumV2({ data, compact = false }: Restauran
         <div className="mx-auto max-w-6xl px-6">
           <h2 className="text-lg font-semibold text-stone-900">Ambiente &amp; atmosfera</h2>
           <p className="mt-2 text-sm text-stone-500">
-            Immagini di template (concept). Non rappresentano foto del locale.
+            Immagini dimostrative. Non rappresentano fotografie del locale.
           </p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {gallery.map((src) => (
@@ -155,19 +156,20 @@ export default function RestaurantPremiumV2({ data, compact = false }: Restauran
       <section className="mx-auto max-w-6xl px-6 py-16">
         <div className="grid gap-8 rounded-2xl border border-stone-200 bg-white p-8 md:grid-cols-2">
           <div>
-            <h2 className="text-lg font-semibold text-stone-900">Perché scegliere questo concept</h2>
+            <h2 className="text-lg font-semibold text-stone-900">Come può aiutare la tua attività</h2>
             <p className="mt-3 text-sm leading-relaxed text-stone-600">
               Una pagina unica che combina fiducia Google, presentazione e contatto — pronta da
               personalizzare con i dati reali della tua attività.
             </p>
-            <span
+            <a
+              href={phone ? `tel:${phone}` : '#informazioni'}
               className="mt-6 inline-flex rounded-full px-5 py-2.5 text-sm font-semibold text-white"
               style={{ backgroundColor: accent }}
             >
               {cta}
-            </span>
+            </a>
           </div>
-          <div>
+          <div id="informazioni">
             <h2 className="text-lg font-semibold text-stone-900">Informazioni</h2>
             {phone ? <p className="mt-3 text-stone-600">{phone}</p> : null}
             {address ? <p className="mt-1 text-stone-600">{address}</p> : null}
@@ -184,7 +186,7 @@ export default function RestaurantPremiumV2({ data, compact = false }: Restauran
               </div>
             ) : null}
             {!phone && !address && !hours ? (
-              <p className="mt-3 text-sm text-stone-500">Contatti disponibili dopo enrichment Google.</p>
+              <p className="mt-3 text-sm text-stone-500">I contatti non sono ancora disponibili.</p>
             ) : null}
           </div>
         </div>
@@ -195,7 +197,7 @@ export default function RestaurantPremiumV2({ data, compact = false }: Restauran
           <p className="font-medium text-stone-800">{name}</p>
           {email ? <p>{email}</p> : null}
           <p className="pt-4 text-[11px] uppercase tracking-wide text-stone-300">
-            Anteprima / concept dimostrativo · Restaurant Premium V2
+            Proposta dimostrativa · Attila Lab
           </p>
         </div>
       </footer>

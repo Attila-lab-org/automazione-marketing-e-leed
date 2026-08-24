@@ -9,13 +9,13 @@ export default function InboxPage() {
       <SectionSubnav items={[...MESSAGE_SUBNAV]} />
       <PageHeader
         title="Messaggi"
-        description="Le risposte dei lead e le conversazioni: una reply ferma automaticamente i follow-up pendenti su quel lead (cancellazione atomica, §12.2)."
+        description="Qui leggerai le risposte dei clienti. Quando un cliente risponde, i messaggi automatici successivi si fermano."
       />
       <EmptyState
         title="Nessuna conversazione"
-        description="L'Inbox si popola quando arrivano risposte via webhook Resend (§11.2, §12.1). Ogni reply aggiorna lo stato commerciale del lead e sospende i follow-up pianificati."
+        description="Le conversazioni compariranno quando il collegamento per ricevere le risposte email sarà attivo."
         nextAction={{
-          label: "Collega Resend e il webhook in Settings",
+          label: "Controlla il collegamento email",
           href: "/settings",
         }}
       />

@@ -5,19 +5,29 @@
 
 export const V3_ASSET_BASE = '/restaurant-premium-v3/assets';
 
+function v3Svg(label: string, start: string, end: string, width = 1200, height = 800): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" data-pack="restaurant-premium-v3"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${start}"/><stop offset="1" stop-color="${end}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><circle cx="82%" cy="18%" r="22%" fill="#fff" opacity=".08"/><text x="6%" y="90%" fill="#fff" opacity=".38" font-family="Georgia,serif" font-size="34">${label}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+const V3_HERO_FALLBACK = v3Svg('restaurant-premium-v3', '#211915', '#9a5538', 1600, 900);
+const V3_GALLERY_FALLBACKS = [
+  v3Svg('Ambiente', '#2c241e', '#80604f'),
+  v3Svg('Atmosfera', '#5f3328', '#c17b54'),
+  v3Svg('Dettagli', '#25201d', '#69564c'),
+] as const;
+
 /** Placeholder concept pack — mixed locations; replace with a coherent pack when curated. */
 export const RESTAURANT_PREMIUM_V3_ASSETS = {
-  hero: `${V3_ASSET_BASE}/hero.jpg`,
-  interior: `${V3_ASSET_BASE}/interior.jpg`,
-  foodDetail: `${V3_ASSET_BASE}/food-detail.jpg`,
-  table: `${V3_ASSET_BASE}/table.jpg`,
-  atmosphere: `${V3_ASSET_BASE}/atmosphere.jpg`,
+  hero: V3_HERO_FALLBACK,
+  interior: V3_GALLERY_FALLBACKS[0],
+  foodDetail: V3_GALLERY_FALLBACKS[2],
+  table: V3_GALLERY_FALLBACKS[1],
+  atmosphere: V3_GALLERY_FALLBACKS[0],
   gallery: [
-    `${V3_ASSET_BASE}/gallery-1.jpg`,
-    `${V3_ASSET_BASE}/gallery-2.jpg`,
-    `${V3_ASSET_BASE}/gallery-3.jpg`,
-    `${V3_ASSET_BASE}/food-detail.jpg`,
-    `${V3_ASSET_BASE}/table.jpg`,
+    V3_GALLERY_FALLBACKS[0],
+    V3_GALLERY_FALLBACKS[1],
+    V3_GALLERY_FALLBACKS[2],
   ],
 } as const;
 
@@ -40,7 +50,7 @@ export const RESTAURANT_PREMIUM_V3_CONCEPT_COPY = {
     },
     {
       title: 'Prenotazione semplice',
-      body: 'Una call to action chiara, ripetuta nei punti giusti, per trasformare interesse in tavolo riservato.',
+      body: 'Un invito chiaro, ripetuto nei punti giusti, per trasformare l’interesse in una prenotazione.',
     },
   ],
   storyHeadline: 'Il gusto incontra una presenza all’altezza.',
@@ -60,15 +70,15 @@ export const RESTAURANT_PREMIUM_V3_CONCEPT_COPY = {
   ownerHeadline: 'Cambia e rinnova la tua attività.',
   ownerOfferLabel: 'Presenza digitale completa',
   ownerBody:
-    'Hai visto cosa può diventare il tuo locale online. La trasformiamo nella versione reale sul tuo brand — partiamo da un messaggio WhatsApp.',
+    'Hai visto cosa può diventare il tuo locale online. Possiamo trasformare questa proposta in un sito reale, costruito sulla tua identità.',
   ownerCta: 'Parliamone',
   ownerCtaWhatsApp: 'Scrivici su WhatsApp',
   ownerCtaSite: 'Scopri Attila Lab',
-  ownerMicro: 'Un tap · Messaggio già pronto · Nessun impegno',
+  ownerMicro: 'Un tocco · Messaggio già pronto · Nessun impegno',
   cta: 'Prenota un tavolo',
   ctaShort: 'Prenota',
   ribbonTitle: 'Anteprima riservata',
-  ribbonBody: 'Concept dimostrativo · rinnova la tua attività',
+  ribbonBody: 'Proposta dimostrativa · rinnova la tua presenza online',
   ribbonCta: 'Info',
   ribbonCtaWhatsApp: 'WhatsApp',
 } as const;

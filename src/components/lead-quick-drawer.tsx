@@ -58,20 +58,20 @@ export default function LeadQuickDrawer({
   return (
     <div className="fixed inset-0 z-40">
       <button
-        aria-label="Chiudi anteprima lead"
+        aria-label="Chiudi dettagli attività"
         onClick={onClose}
         className="absolute inset-0 cursor-default bg-stone-900/40"
       />
       <aside
         role="dialog"
         aria-modal="true"
-        aria-label={`Anteprima rapida: ${lead.name}`}
+        aria-label={`Dettagli attività: ${lead.name}`}
         className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-stone-200 bg-white shadow-2xl"
       >
         <header className="flex items-start justify-between gap-4 border-b border-stone-100 px-6 py-5">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-400">
-              Anteprima rapida lead
+              Dettagli attività
             </p>
             <h2 className="mt-1 text-lg font-semibold text-stone-900">
               {lead.name}
@@ -98,14 +98,14 @@ export default function LeadQuickDrawer({
             </h3>
             <div className="flex flex-wrap items-center gap-2">
               <span
-                title="Stato commerciale del lead (§3.1): NEW → QUALIFIED → CAMPAIGN_READY → CONTACTED → REPLIED → INTERESTED → WON/LOST…"
+                title="Indica a che punto è questa attività: nuova, pronta, contattata, interessata oppure scartata."
                 className="cursor-help rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs font-medium text-stone-700"
               >
                 {lead.businessStatusLabel}
               </span>
               {lead.processingStatusLabel ? (
                 <span
-                  title="Stato della macchina di elaborazione (§3.1): IDLE, ENRICHING, ANALYZING, SCORING, DEMO_GENERATING…"
+                  title="Indica quale elaborazione automatica è in corso per questa attività."
                   className="cursor-help rounded-full border border-stone-200 bg-white px-2.5 py-1 text-xs font-medium text-stone-500"
                 >
                   {lead.processingStatusLabel}
@@ -120,7 +120,7 @@ export default function LeadQuickDrawer({
           typeof lead.confidence === "number" ? (
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
-                Score e confidence
+                Punteggio e affidabilità dei dati
               </h3>
               <ScoreBadge
                 score={lead.score}
@@ -128,8 +128,7 @@ export default function LeadQuickDrawer({
                 breakdown={lead.scoreBreakdown}
               />
               <p className="mt-1.5 text-xs text-stone-400">
-                Passa sopra il badge per il breakdown delle 5 dimensioni
-                (§5.1).
+                Passa sopra il punteggio per vedere come è stato calcolato.
               </p>
             </section>
           ) : null}
@@ -169,17 +168,17 @@ export default function LeadQuickDrawer({
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                title="Crea una demo Restaurant Premium dai dati già disponibili. Nessuna email."
+                title="Crea un sito dimostrativo usando i dati già disponibili. Non invia email."
                 onClick={onCreateDemo}
                 disabled={!onCreateDemo || creatingDemo}
                 className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-60"
               >
-                {creatingDemo ? "Creazione demo…" : "Crea demo"}
+                {creatingDemo ? "Creazione anteprima…" : "Crea anteprima"}
               </button>
               <button
                 type="button"
                 disabled
-                title="Prepara messaggio dalla Review Queue / campagna — non da questo drawer."
+                title="Il messaggio si prepara dalla campagna, dopo aver creato l’anteprima."
                 className="cursor-not-allowed rounded-lg border border-stone-200 px-3 py-2 text-left text-xs font-medium text-stone-300"
               >
                 Prepara messaggio
@@ -190,11 +189,11 @@ export default function LeadQuickDrawer({
           {/* Timeline */}
           <section>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
-              Timeline
+              Cronologia
             </h3>
             <Timeline
               events={lead.timeline ?? []}
-              emptyLabel="Nessun evento ancora: la timeline si popola con discovery, scoring e outreach."
+              emptyLabel="Nessun evento. La cronologia si aggiorna quando cerchi dati, crei un’anteprima o prepari un messaggio."
             />
           </section>
         </div>

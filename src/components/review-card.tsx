@@ -25,15 +25,16 @@ export type ReviewCardProps = {
   signals: ReviewCardSignal[];
   selected?: boolean;
   onSelectChange?: (selected: boolean) => void;
-  onApprove?: () => void;
+  onApprove?: () => void | Promise<boolean | void>;
+  approveDisabled?: boolean;
   approveLabel?: string;
   approveHint?: string;
   headerBadge?: string | null;
   deliveryNote?: string | null;
-  onEditDraft?: () => void;
-  onSkip?: () => void;
-  onReject?: () => void;
-  onPause?: () => void;
+  onEditDraft?: () => void | Promise<boolean | void>;
+  onSkip?: () => void | Promise<boolean | void>;
+  onReject?: () => void | Promise<boolean | void>;
+  onPause?: () => void | Promise<boolean | void>;
 };
 
 type ReviewAction = "approve" | "edit" | "skip" | "reject" | "pause";
@@ -62,8 +63,9 @@ export default function ReviewCard({
   selected = false,
   onSelectChange,
   onApprove,
+  approveDisabled = false,
   approveLabel = "Approva",
-  approveHint = "Autorizza l'invio di questo messaggio al lead.",
+  approveHint = "Autorizza l'invio di questo messaggio al cliente.",
   headerBadge = null,
   deliveryNote = null,
   onEditDraft,
@@ -73,16 +75,21 @@ export default function ReviewCard({
 }: ReviewCardProps) {
   const [actionTaken, setActionTaken] = useState<ReviewAction | null>(null);
 
-  function act(action: ReviewAction, callback?: () => void) {
-    setActionTaken(action);
-    callback?.();
+  async function act(
+    action: ReviewAction,
+    callback?: () => void | Promise<boolean | void>,
+  ) {
+    if (!callback) return;
+    const result = await callback();
+    if (result !== false) setActionTaken(action);
   }
 
   const actions: {
     key: ReviewAction;
     label: string;
     hint: string;
-    callback?: () => void;
+    callback?: () => void | Promise<boolean | void>;
+    disabled?: boolean;
     className: string;
   }[] = [
     {
@@ -90,33 +97,34 @@ export default function ReviewCard({
       label: approveLabel,
       hint: approveHint,
       callback: onApprove,
+      disabled: approveDisabled,
       className: "bg-emerald-600 text-white hover:bg-emerald-700 border border-transparent",
     },
     {
       key: "edit",
       label: "Modifica bozza",
-      hint: "Modifica subject/body della bozza email.",
+      hint: "Modifica l’oggetto e il testo dell’email prima di approvarla.",
       callback: onEditDraft,
       className: "border border-stone-300 text-stone-700 hover:bg-stone-50",
     },
     {
       key: "skip",
       label: "Salta",
-      hint: "Rimanda la decisione: la card torna in coda.",
+      hint: "Rimanda la decisione. Questo elemento resterà tra quelli da controllare.",
       callback: onSkip,
       className: "border border-stone-300 text-stone-700 hover:bg-stone-50",
     },
     {
       key: "reject",
       label: "Rifiuta",
-      hint: "Scarta demo/messaggio per questo lead; nessun invio avverrà.",
+      hint: "Scarta l’anteprima e il messaggio per questa attività. Non verrà inviata alcuna email.",
       callback: onReject,
       className: "border border-red-300 text-red-700 hover:bg-red-50",
     },
     {
       key: "pause",
-      label: "Pausa lead",
-      hint: "Sospende ogni automazione su questo lead.",
+      label: "Sospendi attività",
+      hint: "Sospende tutte le automazioni per questa attività.",
       callback: onPause,
       className: "border border-amber-300 text-amber-800 hover:bg-amber-50",
     },
@@ -124,6 +132,8 @@ export default function ReviewCard({
 
   return (
     <article
+      title={`Controlla anteprima e messaggio preparati per ${companyName}.`}
+      tabIndex={0}
       className={`rounded-xl border bg-white transition-opacity ${
         actionTaken && actionTaken !== "edit"
           ? "border-stone-200 opacity-60"
@@ -194,16 +204,21 @@ export default function ReviewCard({
             {demoUrl ? (
               <a
                 href={demoUrl}
+                title="Apri l’anteprima pubblica in una nuova scheda."
                 target="_blank"
                 rel="noopener noreferrer nofollow"
                 className="text-amber-700 hover:underline"
               >
-                Apri demo
+                Apri anteprima
               </a>
             ) : null}
             {demoSiteId ? (
-              <Link href={`/demos/${demoSiteId}`} className="text-stone-600 hover:underline">
-                Modifica demo
+              <Link
+                href={`/demos/${demoSiteId}`}
+                title="Modifica testi, colori e immagini dell’anteprima."
+                className="text-stone-600 hover:underline"
+              >
+                Modifica anteprima
               </Link>
             ) : null}
           </div>
@@ -233,8 +248,9 @@ export default function ReviewCard({
             key={action.key}
             type="button"
             title={action.hint}
-            onClick={() => act(action.key, action.callback)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${action.className}`}
+            disabled={action.disabled || !action.callback}
+            onClick={() => void act(action.key, action.callback)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${action.className}`}
           >
             {action.label}
           </button>

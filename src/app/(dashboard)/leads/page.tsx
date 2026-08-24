@@ -14,11 +14,11 @@ export default async function LeadsPage({
     <div className="mx-auto max-w-6xl space-y-6">
       <SectionSubnav items={[...LEAD_SUBNAV]} />
       <PageHeader
-        title={opportunita ? "Opportunità" : "Lead"}
+        title={opportunita ? "Opportunità" : "Attività"}
         description={
           opportunita
-            ? "Lead prequalificati o da analizzare. Crea una demo Restaurant Premium quando vuoi — nessuna email."
-            : "Trova attività, qualifica in automatico, crea una demo a mano. Outreach resta in mock."
+            ? "Qui trovi le attività più interessanti. Puoi controllarle e creare un’anteprima senza inviare email."
+            : "Cerca nuove attività, controlla i dati e crea un’anteprima del loro possibile sito."
         }
       />
       <LeadsBrowser view={opportunita ? "opportunita" : "tutti"} />

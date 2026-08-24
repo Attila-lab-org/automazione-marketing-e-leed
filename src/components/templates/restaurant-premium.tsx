@@ -68,12 +68,13 @@ export default function RestaurantPremium({ data, compact = false }: RestaurantP
             </p>
           ) : null}
           <div className="mt-8">
-            <span
+            <a
+              href={phone ? `tel:${phone}` : email ? `mailto:${email}` : '#contatti'}
               className="inline-flex rounded-full px-5 py-2.5 text-sm font-semibold text-white"
               style={{ backgroundColor: accent }}
             >
               {cta}
-            </span>
+            </a>
           </div>
         </div>
       </section>
@@ -94,13 +95,13 @@ export default function RestaurantPremium({ data, compact = false }: RestaurantP
         </section>
       ) : null}
 
-      <footer className="border-t border-stone-200 px-6 py-10 sm:px-10">
+      <footer id="contatti" className="border-t border-stone-200 px-6 py-10 sm:px-10">
         <div className="mx-auto flex max-w-5xl flex-col gap-2 text-sm text-stone-500">
           <p className="font-medium text-stone-800">{name}</p>
           {address ? <p>{address}</p> : null}
           {email ? <p>{email}</p> : null}
           <p className="pt-4 text-[11px] uppercase tracking-wide text-stone-300">
-            Anteprima tecnica · Restaurant Premium v1
+            Proposta dimostrativa · Attila Lab
           </p>
         </div>
       </footer>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import InfoTip from "./info-tip";
 
 export type KpiCardProps = {
   /** Nome della metrica, in linguaggio operativo. */
@@ -61,13 +62,7 @@ export default function KpiCard({
         <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
           {label}
         </p>
-        <span
-          title={tooltip}
-          aria-label={tooltip}
-          className="cursor-help rounded-full border border-stone-200 px-1.5 text-[10px] leading-4 text-stone-400"
-        >
-          ?
-        </span>
+        <InfoTip text={tooltip} label={`Spiegazione di ${label}`} />
       </div>
       <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-stone-900">
         {value}
@@ -101,11 +96,16 @@ export default function KpiCard({
     return (
       <Link
         href={drilldownHref}
+        title={`${tooltip} Apri la pagina con i dettagli.`}
         className="block transition-shadow hover:shadow-sm"
       >
         {body}
       </Link>
     );
   }
-  return body;
+  return (
+    <div title={tooltip} tabIndex={0} className="rounded-xl outline-none focus:ring-2 focus:ring-amber-200">
+      {body}
+    </div>
+  );
 }

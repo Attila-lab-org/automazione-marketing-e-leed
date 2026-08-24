@@ -10,7 +10,6 @@ type Props = {
 
 export function RestaurantV3Location({ address, city, phone, email, openingHours }: Props) {
   const hasAny = Boolean(address || city || phone || email || openingHours);
-  if (!hasAny) return null;
   return (
     <section id="contatti" className={`${styles.section} ${styles.sectionNarrow}`} data-reveal>
       <div className={styles.location}>
@@ -37,6 +36,12 @@ export function RestaurantV3Location({ address, city, phone, email, openingHours
                 <dd>
                   <a href={`mailto:${email}`}>{email}</a>
                 </dd>
+              </div>
+            ) : null}
+            {!hasAny ? (
+              <div>
+                <dt>Informazioni</dt>
+                <dd>I recapiti del locale non sono ancora disponibili.</dd>
               </div>
             ) : null}
           </dl>

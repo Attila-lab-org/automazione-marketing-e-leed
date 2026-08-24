@@ -6,8 +6,8 @@ export default function OverviewPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
-        title="Dashboard"
-        description="Panoramica operativa con dati reali da Supabase. Outreach resta in mock finché non autorizzato."
+        title="Riepilogo"
+        description="Qui vedi quante attività hai trovato, quante anteprime sono pronte e quali invii richiedono attenzione."
       />
 
       <section aria-label="KPI principali">
@@ -15,7 +15,7 @@ export default function OverviewPage() {
       </section>
 
       <section aria-label="Stato dei sistemi" className="space-y-3">
-        <h2 className="text-sm font-semibold text-stone-800">Stato sistemi e provider</h2>
+        <h2 className="text-sm font-semibold text-stone-800">Stato dei collegamenti</h2>
         <ProvidersRuntimeList layout="grid" />
       </section>
     </div>

@@ -6,6 +6,7 @@ import { ensureRestaurantPremiumV3 } from '@/lib/demos/ensure-template-v3';
 import type { PolicyMode } from '@/lib/types/database';
 import {
   isValidEmailShape,
+  isTestRecipientAllowlisted,
   normalizeEmailAddress,
 } from '@/lib/campaigns/test-delivery';
 
@@ -31,7 +32,7 @@ const DEFAULT_POLICY_ACTIONS = {
   screenshot: 'OFF',
   message_generation: 'AUTO',
   send: 'MANUAL',
-  followup: 'AUTO',
+  followup: 'OFF',
 };
 
 export async function createCampaignWithLeads(
@@ -106,6 +107,11 @@ export async function createCampaignWithLeads(
     const raw = input.testRecipient?.trim() ?? '';
     if (!raw || !isValidEmailShape(raw)) {
       throw new Error('Campagna TEST: email destinatario test obbligatoria e valida');
+    }
+    if (!isTestRecipientAllowlisted(raw)) {
+      throw new Error(
+        'Campagna TEST: l’indirizzo di prova non è presente tra quelli autorizzati',
+      );
     }
     testRecipient = normalizeEmailAddress(raw);
   }

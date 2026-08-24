@@ -55,7 +55,7 @@ export default function ScoreBadge({
     Math.max(0, Math.min(1, confidence)) * 100,
   );
   const b = band(clamped);
-  const tooltipText = `Score ${clamped}/100 (${b.label}) con confidence ${confidencePct}%. Lo score misura quanto il lead è promettente; la confidence quanto la stima è affidabile (§5.1).`;
+  const tooltipText = `Punteggio ${clamped}/100 (${b.label}) con affidabilità dei dati ${confidencePct}%. Il punteggio indica quanto l’attività è interessante; l’affidabilità indica quanto sono completi e sicuri i dati usati.`;
 
   return (
     <span className="group relative inline-flex" tabIndex={0}>
@@ -69,7 +69,7 @@ export default function ScoreBadge({
           aria-hidden
           className="mx-0.5 h-3 w-px bg-current opacity-30"
         />
-        <span className="font-normal" title={`Confidence: ${confidencePct}%`}>
+        <span className="font-normal" title={`Affidabilità dei dati: ${confidencePct}%`}>
           {confidencePct}%
         </span>
       </span>
@@ -80,7 +80,7 @@ export default function ScoreBadge({
           className="pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-64 rounded-lg border border-stone-200 bg-white p-3 text-left shadow-lg group-hover:block group-focus-within:block"
         >
           <span className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-stone-500">
-            Breakdown score (§5.1)
+            Come è calcolato
           </span>
           {breakdown.map((item) => (
             <span key={item.label} className="mb-1.5 block last:mb-0">
@@ -97,7 +97,7 @@ export default function ScoreBadge({
             </span>
           ))}
           <span className="mt-2 block border-t border-stone-100 pt-2 text-[11px] text-stone-400">
-            Confidence {confidencePct}% — sotto soglia va in Review Queue.
+            Affidabilità dati {confidencePct}% — se è troppo bassa, l’attività resta da controllare.
           </span>
         </span>
       ) : null}

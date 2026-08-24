@@ -11,64 +11,64 @@ export default function AnalyticsPage() {
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
         title="Statistiche"
-        description="Conversioni e performance lungo tutto il funnel, con drill-down categoria → campagna → template → fascia di score (§20)."
+        description="Misura quante attività trovi, quante contatti e quante rispondono."
       />
 
       <section aria-label="Funnel discovery e qualification">
         <h2 className="mb-3 text-sm font-semibold text-stone-800">
-          Discovery & Qualification
+          Ricerca e valutazione
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
-            label="Lead scoperti"
+            label="Attività trovate"
             value="0"
-            tooltip="Lead trovati via Google Places, al netto dei duplicati (§20 Discovery)."
+            tooltip="Numero di attività trovate su Google, senza contare due volte la stessa attività."
           />
           <KpiCard
-            label="Qualified rate"
+            label="Opportunità valide"
             value="—"
-            tooltip="Percentuale di lead che supera lo scoring sopra soglia (§20 Qualification)."
+            tooltip="Percentuale di attività che supera il punteggio minimo ed è interessante da contattare."
           />
           <KpiCard
-            label="Score medio"
+            label="Punteggio medio"
             value="—"
-            tooltip="Media dello score composito sui lead qualificati (§5.1)."
+            tooltip="Punteggio medio delle attività considerate buone opportunità."
           />
           <KpiCard
-            label="Time-to-demo"
+            label="Tempo per l’anteprima"
             value="—"
-            tooltip="Tempo mediano dalla scoperta alla demo pubblicata (§20 Demo)."
+            tooltip="Tempo medio tra la ricerca di un’attività e la creazione della sua anteprima."
           />
         </div>
       </section>
 
       <section aria-label="Funnel outreach e risultati commerciali">
         <h2 className="mb-3 text-sm font-semibold text-stone-800">
-          Outreach & Commerciale
+          Email e risultati
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
             label="Email inviate"
             value="0"
-            tooltip="Invii effettivi dopo policy + Send Guard (§11.2)."
+            tooltip="Numero di email realmente inviate dopo tutti i controlli di sicurezza."
             accent="amber"
           />
           <KpiCard
-            label="Reply rate"
+            label="Percentuale di risposte"
             value="—"
-            tooltip="Risposte ricevute sul totale consegnato, al netto di bounce e unsubscribe (§20 Outreach)."
+            tooltip="Percentuale di clienti che hanno risposto alle email ricevute."
             accent="amber"
           />
           <KpiCard
-            label="Visite demo"
+            label="Visite alle anteprime"
             value="0"
-            tooltip="Visite alle demo pubbliche, incluse visite ripetute (§20 Engagement)."
+            tooltip="Numero di volte in cui sono state aperte le anteprime pubbliche."
             accent="green"
           />
           <KpiCard
-            label="Lead interessati"
+            label="Clienti interessati"
             value="0"
-            tooltip="Lead passati a INTERESTED o WON (§3.1, §20 Commercial)."
+            tooltip="Numero di attività che hanno mostrato interesse o sono diventate clienti."
             accent="green"
           />
         </div>
@@ -76,9 +76,9 @@ export default function AnalyticsPage() {
 
       <EmptyState
         title="Nessuna metrica disponibile"
-        description="Le metriche si popolano con i primi job di discovery e i primi invii. In Mock Mode gli eventi email saranno simulati dal seed (§22.1) per mostrare il funnel completo."
+        description="Le statistiche compariranno quando inizierai a cercare attività e inviare le prime email."
         nextAction={{
-          label: "Vai alla Overview",
+          label: "Vai al riepilogo",
           href: "/overview",
         }}
       />

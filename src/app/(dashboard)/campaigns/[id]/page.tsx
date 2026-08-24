@@ -14,7 +14,7 @@ export default async function CampaignDetailPage({
       <SectionSubnav items={[...CAMPAIGN_SUBNAV]} />
       <PageHeader
         title="Dettaglio campagna"
-        description="Statistiche lead, preparazione, review e avvio invii."
+        description="Controlla quante attività sono pronte, prepara anteprime e messaggi, poi approva gli invii."
       />
       <CampaignDetailClient campaignId={id} />
     </div>

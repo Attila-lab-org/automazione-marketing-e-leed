@@ -70,6 +70,7 @@ export default function DangerZoneModal({
     >
       <button
         aria-label={cancelLabel}
+        title={cancelLabel}
         onClick={onCancel}
         className="absolute inset-0 cursor-default bg-stone-900/50"
       />
@@ -130,6 +131,7 @@ export default function DangerZoneModal({
         <div className="mt-6 flex justify-end gap-3">
           <button
             type="button"
+            title="Chiudi senza eseguire l’operazione."
             onClick={onCancel}
             className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-50"
           >
@@ -137,6 +139,7 @@ export default function DangerZoneModal({
           </button>
           <button
             type="button"
+            title={canConfirm ? "Esegui l’operazione confermata." : `Scrivi ${confirmPhrase} per abilitare questo pulsante.`}
             onClick={onConfirm}
             disabled={!canConfirm}
             className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-stone-300"

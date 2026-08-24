@@ -26,14 +26,14 @@ export default function DashboardStats() {
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <KpiCard label="Lead trovati" value={String(stats?.leadsTotal ?? "—")} tooltip="Lead in Supabase" drilldownHref="/leads" />
-      <KpiCard label="Qualificati" value={String(stats?.leadsQualified ?? "—")} tooltip="PREQUALIFIED o QUALIFIED" drilldownHref="/segments" accent="amber" />
-      <KpiCard label="Campagne attive" value={String(stats?.campaignsActive ?? "—")} tooltip="Campagne in stato ACTIVE" drilldownHref="/campaigns" />
-      <KpiCard label="Demo pronte" value={String(stats?.demosReady ?? "—")} tooltip="Campaign leads con demo collegata" drilldownHref="/demos" accent="green" />
-      <KpiCard label="Email in coda" value={String(stats?.emailsQueued ?? "—")} tooltip="Bozze pronte o approvate" drilldownHref="/review-queue" />
-      <KpiCard label="Email inviate" value={String(stats?.emailsSent ?? "—")} tooltip="Messaggi inviati (mock o live)" drilldownHref="/analytics" accent="red" />
-      <KpiCard label="Risposte" value={String(stats?.replies ?? "—")} tooltip="Eventi REPLIED registrati" drilldownHref="/inbox" />
-      <KpiCard label="Hot / interessati" value={String(stats?.hotInterested ?? "—")} tooltip="Lead INTERESTED o HOT" drilldownHref="/leads" accent="amber" />
+      <KpiCard label="Attività trovate" value={String(stats?.leadsTotal ?? "—")} tooltip="Tutte le attività presenti nella tua lista." drilldownHref="/leads" />
+      <KpiCard label="Buone opportunità" value={String(stats?.leadsQualified ?? "—")} tooltip="Attività con dati e punteggio sufficienti per essere considerate interessanti." drilldownHref="/leads?view=opportunita" accent="amber" />
+      <KpiCard label="Campagne attive" value={String(stats?.campaignsActive ?? "—")} tooltip="Campagne che stanno preparando contenuti o hanno invii in corso." drilldownHref="/campaigns" />
+      <KpiCard label="Anteprime pronte" value={String(stats?.demosReady ?? "—")} tooltip="Attività per cui è già stato creato un sito dimostrativo." drilldownHref="/demos" accent="green" />
+      <KpiCard label="Email da inviare" value={String(stats?.emailsQueued ?? "—")} tooltip="Messaggi preparati o approvati che non sono ancora stati inviati." drilldownHref="/review-queue" />
+      <KpiCard label="Email inviate" value={String(stats?.emailsSent ?? "—")} tooltip="Numero totale di messaggi inviati dal sistema." drilldownHref="/analytics" accent="red" />
+      <KpiCard label="Risposte" value={String(stats?.replies ?? "—")} tooltip="Numero di risposte ricevute dai clienti." drilldownHref="/inbox" />
+      <KpiCard label="Clienti interessati" value={String(stats?.hotInterested ?? "—")} tooltip="Attività che hanno mostrato interesse o sono vicine alla conversione." drilldownHref="/leads" accent="amber" />
     </div>
   );
 }

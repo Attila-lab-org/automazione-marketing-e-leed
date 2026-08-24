@@ -180,7 +180,7 @@ export default function RestaurantPremiumV3({
       {!compact && ownerWhatsAppHref ? <RestaurantV3OwnerFab href={ownerWhatsAppHref} /> : null}
       <footer className={styles.footer}>
         <span>{name}</span>
-        <span>Concept demo · Restaurant Premium V3</span>
+        <span>Proposta dimostrativa · Attila Lab</span>
       </footer>
     </div>
   );

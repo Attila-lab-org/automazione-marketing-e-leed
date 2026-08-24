@@ -7,6 +7,7 @@ import { Suspense } from "react";
 export type SectionSubnavItem = {
   href: string;
   label: string;
+  description?: string;
 };
 
 function matches(href: string, pathname: string, search: string) {
@@ -35,6 +36,7 @@ function SectionSubnavInner({ items }: { items: SectionSubnavItem[] }) {
           <Link
             key={item.href}
             href={item.href}
+            title={item.description ?? `Apri la sezione ${item.label}`}
             aria-current={active ? "page" : undefined}
             className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
               active

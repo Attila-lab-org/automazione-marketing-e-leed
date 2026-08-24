@@ -50,7 +50,7 @@ export function RestaurantV3OwnerCTA({
         </div>
         {whatsappHref ? (
           <ol className={styles.ownerSteps}>
-            <li>WhatsApp in un tap</li>
+            <li>WhatsApp con un tocco</li>
             <li>Messaggio già pronto</li>
             <li>Ti rispondiamo noi</li>
           </ol>

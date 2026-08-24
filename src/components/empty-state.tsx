@@ -55,6 +55,7 @@ export default function EmptyState({
       <p className="mt-1 max-w-md text-sm text-stone-500">{description}</p>
       <Link
         href={nextAction.href}
+        title={`${nextAction.label}: vai alla pagina indicata per continuare.`}
         className="mt-6 inline-flex items-center gap-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-stone-50 transition-colors hover:bg-stone-700"
       >
         {nextAction.label}

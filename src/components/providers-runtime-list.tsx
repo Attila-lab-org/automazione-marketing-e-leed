@@ -21,12 +21,49 @@ type CommercialItem = {
 };
 
 const TOOLTIPS: Record<string, string> = {
-  supabase: "System of record: probe su workspaces.",
-  google_places: "Places API (New) Text Search — stato runtime.",
-  resend: "Outreach email: MOCK oppure LIVE · TEST ONLY (mai entrambi).",
-  browser_worker: "Analisi/screenshot: mock in questo slice.",
-  ai: "AI messaging: mock in questo slice.",
+  supabase: "Database principale: conserva attività, campagne, anteprime e messaggi.",
+  google_places: "Servizio usato per cercare nuove attività su Google.",
+  resend: "Servizio usato per inviare le email. In modalità prova scrive solo agli indirizzi autorizzati.",
+  browser_worker: "Servizio che analizza i siti e crea le immagini quando sarà attivato.",
+  ai: "Servizio che aiuta a preparare i testi quando sarà attivato.",
 };
+
+const PROVIDER_NAMES: Record<string, string> = {
+  supabase: "Database",
+  google_places: "Ricerca Google",
+  resend: "Invio email",
+  browser_worker: "Analisi siti",
+  ai: "Scrittura assistita",
+};
+
+const COMMERCIAL_NAMES: Record<string, string> = {
+  owner_whatsapp: "Numero WhatsApp",
+  owner_contact_url: "Pagina di contatto",
+  owner_offer_price: "Prezzo dell’offerta",
+  owner_show_bridge: "Sezione commerciale nelle anteprime",
+  resend_test_allowlist: "Indirizzi autorizzati per le prove",
+  test_campaign_safety: "Protezione campagne di prova",
+  app_url: "Indirizzo pubblico dell’app",
+};
+
+const CONFIG_STATUS: Record<CommercialItem["status"], string> = {
+  READY: "Pronto",
+  MISSING: "Da configurare",
+  INVALID: "Non valido",
+};
+
+function providerDetail(item: ProviderItem): string {
+  if (item.status === "ready") return "Collegato e pronto all’uso.";
+  if (item.status === "mock") return "Funziona in modalità prova: non usa il servizio reale.";
+  if (item.status === "not_configured") return "Da configurare prima dell’uso.";
+  return "Il collegamento ha un problema. Controlla la configurazione.";
+}
+
+function commercialDetail(item: CommercialItem): string {
+  if (item.status === "READY") return "Configurazione presente e pronta.";
+  if (item.status === "INVALID") return "Il valore inserito non è valido.";
+  return "Configurazione mancante.";
+}
 
 export default function ProvidersRuntimeList({
   layout = "stack",
@@ -85,10 +122,10 @@ export default function ProvidersRuntimeList({
         {providers.map((p) => (
           <ProviderStatus
             key={p.id}
-            name={p.name}
+            name={PROVIDER_NAMES[p.id] ?? p.name}
             status={p.health}
             tooltip={TOOLTIPS[p.id] ?? p.detail}
-            detail={p.detail}
+            detail={providerDetail(p)}
           />
         ))}
       </div>
@@ -96,18 +133,21 @@ export default function ProvidersRuntimeList({
       {commercial.length > 0 ? (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-stone-800">
-            Config commerciale owner (READY / MISSING)
+            Contatti e sicurezza delle prove
           </h3>
           <p className="text-xs text-stone-500">
-            Nessun valore o secret mostrato — solo stato di configurazione.
+            Per sicurezza, qui vedi soltanto se ogni voce è pronta, non i dati riservati.
           </p>
           <ul className="space-y-2">
             {commercial.map((c) => (
               <li
                 key={c.id}
+                title={`${COMMERCIAL_NAMES[c.id] ?? c.name}: ${commercialDetail(c)}`}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm"
               >
-                <span className="font-medium text-stone-800">{c.name}</span>
+                <span className="font-medium text-stone-800">
+                  {COMMERCIAL_NAMES[c.id] ?? c.name}
+                </span>
                 <span
                   className={
                     c.status === "READY"
@@ -117,9 +157,11 @@ export default function ProvidersRuntimeList({
                         : "rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800"
                   }
                 >
-                  {c.status}
+                  {CONFIG_STATUS[c.status]}
                 </span>
-                <span className="w-full text-xs text-stone-500">{c.detail}</span>
+                <span className="w-full text-xs text-stone-500">
+                  {commercialDetail(c)}
+                </span>
               </li>
             ))}
           </ul>

@@ -22,15 +22,15 @@ const STATUS_META: Record<
   ProviderHealth,
   { label: string; dot: string; text: string }
 > = {
-  ok: { label: "READY", dot: "bg-emerald-500", text: "text-emerald-700" },
-  mock: { label: "MOCK", dot: "bg-sky-500", text: "text-sky-700" },
+  ok: { label: "Pronto", dot: "bg-emerald-500", text: "text-emerald-700" },
+  mock: { label: "Modalità prova", dot: "bg-sky-500", text: "text-sky-700" },
   degraded: { label: "Degradato", dot: "bg-amber-500", text: "text-amber-700" },
   down: {
     label: "Non raggiungibile",
     dot: "bg-red-500",
     text: "text-red-700",
   },
-  error: { label: "ERROR", dot: "bg-red-500", text: "text-red-700" },
+  error: { label: "Errore", dot: "bg-red-500", text: "text-red-700" },
   not_configured: {
     label: "Non configurato",
     dot: "bg-stone-400",
@@ -55,7 +55,8 @@ export default function ProviderStatus({
     <div
       title={tooltip}
       aria-label={`${name}: ${meta.label}. ${tooltip}`}
-      className="flex cursor-help items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3"
+      tabIndex={0}
+      className="flex cursor-help items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 outline-none hover:border-amber-300 focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
     >
       <span className="relative flex h-2.5 w-2.5 shrink-0">
         {status === "degraded" ? (

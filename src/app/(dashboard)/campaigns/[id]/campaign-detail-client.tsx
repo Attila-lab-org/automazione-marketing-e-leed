@@ -29,6 +29,32 @@ type Totals = {
   sent: number;
 };
 
+const CAMPAIGN_STATUS: Record<string, string> = {
+  DRAFT: "Bozza",
+  ACTIVE: "Attiva",
+  PAUSED: "In pausa",
+  COMPLETED: "Completata",
+  STOPPED: "Fermata",
+};
+
+const CAMPAIGN_MODE: Record<string, string> = {
+  MANUAL: "Controllo manuale",
+  SCORE_BASED: "In base al punteggio",
+  FULL_AUTO: "Completamente automatica",
+};
+
+const ACTIVITY_STATUS: Record<string, string> = {
+  PENDING: "In attesa",
+  RESEARCHING: "Ricerca in corso",
+  READY_FOR_REVIEW: "Da controllare",
+  APPROVED: "Approvata",
+  SENDING: "Invio in corso",
+  SENT: "Inviata",
+  FAILED: "Non riuscita",
+  SKIPPED: "Saltata",
+  PAUSED: "In pausa",
+};
+
 export default function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const router = useRouter();
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
@@ -79,8 +105,8 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       const isTest = campaign?.delivery_mode === "TEST";
       const ok = window.confirm(
         isTest
-          ? `Approvare e avviare TEST per i lead in REVIEW/READY${n ? ` (${n})` : ""}?\nNessun prospect reale verrà contattato — invio solo a ${campaign?.test_recipient ?? "test recipient"}.`
-          : `Approvare e avviare l'invio per i lead in REVIEW/READY di questa campagna${
+          ? `Approvare e avviare la prova per le attività pronte${n ? ` (${n})` : ""}?\nNessun cliente reale verrà contattato. Le email arriveranno solo a ${campaign?.test_recipient ?? "indirizzo di prova"}.`
+          : `Approvare e avviare l'invio per le attività pronte di questa campagna${
               n ? ` (${n})` : ""
             }?`,
       );
@@ -100,23 +126,23 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       if (action === "prepare") {
         setMessage(
           typeof data.enqueued === "number"
-            ? `Preparazione avviata: ${data.enqueued} job in coda.`
+            ? `Preparazione avviata: ${data.enqueued} operazioni in attesa. I conteggi si aggiornano quando le operazioni vengono eseguite.`
             : "Preparazione avviata.",
         );
       } else if (action === "approve") {
         setMessage(
           campaign?.delivery_mode === "TEST"
-            ? `Approvati ${data.approved ?? 0} lead — invio TEST in coda.`
-            : `Approvati ${data.approved ?? 0} lead — invio in coda.`,
+            ? `Approvate ${data.approved ?? 0} attività. La prova è in attesa di invio.`
+            : `Approvate ${data.approved ?? 0} attività. Le email sono in attesa di invio.`,
         );
       } else if (action === "pause") {
-        setMessage("Campagna in pausa (i follow-up dovuti restano in attesa).");
+        setMessage("Campagna in pausa. I messaggi successivi restano in attesa.");
       } else {
         const released =
           typeof data.releasedJobs === "number" ? data.releasedJobs : 0;
         setMessage(
           released > 0
-            ? `Campagna ripresa — ${released} job deferred rilasciati.`
+            ? `Campagna ripresa: ${released} operazioni in attesa sono state riattivate.`
             : "Campagna ripresa.",
         );
       }
@@ -146,7 +172,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       if (!res.ok) throw new Error(data.error ?? "Salvataggio fallito");
       setMessage(
         deliveryMode === "TEST"
-          ? "Modalità TEST salvata — nessun prospect reale verrà contattato."
+          ? "Modalità di prova salvata. Nessun cliente reale verrà contattato."
           : "Modalità Produzione salvata.",
       );
       await refresh();
@@ -172,11 +198,11 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
   const isTest = campaign.delivery_mode === "TEST";
 
   const statCards: { label: string; value: number }[] = [
-    { label: "Totale lead", value: totals.leads },
-    { label: "Pending", value: totals.pending },
+    { label: "Totale attività", value: totals.leads },
+    { label: "In attesa", value: totals.pending },
     { label: "In generazione", value: totals.generating },
-    { label: "In review", value: totals.review },
-    { label: "Ready", value: totals.ready },
+    { label: "Da controllare", value: totals.review },
+    { label: "Pronti", value: totals.ready },
     { label: "Approvati", value: totals.approved },
     { label: "Inviati", value: totals.sent },
     { label: "Falliti", value: totals.failed },
@@ -189,14 +215,15 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">
-              {campaign.mode} · {campaign.status}
-              {isTest ? " · TEST" : ""}
+              {CAMPAIGN_MODE[campaign.mode] ?? campaign.mode} ·{" "}
+              {CAMPAIGN_STATUS[campaign.status] ?? campaign.status}
+              {isTest ? " · PROVA" : ""}
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-semibold text-stone-900">{campaign.name}</h2>
               {isTest ? (
                 <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-bold uppercase text-violet-800">
-                  TEST
+                  PROVA
                 </span>
               ) : null}
             </div>
@@ -211,16 +238,21 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
 
         {isTest ? (
           <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
-            <p className="font-semibold">🧪 CAMPAGNA TEST</p>
+            <p className="font-semibold">CAMPAGNA DI PROVA</p>
             <p className="mt-1">
-              Nessun prospect reale verrà contattato. Destinatario effettivo:{" "}
+              Nessun cliente reale verrà contattato. Le email arriveranno a:{" "}
               <strong>{campaign.test_recipient ?? "—"}</strong>
             </p>
             <p className="mt-1 text-xs text-violet-700">
-              Follow-up accelerati: +5 min / +10 min. Pause/Resume restano attivi.
+              I due messaggi successivi partono dopo 5 e 10 minuti. Puoi mettere in pausa in qualsiasi momento.
             </p>
           </div>
-        ) : null}
+        ) : (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Questa campagna è impostata per clienti reali, ma gli invii reali non sono ancora
+            abilitati. Passa a «Solo prova» prima di avviarla.
+          </div>
+        )}
 
         <div className="mt-5 rounded-lg border border-stone-200 bg-stone-50 p-4">
           <p className="text-sm font-semibold text-stone-800">Modalità invio</p>
@@ -231,11 +263,15 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
                 name="delivery"
                 checked={deliveryMode === "PRODUCTION"}
                 onChange={() => setDeliveryMode("PRODUCTION")}
-                disabled={busy}
+                disabled
+                title="L’invio ai clienti reali non è ancora abilitato."
               />
-              Produzione
+              Clienti reali (non ancora disponibile)
             </label>
-            <label className="flex items-center gap-2 text-sm text-stone-700">
+            <label
+              title="Le email arriveranno soltanto all’indirizzo di prova inserito."
+              className="flex items-center gap-2 text-sm text-stone-700"
+            >
               <input
                 type="radio"
                 name="delivery"
@@ -243,12 +279,12 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
                 onChange={() => setDeliveryMode("TEST")}
                 disabled={busy}
               />
-              Test
+              Solo prova
             </label>
           </div>
           {deliveryMode === "TEST" ? (
             <label className="mt-3 block text-sm text-stone-700">
-              Email destinatario test
+              Indirizzo che riceverà la prova
               <input
                 type="email"
                 value={testRecipient}
@@ -261,6 +297,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
           ) : null}
           <button
             type="button"
+            title="Salva se questa campagna deve contattare clienti reali oppure soltanto l’indirizzo di prova."
             disabled={busy}
             onClick={() => void saveDelivery()}
             className="mt-3 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-100 disabled:opacity-50"
@@ -272,31 +309,44 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
         <div className="mt-5 flex flex-wrap gap-2">
           <button
             type="button"
+            title="Ricarica i conteggi per vedere se la preparazione è avanzata."
+            disabled={busy}
+            onClick={() => void refresh()}
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            Aggiorna stato
+          </button>
+          <button
+            type="button"
+            title="Crea anteprime e messaggi per le attività della campagna. Non invia email."
             disabled={busy}
             onClick={() => void runAction("prepare")}
             className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-50"
           >
-            Prepara
+            Prepara anteprime e messaggi
           </button>
           <button
             type="button"
+            title="Apri la pagina dove controllare anteprime e messaggi prima dell’invio."
             disabled={busy}
             onClick={() => router.push("/review-queue")}
             className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
           >
-            Revisiona
+            Controlla prima dell’invio
           </button>
           <button
             type="button"
-            disabled={busy}
+            title={isTest ? "Approva e invia soltanto all’indirizzo di prova." : "Passa a «Solo prova»: gli invii ai clienti reali non sono ancora abilitati."}
+            disabled={busy || !isTest}
             onClick={() => void runAction("approve")}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
           >
-            {isTest ? "Approva e avvia test" : "Approva e avvia"}
+            {isTest ? "Approva e avvia la prova" : "Approva e avvia"}
           </button>
           {campaign.status === "PAUSED" ? (
             <button
               type="button"
+              title="Riattiva la preparazione e gli invii di questa campagna."
               disabled={busy}
               onClick={() => void runAction("resume")}
               className="rounded-lg border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"
@@ -306,6 +356,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
           ) : (
             <button
               type="button"
+              title="Blocca temporaneamente preparazione e invii di questa campagna."
               disabled={busy}
               onClick={() => void runAction("pause")}
               className="rounded-lg border border-amber-300 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
@@ -323,6 +374,8 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
         {statCards.map((s) => (
           <div
             key={s.label}
+            title={`Numero di elementi nello stato “${s.label}”.`}
+            tabIndex={0}
             className="rounded-xl border border-stone-200 bg-white px-4 py-3"
           >
             <p className="text-xs font-medium uppercase tracking-wide text-stone-400">
@@ -346,7 +399,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
                   key={status}
                   className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-medium text-stone-700"
                 >
-                  {status}: {n}
+                  {ACTIVITY_STATUS[status] ?? status}: {n}
                 </li>
               ))}
           </ul>

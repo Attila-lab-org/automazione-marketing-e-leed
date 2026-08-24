@@ -9,6 +9,7 @@ import { pickCompatibleTemplateKey } from '@/lib/templates/match';
 import { listPublishedTemplates } from '@/lib/demos/ensure-template';
 import { ensureRestaurantPremiumV3 } from '@/lib/demos/ensure-template-v3';
 import { buildVisualEmailDraft, buildFollowupDraft } from '@/lib/messaging/visual-email';
+import { emailHtmlToText } from '@/lib/messaging/html-to-text';
 import { buildSendGuardContext } from '@/lib/send-guard/build-context';
 import { runSendGuard } from '@/lib/send-guard';
 import {
@@ -264,7 +265,17 @@ async function scheduleNextFollowup(
   campaignLeadId: string,
   campaignId: string,
   currentStep: number,
+  env: NodeJS.ProcessEnv,
 ) {
+  if ((env.AUTO_FOLLOWUPS_ENABLED ?? '').trim().toLowerCase() !== 'true') {
+    await updateCampaignLead(
+      admin,
+      campaignLeadId,
+      { status: 'SENT', next_action_at: null },
+      { automaticFollowup: false, sequenceCompleted: true, lastStep: currentStep },
+    );
+    return { done: true, automaticFollowup: false };
+  }
   const { data: campaign } = await admin
     .from('campaigns')
     .select('followup_sequence_version_id, delivery_mode')
@@ -363,6 +374,11 @@ async function handleSendMessage(
     .eq('id', cl.campaign_id)
     .single();
   if (!campaign) throw new Error('Send: campaign missing');
+  const { data: leadRecipient } = await admin
+    .from('leads')
+    .select('email')
+    .eq('id', cl.lead_id)
+    .maybeSingle();
 
   // Live Resend unlocked only for TEST campaigns (PRODUCTION stays hard-blocked).
   if (providerMode === 'live' && campaign.delivery_mode !== 'TEST') {
@@ -398,7 +414,7 @@ async function handleSendMessage(
     delivery = resolveTestDelivery({
       deliveryMode: campaign.delivery_mode,
       testRecipient: campaign.test_recipient,
-      leadEmail: ctx.recipient.email,
+      leadEmail: leadRecipient?.email ?? null,
       env,
     });
   } catch (err) {
@@ -450,14 +466,18 @@ async function handleSendMessage(
     .eq('sequence_step', sequenceStep)
     .single();
 
+  const fromAddress = env.RESEND_FROM?.trim();
+  if (providerMode === 'live' && !fromAddress) {
+    throw new Error('Invio live bloccato: mittente RESEND_FROM non configurato');
+  }
   const resend = getResendProvider(env);
   const idempotencyKey = `SEND_MESSAGE:campaign_lead:${cl.id}:step:${sequenceStep}`;
   const sendResult = await resend.send({
-    from: env.RESEND_FROM ?? 'onboarding@resend.dev',
+    from: fromAddress || 'onboarding@resend.dev',
     to: delivery.actualDeliveryRecipient,
     subject: draft!.subject!,
     html: draft!.body!,
-    text: draft!.body!.replace(/<[^>]+>/g, ' '),
+    text: emailHtmlToText(draft!.body!),
     idempotencyKey,
   });
 
@@ -473,7 +493,7 @@ async function handleSendMessage(
       direction: 'OUTBOUND',
       provider: 'resend',
       provider_message_id: sendResult.providerMessageId,
-      from_address: env.RESEND_FROM ?? 'onboarding@resend.dev',
+      from_address: fromAddress || 'onboarding@resend.dev',
       to_address: delivery.actualDeliveryRecipient,
       intended_recipient: delivery.intendedRecipient,
       actual_delivery_recipient: delivery.actualDeliveryRecipient,
@@ -524,6 +544,7 @@ async function handleSendMessage(
     cl.id,
     cl.campaign_id,
     sequenceStep,
+    env,
   );
 
   return {
@@ -543,6 +564,9 @@ async function handleFollowupStep(
   job: JobRef,
   env: NodeJS.ProcessEnv,
 ) {
+  if ((env.AUTO_FOLLOWUPS_ENABLED ?? '').trim().toLowerCase() !== 'true') {
+    return { skipped: true, reason: 'AUTOMATIC_FOLLOWUP_DISABLED' };
+  }
   const sequenceStep = Number(job.inputSnapshot.sequenceStep ?? 1);
   const { data: cl } = await admin
     .from('campaign_leads')

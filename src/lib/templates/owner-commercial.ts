@@ -51,12 +51,12 @@ export function ownerBridgeBody(offerPrice: string | null, baseWithoutPrice: str
 
 export function ownerFinalBody(offerPrice: string | null): string {
   if (!offerPrice) {
-    return 'Hai visto cosa può diventare il tuo locale online. La trasformiamo nella versione reale sul tuo brand — partiamo da un messaggio WhatsApp.';
+    return 'Hai visto cosa può diventare il tuo locale online. Possiamo trasformare questa proposta in un sito reale, costruito sulla tua identità.';
   }
-  return `Hai visto cosa può diventare il tuo locale online. Da ${offerPrice} la trasformiamo nella versione reale sul tuo brand — partiamo da un messaggio WhatsApp.`;
+  return `Hai visto cosa può diventare il tuo locale online. Da ${offerPrice} possiamo trasformare questa proposta in un sito reale, costruito sulla tua identità.`;
 }
 
 export function ownerRibbonBody(offerPrice: string | null): string {
-  if (!offerPrice) return 'Concept dimostrativo · rinnova la tua attività';
-  return `Concept dimostrativo · rinnova la tua attività da ${offerPrice}`;
+  if (!offerPrice) return 'Proposta dimostrativa · rinnova la tua presenza online';
+  return `Proposta dimostrativa · rinnova la tua presenza online da ${offerPrice}`;
 }

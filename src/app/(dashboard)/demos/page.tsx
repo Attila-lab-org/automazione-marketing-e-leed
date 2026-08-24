@@ -8,8 +8,8 @@ export default function DemosPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <SectionSubnav items={[...CAMPAIGN_SUBNAV]} />
       <PageHeader
-        title="Demos"
-        description="Istanze di un Master Template. Una demo non è un progetto né un deploy: è lead + versione template + override."
+        title="Anteprime"
+        description="Qui trovi i siti dimostrativi creati per ogni attività. Aprine uno per controllare o modificare testi, colori e immagini."
       />
       <DemosBrowser />
     </div>

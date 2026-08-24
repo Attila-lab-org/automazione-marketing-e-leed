@@ -1,6 +1,8 @@
 import { formatEmailEvidenceLabel } from '@/lib/enrichment/email-from-website';
 import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
+import { EMAIL_PREVIEW_CACHE_VERSION } from '@/lib/messaging/constants';
+import { isTestRecipientAllowlisted } from '@/lib/campaigns/test-delivery';
 
 export interface ReviewQueueItem {
   id: string;
@@ -115,7 +117,9 @@ export async function listReviewQueue(
           : null;
     const publicPath = demo?.public_url ?? (demo?.slug ? `/demo/${demo.slug}` : null);
     const demoUrl = publicPath ? `${appUrl}${publicPath}` : null;
-    const previewImageUrl = publicPath ? `${appUrl}${publicPath}/email-preview` : null;
+    const previewImageUrl = publicPath
+      ? `${appUrl}${publicPath}/email-preview?v=${EMAIL_PREVIEW_CACHE_VERSION}`
+      : null;
     const body = draft?.body ?? '';
 
     const campaign = campaignById.get(row.campaign_id);
@@ -132,6 +136,8 @@ export async function listReviewQueue(
       }
     } else if (!testRecipient) {
       blockers.push('TEST_RECIPIENT_MISSING');
+    } else if (!isTestRecipientAllowlisted(testRecipient)) {
+      blockers.push('TEST_RECIPIENT_NOT_ALLOWED');
     }
     if (!row.demo_site_id) blockers.push('DEMO_NOT_READY');
     if (row.status === 'FAILED') blockers.push('PREPARATION_FAILED');

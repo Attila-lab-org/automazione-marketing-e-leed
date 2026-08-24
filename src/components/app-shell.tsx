@@ -36,15 +36,15 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   {
     href: "/overview",
-    label: "Dashboard",
-    description: "Panoramica operativa",
+    label: "Riepilogo",
+    description: "Vedi subito cosa sta succedendo e cosa richiede attenzione.",
     match: ["/overview"],
     icon: navIcon("M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10"),
   },
   {
     href: "/leads",
-    label: "Lead",
-    description: "Trova lead, opportunità e filtri",
+    label: "Attività",
+    description: "Cerca attività e scegli quelle da contattare.",
     match: ["/leads", "/segments"],
     icon: navIcon(
       "M16 19c0-2.2-1.8-4-4-4s-4 1.8-4 4M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7 8c0-1.7-.9-3.2-2.3-3.8M17 8.5a2.5 2.5 0 0 1-1.5 2.3M5 19c0-1.7.9-3.2 2.3-3.8M7 8.5a2.5 2.5 0 0 0 1.5 2.3",
@@ -53,7 +53,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/campaigns",
     label: "Campagne",
-    description: "Campagne, review, demo e template",
+    description: "Prepara anteprime, controlla i messaggi e gestisci gli invii.",
     match: ["/campaigns", "/review-queue", "/demos", "/templates"],
     icon: navIcon(
       "M3 11l14-6v14L3 13v-2Zm14-2a4 4 0 0 1 0 6M7 13.5V17a1.5 1.5 0 0 0 3 0v-2.5",
@@ -62,7 +62,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/inbox",
     label: "Messaggi",
-    description: "Inbox e template email",
+    description: "Leggi le risposte e controlla i messaggi inviati.",
     match: ["/inbox"],
     icon: navIcon("M4 6h16v12H4zM4 7l8 6 8-6"),
   },
@@ -76,7 +76,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/settings",
     label: "Impostazioni",
-    description: "Providers e automazioni",
+    description: "Controlla collegamenti esterni e automazioni.",
     match: ["/settings", "/automations"],
     icon: navIcon(
       "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm8 3a8 8 0 0 1-.2 1.8l2 1.6-2 3.4-2.4-1a8 8 0 0 1-1.6.9L15.4 21H8.6l-.4-2.3a8 8 0 0 1-1.6-.9l-2.4 1-2-3.4 2-1.6A8 8 0 0 1 4 12a8 8 0 0 1 .2-1.8l-2-1.6 2-3.4 2.4 1a8 8 0 0 1 1.6-.9L8.6 3h6.8l.4 2.3a8 8 0 0 1 1.6.9l2.4-1 2 3.4-2 1.6a8 8 0 0 1 .2 1.8Z",
@@ -85,13 +85,13 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const SECTION_LABELS: Record<string, string> = {
-  overview: "Dashboard",
-  leads: "Lead",
-  segments: "Filtri",
+  overview: "Riepilogo",
+  leads: "Attività",
+  segments: "Filtri salvati",
   campaigns: "Campagne",
-  "review-queue": "Review Queue",
-  demos: "Demos",
-  templates: "Templates",
+  "review-queue": "Da controllare",
+  demos: "Anteprime",
+  templates: "Modelli",
   inbox: "Messaggi",
   automations: "Automazioni",
   analytics: "Statistiche",
@@ -117,7 +117,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     label: string;
     detail: string;
     mode: string;
-  }>({ label: "RESEND …", detail: "Caricamento runtime…", mode: "loading" });
+  }>({ label: "EMAIL: CONTROLLO…", detail: "Controllo del servizio email in corso.", mode: "loading" });
 
   const refreshPause = useCallback(() => {
     fetch("/api/settings/outreach-pause")
@@ -153,19 +153,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
         if (!resend) return;
         if (resend.status === "mock") {
           setResendBadge({
-            label: "RESEND MOCK",
+            label: "EMAIL DI PROVA",
             detail: resend.detail,
             mode: "mock",
           });
         } else if (resend.status === "ready") {
           setResendBadge({
-            label: "RESEND LIVE · TEST ONLY",
+            label: "EMAIL ATTIVE · SOLO TEST",
             detail: resend.detail,
             mode: "live",
           });
         } else {
           setResendBadge({
-            label: "RESEND ERROR",
+            label: "ERRORE EMAIL",
             detail: resend.detail,
             mode: "error",
           });
@@ -174,8 +174,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       .catch(() => {
         if (!cancelled) {
           setResendBadge({
-            label: "RESEND UNKNOWN",
-            detail: "Impossibile leggere runtime provider",
+            label: "STATO EMAIL SCONOSCIUTO",
+            detail: "Non è stato possibile controllare il servizio email.",
             mode: "error",
           });
         }
@@ -214,10 +214,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </span>
           <div className="leading-tight">
             <p className="text-sm font-semibold text-stone-900">
-              Sales Automation OS
+              Gestione contatti
             </p>
             <p className="text-[10px] uppercase tracking-wide text-stone-400">
-              Workspace demo
+              Pannello operativo
             </p>
           </div>
         </div>
@@ -253,8 +253,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         <div className="border-t border-stone-100 px-4 py-3">
           <p className="text-[11px] leading-snug text-stone-400">
-            Pipeline: Trova → Qualifica → Demo → Contatta (§3). Nessun invio
-            senza policy.
+            Percorso: trova un’attività → controlla i dati → crea l’anteprima →
+            contatta. Nessuna email parte senza i controlli previsti.
           </p>
         </div>
       </aside>
@@ -271,7 +271,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   href="/overview"
                   className="text-stone-400 transition-colors hover:text-stone-600"
                 >
-                  Dashboard
+                  Riepilogo
                 </Link>
               </li>
               {crumbs.map((crumb) => (
@@ -319,16 +319,22 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <input
               type="search"
               disabled
-              placeholder="Ricerca globale — in arrivo"
-              title="Ricerca globale su lead, campagne, demo e messaggi: sarà attivata con le API (§7.1)."
-              aria-label="Ricerca globale (non ancora attiva)"
+              placeholder="Ricerca generale — non ancora disponibile"
+              title="In futuro permetterà di cercare attività, campagne, anteprime e messaggi da un solo punto."
+              aria-label="Ricerca generale non ancora disponibile"
               className="w-full cursor-not-allowed rounded-lg border border-stone-200 bg-stone-50 py-1.5 pl-9 pr-3 text-sm text-stone-400 placeholder:text-stone-400"
             />
           </div>
 
           {/* Badge Resend runtime (single source of truth) */}
           <span
-            title={resendBadge.detail}
+            title={
+              resendBadge.mode === "live"
+                ? "Il servizio email è collegato. Per sicurezza, al momento può inviare soltanto agli indirizzi autorizzati per le prove."
+                : resendBadge.mode === "mock"
+                  ? "Il servizio email è in modalità prova: nessuna email reale viene inviata."
+                  : "Non è stato possibile verificare il servizio email."
+            }
             className={`cursor-help whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
               resendBadge.mode === "live"
                 ? "border-emerald-300 bg-emerald-50 text-emerald-900"
@@ -349,10 +355,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
             }
             title={
               pauseState === "unknown"
-                ? "Stato pausa sconosciuto — fail-closed (SAFE PAUSED). Riprova dopo aver ricaricato."
+                ? "Non riesco a leggere lo stato degli invii. Per sicurezza, ogni nuovo invio è bloccato. Ricarica la pagina."
                 : outreachPaused
-                  ? "Riattiva invii e follow-up (kill switch globale, §19.2)."
-                  : "Blocca immediatamente nuovi invii e follow-up in tutto il workspace (§19.2)."
+                  ? "Riattiva le nuove email e i messaggi successivi."
+                  : "Blocca subito tutte le nuove email e i messaggi successivi."
             }
             className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors ${
               pauseState === "unknown"
@@ -363,10 +369,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
             }`}
           >
             {pauseState === "unknown"
-              ? "SAFE PAUSED · UNKNOWN"
+              ? "INVII BLOCCATI · STATO NON DISPONIBILE"
               : outreachPaused
-                ? "Riprendi outreach"
-                : "Pausa tutto l'outreach"}
+                ? "Riattiva gli invii"
+                : "Blocca tutti gli invii"}
           </button>
         </header>
 
@@ -376,18 +382,16 @@ export default function AppShell({ children }: { children: ReactNode }) {
             role="alert"
             className="border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-sm text-amber-900"
           >
-            <span className="font-semibold">SAFE PAUSED · UNKNOWN:</span>{" "}
-            impossibile leggere lo stato del kill switch. UI fail-closed (backend resta
-            fail-closed indipendentemente).
+            <span className="font-semibold">Invii bloccati per sicurezza:</span>{" "}
+            non è stato possibile leggere lo stato del sistema. Ricarica la pagina prima di procedere.
           </div>
         ) : outreachPaused ? (
           <div
             role="alert"
             className="border-b border-red-200 bg-red-50 px-6 py-2.5 text-sm text-red-800"
           >
-            <span className="font-semibold">Outreach in pausa:</span>{" "}
-            nuovi invii e follow-up sono bloccati in tutto il workspace (persistente).
-            Le fasi di acquisizione restano attive.
+            <span className="font-semibold">Invii in pausa:</span>{" "}
+            le nuove email e i messaggi successivi sono bloccati. La ricerca delle attività resta attiva.
           </div>
         ) : null}
 
@@ -396,12 +400,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       <DangerZoneModal
         open={killSwitchOpen}
-        title="Pausa tutto l'outreach"
-        description="Kill switch globale (§19.2): blocca immediatamente nuovi invii e follow-up in tutto il workspace. Discovery, scoring e generazione demo non vengono toccati. Potrai riprendere in qualsiasi momento dal pulsante in alto."
+        title="Blocca tutti gli invii"
+        description="Blocca subito le nuove email e i messaggi successivi. La ricerca, la valutazione delle attività e la creazione delle anteprime continuano a funzionare. Potrai riattivare gli invii dal pulsante in alto."
         affectedCount={0}
-        affectedLabel="invii programmati (stato demo: nessun job attivo)"
+        affectedLabel="invii programmati"
         confirmPhrase="PAUSA"
-        confirmLabel="Pausa tutto"
+        confirmLabel="Blocca gli invii"
         onConfirm={() => {
           void setPause(true);
           setKillSwitchOpen(false);

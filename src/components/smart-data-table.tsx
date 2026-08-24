@@ -46,8 +46,8 @@ export default function SmartDataTable<T>({
   filterPlaceholder = "Filtra per nome, dominio, email, città…",
   bulkActions = [],
   onRowClick,
-  emptyTitle = "Nessun record",
-  emptyDescription = "Modifica i filtri o importa nuovi dati per popolare la tabella.",
+  emptyTitle = "Nessun risultato",
+  emptyDescription = "Modifica i filtri oppure aggiungi nuovi dati.",
 }: SmartDataTableProps<T>) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -110,15 +110,16 @@ export default function SmartDataTable<T>({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={filterPlaceholder}
-            aria-label="Filtro rapido"
+            aria-label="Cerca dentro questa tabella"
+            title="Scrivi per filtrare subito le righe visibili."
             className="w-full rounded-lg border border-stone-200 bg-stone-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-100"
           />
         </div>
         <span
-          title="Le saved views e i filtri persistenti arriveranno con il dominio Leads (§7.1)."
+          title="In futuro potrai salvare una combinazione di filtri e riutilizzarla."
           className="cursor-help rounded-lg border border-dashed border-stone-300 px-3 py-2 text-xs text-stone-400"
         >
-          Saved views · presto
+          Filtri salvati · presto
         </span>
       </div>
 
@@ -135,6 +136,7 @@ export default function SmartDataTable<T>({
             <button
               key={action.label}
               type="button"
+              title={`${action.label} per ${selectedRows.length} righe selezionate.`}
               onClick={() => action.onApply(selectedRows)}
               className={
                 action.variant === "danger"
@@ -147,6 +149,7 @@ export default function SmartDataTable<T>({
           ))}
           <button
             type="button"
+            title="Rimuovi la selezione da tutte le righe."
             onClick={() => setSelected(new Set())}
             className="ml-auto text-xs font-medium text-stone-500 underline-offset-2 hover:underline"
           >
@@ -182,6 +185,7 @@ export default function SmartDataTable<T>({
               return (
                 <tr
                   key={key}
+                  title={onRowClick ? "Apri i dettagli di questa riga." : undefined}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   className={`transition-colors ${
                     onRowClick ? "cursor-pointer" : ""

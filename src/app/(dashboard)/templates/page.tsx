@@ -8,8 +8,8 @@ export default function TemplatesPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <SectionSubnav items={[...CAMPAIGN_SUBNAV]} />
       <PageHeader
-        title="Templates"
-        description="Master Template in codice React. Il database tiene solo metadata e versioni. Le demo già create restano sulla loro versione."
+        title="Modelli"
+        description="I modelli sono la base grafica usata per creare le anteprime. Le anteprime già create non cambiano quando aggiorni un modello."
       />
       <TemplatesLibrary />
     </div>

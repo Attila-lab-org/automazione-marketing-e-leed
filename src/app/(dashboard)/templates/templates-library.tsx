@@ -21,6 +21,12 @@ const STATUS_STYLE: Record<string, string> = {
   archived: "border-stone-200 bg-stone-100 text-stone-500",
 };
 
+const STATUS_LABEL: Record<string, string> = {
+  draft: "Bozza",
+  published: "Pubblicato",
+  archived: "Archiviato",
+};
+
 export default function TemplatesLibrary() {
   const [rows, setRows] = useState<TemplateRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +37,7 @@ export default function TemplatesLibrary() {
     fetch("/api/templates")
       .then(async (res) => {
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Elenco template fallito");
+        if (!res.ok) throw new Error(data.error ?? "Caricamento modelli fallito");
         if (!cancelled) setRows(data.templates ?? []);
       })
       .catch((err: unknown) => {
@@ -45,7 +51,7 @@ export default function TemplatesLibrary() {
     };
   }, []);
 
-  if (loading) return <p className="text-sm text-stone-500">Caricamento template…</p>;
+  if (loading) return <p className="text-sm text-stone-500">Caricamento modelli…</p>;
   if (error) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -59,7 +65,9 @@ export default function TemplatesLibrary() {
       {rows.map((row) => (
         <article
           key={row.id}
-          className="rounded-xl border border-stone-200 bg-white p-5"
+          title={`${row.name}: modello grafico usato per creare le anteprime.`}
+          tabIndex={0}
+          className="rounded-xl border border-stone-200 bg-white p-5 outline-none hover:border-amber-300 focus:ring-2 focus:ring-amber-100"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -71,25 +79,27 @@ export default function TemplatesLibrary() {
             <span
               className={`rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${STATUS_STYLE[row.status] ?? STATUS_STYLE.draft}`}
             >
-              {row.status}
+              {STATUS_LABEL[row.status] ?? row.status}
             </span>
           </div>
           <p className="mt-3 text-sm leading-relaxed text-stone-600">
-            {row.description ?? "Master template in codice. Le demo restano legate alla versione usata alla creazione."}
+            {row.description ?? "Modello grafico di base. Le anteprime già create restano legate alla versione usata."}
           </p>
-          <p className="mt-4 text-xs text-stone-400">{row.demoCount} demo collegate</p>
+          <p className="mt-4 text-xs text-stone-400">{row.demoCount} anteprime collegate</p>
           <div className="mt-4 flex gap-2">
             <Link
               href="/demos"
+              title="Vedi tutte le anteprime create con i modelli disponibili."
               className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50"
             >
-              Vedi demo
+              Vedi anteprime
             </Link>
             <Link
               href="/leads"
+              title="Scegli un’attività e crea una nuova anteprima."
               className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-800"
             >
-              Crea da un lead
+              Crea da un’attività
             </Link>
           </div>
         </article>

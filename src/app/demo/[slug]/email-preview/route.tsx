@@ -22,7 +22,7 @@ function truncate(text: string, max: number): string {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   ctx: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await ctx.params;
@@ -40,6 +40,7 @@ export async function GET(
       business_name?: string | null;
       accent_color?: string | null;
       primary_color?: string | null;
+      hero_image?: string | null;
     };
     content?: {
       headline?: string | null;
@@ -63,6 +64,12 @@ export async function GET(
   );
   const accent = data.branding?.accent_color || (isV3 ? '#b86a45' : '#d97706');
   const primary = data.branding?.primary_color || (isV3 ? '#2c241e' : '#1c1917');
+  const rawHero = data.branding?.hero_image?.trim();
+  const hero = rawHero
+    ? rawHero.startsWith('/')
+      ? new URL(rawHero, request.url).toString()
+      : rawHero
+    : null;
   const city = truncate(data.contact?.city?.trim() || '', 24);
   const rating = data.signals?.rating;
   const reviews = data.signals?.review_count;
@@ -126,11 +133,39 @@ export async function GET(
             justifyContent: 'center',
             padding: '20px 28px 22px',
             background: `linear-gradient(160deg, ${primary} 0%, #4a342c 55%, ${accent} 160%)`,
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
+          {hero ? (
+            // ImageResponse richiede un elemento img nativo per comporre il PNG.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={hero}
+              alt=""
+              width={600}
+              height={304}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+          ) : null}
           <div
             style={{
               display: 'flex',
+              position: 'absolute',
+              inset: 0,
+              background: `linear-gradient(90deg, rgba(20,15,12,0.92) 0%, rgba(20,15,12,0.76) 58%, ${primary}99 100%)`,
+            }}
+          />
+          <div
+            style={{
+              display: 'flex',
+              position: 'relative',
               fontSize: 11,
               color: 'rgba(255,253,249,0.72)',
               fontFamily: 'system-ui, sans-serif',
@@ -143,6 +178,7 @@ export async function GET(
           <div
             style={{
               display: 'flex',
+              position: 'relative',
               fontSize: nameSize,
               fontWeight: 700,
               color: '#fffdf9',
@@ -157,6 +193,7 @@ export async function GET(
           <div
             style={{
               display: 'flex',
+              position: 'relative',
               fontSize: 14,
               color: 'rgba(255,253,249,0.9)',
               lineHeight: 1.35,
@@ -167,7 +204,7 @@ export async function GET(
             {headline}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
             <div
               style={{
                 display: 'flex',

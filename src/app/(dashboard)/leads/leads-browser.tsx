@@ -34,11 +34,11 @@ type LeadView = LeadQuickDrawerLead & {
 };
 
 const STATUS_LABELS: Record<QualificationStatus, string> = {
-  NEW: "NEW",
-  PREQUALIFIED: "PREQUALIFIED",
-  NEEDS_ANALYSIS: "NEEDS ANALYSIS",
-  LOW_PRIORITY: "LOW PRIORITY",
-  REJECTED: "REJECTED",
+  NEW: "Nuova",
+  PREQUALIFIED: "Buona opportunità",
+  NEEDS_ANALYSIS: "Da controllare",
+  LOW_PRIORITY: "Bassa priorità",
+  REJECTED: "Scartata",
 };
 
 const STATUS_STYLE: Record<QualificationStatus, string> = {
@@ -127,7 +127,7 @@ export default function LeadsBrowser({
   const [campaignLeads, setCampaignLeads] = useState<LeadView[]>([]);
   const [campaignName, setCampaignName] = useState("");
   const [campaignMode, setCampaignMode] = useState<"MANUAL" | "SCORE_BASED">("MANUAL");
-  const [deliveryMode, setDeliveryMode] = useState<"PRODUCTION" | "TEST">("PRODUCTION");
+  const [deliveryMode, setDeliveryMode] = useState<"PRODUCTION" | "TEST">("TEST");
   const [testRecipient, setTestRecipient] = useState("");
   const [manualOpen, setManualOpen] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
@@ -210,7 +210,7 @@ export default function LeadsBrowser({
   const columns: SmartDataTableColumn<LeadView>[] = [
     {
       key: "name",
-      header: "Azienda",
+      header: "Attività",
       render: (lead) => (
         <div>
           <p className="font-medium text-stone-900">{lead.name}</p>
@@ -222,7 +222,7 @@ export default function LeadsBrowser({
     },
     {
       key: "score",
-      header: "Discovery Score",
+      header: "Punteggio",
       render: (lead) =>
         typeof lead.discoveryScore === "number" ? (
           <ScoreBadge
@@ -235,7 +235,7 @@ export default function LeadsBrowser({
     },
     {
       key: "confidence",
-      header: "Confidence",
+      header: "Affidabilità dati",
       render: (lead) =>
         typeof lead.discoveryConfidence === "number" ? (
           <span className="font-mono text-sm text-stone-700">
@@ -346,12 +346,12 @@ export default function LeadsBrowser({
     try {
       const res = await fetch("/api/leads/qualify", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Qualification fallita");
+      if (!res.ok) throw new Error(data.error ?? "Ricalcolo fallito");
       setResultBanner(data.message);
       setLoading(true);
       setReloadToken((n) => n + 1);
     } catch (err) {
-      setResultBanner(err instanceof Error ? err.message : "Qualification fallita");
+      setResultBanner(err instanceof Error ? err.message : "Ricalcolo fallito");
     } finally {
       setSearching(false);
     }
@@ -362,7 +362,7 @@ export default function LeadsBrowser({
     setCampaignLeads(selected);
     setCampaignName(`Campagna ${dateLabel}`);
     setCampaignMode("MANUAL");
-    setDeliveryMode("PRODUCTION");
+    setDeliveryMode("TEST");
     setTestRecipient("");
     setCampaignModalOpen(true);
   }
@@ -371,7 +371,7 @@ export default function LeadsBrowser({
     e.preventDefault();
     if (!campaignLeads.length || !campaignName.trim()) return;
     if (deliveryMode === "TEST" && !testRecipient.trim()) {
-      setResultBanner("Campagna TEST: inserisci l'email destinatario test.");
+      setResultBanner("Campagna di prova: inserisci l’indirizzo che deve ricevere le email.");
       return;
     }
     setCreatingCampaign(true);
@@ -394,7 +394,7 @@ export default function LeadsBrowser({
       const campaignId = data.campaignId as string | undefined;
       setResultBanner(
         data.message ??
-          `Campagna creata con ${data.leadCount ?? campaignLeads.length} lead — preparazione avviata.`,
+          `Campagna creata con ${data.leadCount ?? campaignLeads.length} attività. Preparazione avviata.`,
       );
       setCampaignModalOpen(false);
       if (campaignId) {
@@ -425,14 +425,14 @@ export default function LeadsBrowser({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Creazione lead fallita");
-      setResultBanner(`Lead manuale creato: ${data.lead?.name ?? manualForm.businessName}`);
+      if (!res.ok) throw new Error(data.error ?? "Creazione attività fallita");
+      setResultBanner(`Attività aggiunta: ${data.lead?.name ?? manualForm.businessName}`);
       setManualOpen(false);
       setManualForm({ businessName: "", email: "", websiteUrl: "", phone: "", city: "" });
       setLoading(true);
       setReloadToken((n) => n + 1);
     } catch (err) {
-      setResultBanner(err instanceof Error ? err.message : "Creazione lead fallita");
+      setResultBanner(err instanceof Error ? err.message : "Creazione attività fallita");
     } finally {
       setManualBusy(false);
     }
@@ -446,20 +446,22 @@ export default function LeadsBrowser({
             <p className="text-sm text-stone-700">{resultBanner}</p>
           ) : (
             <p className="text-sm text-stone-500">
-              Discovery Score preliminare · nessun outreach · ordinati per opportunità
+              Le attività sono ordinate dalla più interessante. Da questa pagina non parte nessuna email.
             </p>
           )}
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
+            title="Inserisci a mano un’attività che conosci già."
             onClick={() => setManualOpen(true)}
             className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
           >
-            Aggiungi lead manualmente
+            Aggiungi attività
           </button>
           <button
             type="button"
+            title="Ricalcola il punteggio di tutte le attività usando i dati disponibili."
             onClick={() => void onRequalify()}
             disabled={searching}
             className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 disabled:opacity-60"
@@ -468,17 +470,18 @@ export default function LeadsBrowser({
           </button>
           <button
             type="button"
+            title="Cerca nuove attività su Google per categoria e località."
             onClick={() => setModalOpen(true)}
             className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
           >
-            Trova lead
+            Cerca attività
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 rounded-xl border border-stone-200 bg-white p-4 md:grid-cols-5">
         <label className="text-xs font-medium text-stone-600">
-          Score minimo
+          Punteggio minimo
           <input
             type="number"
             min={0}
@@ -558,12 +561,12 @@ export default function LeadsBrowser({
       ) : null}
 
       {loading ? (
-        <p className="text-sm text-stone-500">Caricamento lead…</p>
+        <p className="text-sm text-stone-500">Caricamento attività…</p>
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-stone-300 bg-white px-6 py-10 text-center">
-          <p className="text-sm font-medium text-stone-800">Nessun lead</p>
+          <p className="text-sm font-medium text-stone-800">Nessuna attività</p>
           <p className="mt-1 text-sm text-stone-500">
-            Usa «Trova lead» (fino a 50) per popolare e qualificare automaticamente.
+            Usa «Cerca attività» per trovare fino a 50 attività e valutarle automaticamente.
           </p>
         </div>
       ) : (
@@ -596,25 +599,25 @@ export default function LeadsBrowser({
       {selectedLead ? (
         <div className="rounded-xl border border-stone-200 bg-white p-4">
           <h3 className="text-sm font-semibold text-stone-800">
-            Perché {selectedLead.discoveryScore ?? "—"} / confidence{" "}
+            Perché ha punteggio {selectedLead.discoveryScore ?? "—"} e affidabilità{" "}
             {selectedLead.discoveryConfidence ?? "—"}
           </h3>
           <ul className="mt-2 space-y-1.5">
             {selectedLead.reasons.length === 0 ? (
-              <li className="text-sm text-stone-500">Nessuna reason (riqualifica il lead).</li>
+              <li className="text-sm text-stone-500">Nessuna spiegazione disponibile. Ricalcola il punteggio.</li>
             ) : (
               selectedLead.reasons.map((r) => (
                 <li key={`${selectedLead.id}-${r.code}-${r.label}`} className="text-sm text-stone-700">
                   <span className="font-medium">{r.label}</span>
                   {r.scoreDelta ? (
                     <span className="ml-2 text-xs text-stone-400">
-                      score {r.scoreDelta > 0 ? "+" : ""}
+                      punteggio {r.scoreDelta > 0 ? "+" : ""}
                       {r.scoreDelta}
                     </span>
                   ) : null}
                   {r.confidenceDelta ? (
                     <span className="ml-2 text-xs text-stone-400">
-                      conf +{r.confidenceDelta}
+                      affidabilità +{r.confidenceDelta}
                     </span>
                   ) : null}
                 </li>
@@ -636,13 +639,13 @@ export default function LeadsBrowser({
             onSubmit={onDiscover}
             className="relative w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl"
           >
-            <h2 className="text-lg font-semibold text-stone-900">Trova lead</h2>
+            <h2 className="text-lg font-semibold text-stone-900">Cerca attività</h2>
             <p className="mt-1 text-sm text-stone-500">
-              Google Places → dedupe → qualifica automatica (max 50)
+              Cerca su Google per categoria e località. I duplicati vengono esclusi automaticamente.
             </p>
 
             <label className="mt-5 block text-sm font-medium text-stone-700">
-              Categoria / query
+              Tipo di attività
               <input
                 required
                 value={category}
@@ -681,6 +684,7 @@ export default function LeadsBrowser({
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
+                title="Chiudi senza avviare la ricerca."
                 disabled={searching}
                 onClick={() => setModalOpen(false)}
                 className="rounded-lg px-4 py-2 text-sm text-stone-600 hover:bg-stone-100"
@@ -689,6 +693,7 @@ export default function LeadsBrowser({
               </button>
               <button
                 type="submit"
+                title="Avvia la ricerca con i criteri inseriti."
                 disabled={searching}
                 className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
@@ -713,7 +718,7 @@ export default function LeadsBrowser({
           >
             <h2 className="text-lg font-semibold text-stone-900">Crea campagna</h2>
             <p className="mt-1 text-sm text-stone-500">
-              {campaignLeads.length} lead selezionat
+              {campaignLeads.length} attività selezionat
               {campaignLeads.length === 1 ? "o" : "i"} · preparazione automatica
             </p>
 
@@ -738,8 +743,8 @@ export default function LeadsBrowser({
                 className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 disabled={creatingCampaign}
               >
-                <option value="MANUAL">MANUAL — review obbligatoria</option>
-                <option value="SCORE_BASED">SCORE_BASED — soglie score</option>
+                <option value="MANUAL">Controllo manuale — approvi tutto tu</option>
+                <option value="SCORE_BASED">Scelta automatica — in base al punteggio</option>
               </select>
             </label>
 
@@ -752,11 +757,15 @@ export default function LeadsBrowser({
                     name="deliveryMode"
                     checked={deliveryMode === "PRODUCTION"}
                     onChange={() => setDeliveryMode("PRODUCTION")}
-                    disabled={creatingCampaign}
+                    disabled
+                    title="L’invio ai clienti reali non è ancora abilitato."
                   />
-                  Produzione
+                  Clienti reali (non ancora disponibile)
                 </label>
-                <label className="flex items-center gap-2">
+                <label
+                  title="Le email arriveranno soltanto all’indirizzo di prova inserito."
+                  className="flex items-center gap-2"
+                >
                   <input
                     type="radio"
                     name="deliveryMode"
@@ -764,7 +773,7 @@ export default function LeadsBrowser({
                     onChange={() => setDeliveryMode("TEST")}
                     disabled={creatingCampaign}
                   />
-                  Test
+                  Solo prova
                 </label>
               </div>
             </fieldset>
@@ -772,10 +781,10 @@ export default function LeadsBrowser({
             {deliveryMode === "TEST" ? (
               <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2">
                 <p className="text-xs font-semibold text-violet-900">
-                  🧪 CAMPAGNA TEST — Nessun prospect reale verrà contattato.
+                  INVIO DI PROVA — Nessun cliente reale verrà contattato.
                 </p>
                 <label className="mt-2 block text-sm font-medium text-stone-700">
-                  Email destinatario test
+                  Indirizzo che riceverà la prova
                   <input
                     required
                     type="email"
@@ -792,6 +801,7 @@ export default function LeadsBrowser({
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
+                title="Chiudi senza creare la campagna."
                 disabled={creatingCampaign}
                 onClick={() => setCampaignModalOpen(false)}
                 className="rounded-lg px-4 py-2 text-sm text-stone-600 hover:bg-stone-100"
@@ -800,6 +810,7 @@ export default function LeadsBrowser({
               </button>
               <button
                 type="submit"
+                title="Crea la campagna con le attività selezionate. Non invia ancora email."
                 disabled={creatingCampaign}
                 className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
@@ -822,9 +833,9 @@ export default function LeadsBrowser({
             onSubmit={onCreateManualLead}
             className="relative w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl"
           >
-            <h2 className="text-lg font-semibold text-stone-900">Aggiungi lead manualmente</h2>
+            <h2 className="text-lg font-semibold text-stone-900">Aggiungi un’attività</h2>
             <p className="mt-1 text-sm text-stone-500">
-              Entra nella stessa pipeline: Lead → Campaign → Demo → Review → Send.
+              L’attività sarà aggiunta alla lista. Potrai poi creare l’anteprima e inserirla in una campagna.
             </p>
             <label className="mt-4 block text-sm font-medium text-stone-700">
               Nome attività
@@ -883,6 +894,7 @@ export default function LeadsBrowser({
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
+                title="Chiudi senza salvare l’attività."
                 disabled={manualBusy}
                 onClick={() => setManualOpen(false)}
                 className="rounded-lg px-4 py-2 text-sm text-stone-600 hover:bg-stone-100"
@@ -891,10 +903,11 @@ export default function LeadsBrowser({
               </button>
               <button
                 type="submit"
+                title="Salva l’attività nella lista."
                 disabled={manualBusy}
                 className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
-                {manualBusy ? "Salvataggio…" : "Crea lead"}
+                {manualBusy ? "Salvataggio…" : "Salva attività"}
               </button>
             </div>
           </form>

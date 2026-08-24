@@ -55,7 +55,8 @@ describe('Restaurant Premium V3', () => {
     });
     expect(data.branding.logo_url).toBeNull();
     expect(data.branding.hero_image).toBe(RESTAURANT_PREMIUM_V3_ASSETS.hero);
-    expect(data.branding.gallery[0]).toContain('/restaurant-premium-v3/assets/');
+    expect(data.branding.gallery[0]).toContain('data:image/svg+xml');
+    expect(data.branding.gallery[0]).toContain('restaurant-premium-v3');
   });
 
   it('real gallery overrides template imagery; colors override tokens', () => {

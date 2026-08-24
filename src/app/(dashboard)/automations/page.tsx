@@ -15,53 +15,68 @@ export default function AutomationsPage() {
       <SectionSubnav items={[...SETTINGS_SUBNAV]} />
       <PageHeader
         title="Automazioni"
-        description="Policy operative (§4.1), follow-up sequence (§12.2) e stato dei job persistenti della coda (§15.1): qui controlli cosa il sistema fa in automatico."
+        description="Qui controlli quali operazioni il sistema esegue da solo e quali richiedono la tua approvazione."
         actions={<PolicyBadge mode="SCORE_BASED" />}
       />
 
+      <section
+        title="Nessun secondo messaggio parte automaticamente. Sarai tu a decidere se e quando inviarlo."
+        className="rounded-xl border border-emerald-200 bg-emerald-50 p-5"
+      >
+        <h2 className="text-sm font-semibold text-emerald-900">
+          Messaggi successivi automatici: spenti
+        </h2>
+        <p className="mt-1 text-sm text-emerald-800">
+          Dopo la prima email non partirà altro. Deciderai tu se inviare un nuovo messaggio e
+          quando farlo.
+        </p>
+      </section>
+
       {/* Kill switches (§19.2) */}
       <section
-        aria-label="Kill switch disponibili"
+        aria-label="Comandi di arresto disponibili"
         className="rounded-xl border border-stone-200 bg-white p-5"
       >
         <h2 className="text-sm font-semibold text-stone-800">
-          Kill switch (§19.2)
+          Comandi di arresto
         </h2>
         <p className="mt-1 text-sm text-stone-500">
-          Ogni interruttore ferma un perimetro preciso. Il kill switch globale
-          è sempre raggiungibile dal pulsante rosso nella topbar.
+          Ogni comando ferma una parte precisa del sistema. Il blocco di tutti
+          gli invii è sempre disponibile nel pulsante rosso in alto.
         </p>
         <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {[
             {
-              name: "Pausa tutto l'outreach",
-              effect: "Blocca immediatamente nuovi invii e follow-up.",
-              where: "Topbar — sempre visibile",
+              name: "Blocca tutti gli invii",
+              effect: "Blocca subito nuove email e messaggi successivi.",
+              where: "Pulsante in alto — sempre visibile",
             },
             {
               name: "Pausa campagna",
               effect: "Blocca solo la campagna selezionata.",
-              where: "Pagina campagna (Phase 5)",
+              where: "Pagina della campagna",
             },
             {
-              name: "Pausa discovery",
-              effect: "Ferma nuovi job Google Places.",
-              where: "Qui (Phase 2)",
+              name: "Pausa ricerca attività",
+              effect: "Ferma le nuove ricerche su Google.",
+              where: "Questa pagina",
             },
             {
-              name: "Pausa browser worker",
-              effect: "Ferma analisi siti e screenshot.",
-              where: "Qui (Phase 4)",
+              name: "Pausa analisi siti",
+              effect: "Ferma le analisi e le immagini automatiche dei siti.",
+              where: "Questa pagina",
             },
             {
-              name: "Disabilita provider",
-              effect: "Impedisce nuove chiamate al provider selezionato.",
-              where: "Settings (Phase 1 backend)",
+              name: "Disattiva un collegamento",
+              effect: "Impedisce nuove richieste al servizio selezionato.",
+              where: "Impostazioni",
             },
           ].map((item) => (
             <li
               key={item.name}
-              className="rounded-lg border border-stone-100 bg-stone-50 p-4"
+              title={`${item.name}: ${item.effect}`}
+              tabIndex={0}
+              className="rounded-lg border border-stone-100 bg-stone-50 p-4 outline-none hover:border-amber-300 focus:ring-2 focus:ring-amber-100"
             >
               <p className="text-sm font-medium text-stone-800">{item.name}</p>
               <p className="mt-1 text-xs text-stone-500">{item.effect}</p>
@@ -75,7 +90,7 @@ export default function AutomationsPage() {
 
       {/* Decision Trace dimostrativo (§19.1) */}
       <DecisionTrace
-        summary="Esempio demo: come il sistema deciderebbe l'invio per un lead sopra soglia in modalità Score-Based."
+        summary="Esempio: come il sistema decide se un’attività è pronta per ricevere un messaggio."
         policyVersion="ws-default@v3"
         steps={[
           {
@@ -84,7 +99,7 @@ export default function AutomationsPage() {
             actor: "system",
             decision: "Scoring completato",
             reason:
-              "Score 82/100, confidence 91%: entrambe le dimensioni calcolate dalle evidenze dell'audit (§5.1).",
+              "Punteggio 82/100 e affidabilità dati 91%: entrambi superano i valori minimi.",
           },
           {
             id: "d2",
@@ -92,7 +107,7 @@ export default function AutomationsPage() {
             actor: "policy",
             decision: "Generazione demo autorizzata",
             reason:
-              "Policy SCORE_BASED: score 82 ≥ soglia 70 e confidence 0,91 ≥ 0,75 → gate aperto (§5.2).",
+              "Il punteggio e l’affidabilità dei dati superano i valori minimi: l’anteprima può essere creata.",
           },
           {
             id: "d3",
@@ -100,16 +115,16 @@ export default function AutomationsPage() {
             actor: "policy",
             decision: "Invio NON autorizzato",
             reason:
-              "Send policy = manual per questa campagna: la bozza va in Review Queue per approvazione umana (§8.2).",
+              "Questa campagna richiede controllo manuale: il messaggio resta tra gli elementi da controllare.",
           },
         ]}
       />
 
       <EmptyState
-        title="Nessun job attivo"
-        description="La coda persistente (job idempotenti con lease atomici, retry e dependency graph, §15.1) sarà visibile qui quando i worker partiranno. Ogni job salverà lo snapshot della policy applicata (§4.1)."
+        title="Nessuna operazione automatica in corso"
+        description="Quando il sistema inizierà a cercare attività, creare anteprime o preparare messaggi, potrai vedere qui lo stato di ogni operazione."
         nextAction={{
-          label: "Verifica i provider in Settings",
+          label: "Controlla i collegamenti",
           href: "/settings",
         }}
       />
