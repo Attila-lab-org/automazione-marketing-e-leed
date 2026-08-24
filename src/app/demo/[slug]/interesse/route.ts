@@ -10,8 +10,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const STUDIO_FALLBACK = 'https://www.attila-lab.net/';
-/** Studio WhatsApp — commercial fallback when OWNER_WHATSAPP env is missing (Production lock). */
-const STUDIO_WHATSAPP_FALLBACK = '393518011635';
+/** Commercial WhatsApp fallback when OWNER_WHATSAPP env is missing on Production. */
+const STUDIO_WHATSAPP_FALLBACK = '393462689082';
 
 /**
  * Commercial owner contact destination.

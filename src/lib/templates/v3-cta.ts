@@ -66,8 +66,17 @@ export function isWhatsAppContactTarget(raw: string): boolean {
 
 /** Digits-only international phone, or null. */
 export function normalizeWhatsAppPhone(raw: string): string | null {
-  const digits = raw.replace(/\D/g, '');
-  if (digits.length < 8 || digits.length > 15) return null;
+  let digits = raw.replace(/\D/g, '');
+  if (!digits) return null;
+  // Italian mobile without country code (10 digits, starts with 3) → prepend 39
+  if (digits.length === 10 && digits.startsWith('3')) {
+    digits = `39${digits}`;
+  }
+  // Italian local with leading 0 (e.g. 0346…) → strip 0 and prepend 39
+  if (digits.length === 11 && digits.startsWith('03')) {
+    digits = `39${digits.slice(1)}`;
+  }
+  if (digits.length < 10 || digits.length > 15) return null;
   return digits;
 }
 

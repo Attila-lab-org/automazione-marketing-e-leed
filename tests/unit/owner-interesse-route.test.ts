@@ -60,13 +60,13 @@ describe('Owner interesse route', () => {
     );
     expect(res.status).toBe(302);
     const loc = res.headers.get('location') ?? '';
-    expect(loc.startsWith('https://wa.me/')).toBe(true);
+    expect(loc.startsWith('https://wa.me/393462689082')).toBe(true);
     expect(loc.includes('attila-lab.net')).toBe(false);
     expect(decodeURIComponent(loc)).toContain('350');
   });
 
   it('channel=whatsapp con OWNER_WHATSAPP → wa.me + messaggio', async () => {
-    process.env.OWNER_WHATSAPP = '393518011635';
+    process.env.OWNER_WHATSAPP = '3462689082';
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     const { GET } = await import('../../src/app/demo/[slug]/interesse/route');
@@ -76,7 +76,7 @@ describe('Owner interesse route', () => {
     );
     expect(res.status).toBe(302);
     const loc = res.headers.get('location') ?? '';
-    expect(loc.startsWith('https://wa.me/393518011635')).toBe(true);
+    expect(loc.startsWith('https://wa.me/393462689082')).toBe(true);
     expect(decodeURIComponent(loc)).toContain('350');
     expect(decodeURIComponent(loc)).toContain('trattoria-duomo');
   });
@@ -104,11 +104,11 @@ describe('Owner CTA helpers', () => {
 
   it('buildWhatsAppUrl precompila testo', () => {
     const url = buildWhatsAppUrl({
-      phoneOrUrl: '+39 351 801 1635',
+      phoneOrUrl: '3462689082',
       businessName: 'Trattoria Duomo',
       slug: 'trattoria-duomo',
     });
-    expect(url).toContain('https://wa.me/393518011635');
+    expect(url).toContain('https://wa.me/393462689082');
     expect(decodeURIComponent(url!)).toContain('Trattoria Duomo');
   });
 });
