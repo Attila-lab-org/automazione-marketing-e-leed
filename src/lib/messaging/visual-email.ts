@@ -110,7 +110,7 @@ export async function buildVisualEmailDraft(
 
   const appUrl = resolveAppUrl(env);
   const demoUrl = `${appUrl}${demo.publicPath}`;
-  const previewImageUrl = `${appUrl}${demo.publicPath}/email-preview?v=4`;
+  const previewImageUrl = `${appUrl}${demo.publicPath}/email-preview?v=5`;
   // Preferisci il nome branding della demo (locale), non un contatto test
   const brandingName =
     (demo.data as { branding?: { business_name?: string | null } })?.branding?.business_name?.trim() ||

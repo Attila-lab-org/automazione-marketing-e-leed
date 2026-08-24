@@ -123,8 +123,8 @@ export async function GET(
             display: 'flex',
             flex: 1,
             flexDirection: 'column',
-            justifyContent: 'flex-end',
-            padding: '22px 24px 20px',
+            justifyContent: 'center',
+            padding: '20px 28px 22px',
             background: `linear-gradient(160deg, ${primary} 0%, #4a342c 55%, ${accent} 160%)`,
           }}
         >
@@ -134,7 +134,7 @@ export async function GET(
               fontSize: 11,
               color: 'rgba(255,253,249,0.72)',
               fontFamily: 'system-ui, sans-serif',
-              marginBottom: 8,
+              marginBottom: 10,
             }}
           >
             {city ? `${city} · anteprima personalizzata` : 'Anteprima personalizzata'}
@@ -147,7 +147,7 @@ export async function GET(
               fontWeight: 700,
               color: '#fffdf9',
               lineHeight: 1.12,
-              marginBottom: 8,
+              marginBottom: 10,
               maxWidth: 540,
             }}
           >
@@ -160,14 +160,14 @@ export async function GET(
               fontSize: 14,
               color: 'rgba(255,253,249,0.9)',
               lineHeight: 1.35,
-              marginBottom: 14,
+              marginBottom: 18,
               maxWidth: 500,
             }}
           >
             {headline}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
             <div
               style={{
                 display: 'flex',
@@ -178,6 +178,7 @@ export async function GET(
                 fontSize: 13,
                 fontWeight: 700,
                 fontFamily: 'system-ui, sans-serif',
+                marginRight: 14,
               }}
             >
               {cta}
@@ -191,8 +192,8 @@ export async function GET(
                   fontFamily: 'system-ui, sans-serif',
                 }}
               >
-                ★ {Number(rating).toFixed(1)}
-                {reviews != null ? ` · ${Number(reviews).toLocaleString('it-IT')}` : ''}
+                {Number(rating).toFixed(1)} Google
+                {reviews != null ? ` · ${Number(reviews).toLocaleString('it-IT')} rec.` : ''}
               </div>
             ) : null}
           </div>
