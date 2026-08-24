@@ -19,6 +19,9 @@ function baseMessage(
     providerEventId: 'telegram:update:1',
     providerMessageId: '10',
     chatId: '-1001',
+    chatType: 'supergroup',
+    chatTitle: 'Gruppo test',
+    chatUsername: 'gruppo_test',
     authorId: '42',
     authorUsername: 'mario_rossi',
     authorDisplayName: 'Mario Rossi',
@@ -142,6 +145,8 @@ describe('telegram parse', () => {
     expect(msg?.channel).toBe('telegram');
     expect(msg?.authorUsername).toBe('anna');
     expect(msg?.isGroup).toBe(true);
+    expect(msg?.chatType).toBe('supergroup');
+    expect(msg?.chatTitle).toBe('Test');
     expect(msg?.providerMessageId).toBe('7');
   });
 

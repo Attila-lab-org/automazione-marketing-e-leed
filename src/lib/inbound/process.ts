@@ -1,10 +1,17 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { ensureInboundThread } from '@/lib/messaging/persist';
 import { buildAutoReplyText } from '@/lib/inbound/auto-reply';
-import { upsertLeadFromInbound } from '@/lib/inbound/create-lead';
+import {
+  findLeadFromInbound,
+  upsertLeadFromInbound,
+} from '@/lib/inbound/create-lead';
 import { classifyInboundIntent } from '@/lib/inbound/intent';
 import type { TelegramInboundSettings } from '@/lib/inbound/telegram-settings';
-import type { IntentMatch, NormalizedInboundMessage } from '@/lib/inbound/types';
+import type {
+  IntentMatch,
+  NormalizedInboundMessage,
+  OutboundReplyResult,
+} from '@/lib/inbound/types';
 import type { TelegramProvider } from '@/lib/providers/telegram';
 
 export type ProcessInboundResult = {
@@ -62,12 +69,17 @@ export async function processTelegramInbound(args: {
   }
 
   const intent = classifyInboundIntent(message, settings.keywords);
-  if (!intent.matched) {
+  const existingLeadId = await findLeadFromInbound(admin, workspaceId, message);
+  if (!intent.matched && !existingLeadId) {
     return { skipped: true, reason: 'NO_INTENT', intent };
   }
 
   const lead = await upsertLeadFromInbound(admin, workspaceId, message, intent);
-  const subject = `Telegram · ${message.authorUsername ? `@${message.authorUsername}` : `tg:${message.authorId}`}`;
+  const subject = message.isGroup
+    ? `Telegram · ${message.chatTitle ?? message.chatUsername ?? message.chatId} · ${
+        message.authorUsername ? `@${message.authorUsername}` : message.authorDisplayName
+      }`
+    : `Telegram · ${message.authorUsername ? `@${message.authorUsername}` : `tg:${message.authorId}`}`;
   const threadId = await ensureInboundThread(admin, workspaceId, lead.leadId, subject);
 
   const fromAddress = message.authorUsername
@@ -123,12 +135,15 @@ export async function processTelegramInbound(args: {
       intent: intent.intent,
       keywords: intent.keywords,
       chat_id: message.chatId,
+      chat_title: message.chatTitle,
+      chat_username: message.chatUsername,
+      is_group: message.isGroup,
       provider_message_id: message.providerMessageId,
       lead_created: lead.created,
     },
   });
 
-  const replyText = settings.replyEnabled
+  const replyText = settings.replyEnabled && intent.matched
     ? buildAutoReplyText({
         message,
         intent,
@@ -137,13 +152,34 @@ export async function processTelegramInbound(args: {
       })
     : null;
   if (!replyText) {
+    const reason = !intent.matched
+      ? 'FOLLOWUP_NO_AUTO_REPLY'
+      : !settings.replyEnabled
+        ? 'AUTO_REPLY_DISABLED'
+        : 'NO_REPLY_TEMPLATE';
+    await admin.from('activity_log').insert({
+      workspace_id: workspaceId,
+      actor_type: 'SYSTEM',
+      entity_type: 'lead',
+      entity_id: lead.leadId,
+      lead_id: lead.leadId,
+      category: 'DECISION',
+      event_type: 'TELEGRAM_REPLY_SKIPPED',
+      message:
+        reason === 'AUTO_REPLY_DISABLED'
+          ? 'Risposta Telegram non inviata: risposta automatica disattivata'
+          : reason === 'FOLLOWUP_NO_AUTO_REPLY'
+            ? 'Messaggio Telegram successivo registrato senza risposta automatica'
+            : 'Risposta Telegram non inviata: testo non disponibile',
+      data: { reason, chat_id: message.chatId, provider_message_id: message.providerMessageId },
+    });
     return {
       leadId: lead.leadId,
       leadCreated: lead.created,
       inboundMessageId: inboundRow.id,
       replied: false,
       intent,
-      reason: 'NO_REPLY_TEMPLATE',
+      reason,
     };
   }
 
@@ -159,6 +195,21 @@ export async function processTelegramInbound(args: {
     .limit(1)
     .maybeSingle();
   if (recentOutbound?.id) {
+    await admin.from('activity_log').insert({
+      workspace_id: workspaceId,
+      actor_type: 'SYSTEM',
+      entity_type: 'lead',
+      entity_id: lead.leadId,
+      lead_id: lead.leadId,
+      category: 'DECISION',
+      event_type: 'TELEGRAM_REPLY_SKIPPED',
+      message: 'Risposta Telegram non inviata: limite di una risposta in 24 ore',
+      data: {
+        reason: 'RATE_LIMITED',
+        chat_id: message.chatId,
+        provider_message_id: message.providerMessageId,
+      },
+    });
     return {
       leadId: lead.leadId,
       leadCreated: lead.created,
@@ -169,11 +220,40 @@ export async function processTelegramInbound(args: {
     };
   }
 
-  const send = await provider.reply({
-    chatId: message.chatId,
-    text: replyText,
-    replyToMessageId: message.replyToMessageId,
-  });
+  let send: OutboundReplyResult;
+  try {
+    send = await provider.reply({
+      chatId: message.chatId,
+      text: replyText,
+      replyToMessageId: message.replyToMessageId,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message.slice(0, 300) : 'Errore sconosciuto';
+    await admin.from('activity_log').insert({
+      workspace_id: workspaceId,
+      actor_type: 'SYSTEM',
+      entity_type: 'lead',
+      entity_id: lead.leadId,
+      lead_id: lead.leadId,
+      category: 'TECHNICAL',
+      event_type: 'TELEGRAM_REPLY_FAILED',
+      message: 'Invio della risposta Telegram fallito',
+      data: {
+        reason: 'SEND_FAILED',
+        detail,
+        chat_id: message.chatId,
+        provider_message_id: message.providerMessageId,
+      },
+    });
+    return {
+      leadId: lead.leadId,
+      leadCreated: lead.created,
+      inboundMessageId: inboundRow.id,
+      replied: false,
+      intent,
+      reason: 'SEND_FAILED',
+    };
+  }
 
   const { data: outboundRow, error: outboundError } = await admin
     .from('messages')
@@ -229,6 +309,22 @@ export async function processTelegramInbound(args: {
       updated_at: new Date().toISOString(),
     })
     .eq('id', lead.leadId);
+
+  await admin.from('activity_log').insert({
+    workspace_id: workspaceId,
+    actor_type: 'SYSTEM',
+    entity_type: 'lead',
+    entity_id: lead.leadId,
+    lead_id: lead.leadId,
+    category: 'BUSINESS',
+    event_type: 'TELEGRAM_REPLY_SENT',
+    message: 'Risposta automatica Telegram inviata',
+    data: {
+      chat_id: message.chatId,
+      inbound_provider_message_id: message.providerMessageId,
+      outbound_provider_message_id: send.providerMessageId,
+    },
+  });
 
   return {
     leadId: lead.leadId,

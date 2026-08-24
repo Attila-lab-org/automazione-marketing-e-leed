@@ -19,6 +19,9 @@ export type NormalizedInboundMessage = {
   /** Provider message id (Telegram message_id) */
   providerMessageId: string;
   chatId: string;
+  chatType: string;
+  chatTitle: string | null;
+  chatUsername: string | null;
   /** User id on the channel */
   authorId: string;
   authorUsername: string | null;

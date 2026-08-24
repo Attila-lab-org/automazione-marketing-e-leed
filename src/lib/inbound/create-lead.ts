@@ -17,6 +17,41 @@ function contactNormalized(message: NormalizedInboundMessage): string {
   return `telegram:${message.authorId}`;
 }
 
+function sourceSnapshot(message: NormalizedInboundMessage, intent: IntentMatch) {
+  return {
+    channel: message.channel,
+    chat_id: message.chatId,
+    chat_type: message.chatType,
+    chat_title: message.chatTitle,
+    chat_username: message.chatUsername,
+    author_id: message.authorId,
+    author_username: message.authorUsername,
+    author_display_name: message.authorDisplayName,
+    intent: intent.intent,
+    keywords: intent.keywords,
+    text_preview: message.text.slice(0, 280),
+    is_group: message.isGroup,
+    provider_message_id: message.providerMessageId,
+    last_message_at: message.occurredAt,
+  };
+}
+
+export async function findLeadFromInbound(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+  message: NormalizedInboundMessage,
+): Promise<string | null> {
+  const { data, error } = await admin
+    .from('lead_sources')
+    .select('lead_id')
+    .eq('workspace_id', workspaceId)
+    .eq('source_type', sourceTypeForChannel(message.channel))
+    .eq('external_id', message.authorId)
+    .maybeSingle();
+  if (error) throw new Error(`Inbound lead lookup: ${error.message}`);
+  return data?.lead_id ?? null;
+}
+
 /**
  * Crea o riusa un lead da un messaggio Telegram.
  * Dedupe su lead_sources.external_id = telegram user id.
@@ -41,13 +76,21 @@ export async function upsertLeadFromInbound(
     .maybeSingle();
 
   if (existingSource?.lead_id) {
-    await admin
-      .from('leads')
-      .update({
-        processing_status: 'IDLE',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', existingSource.lead_id);
+    await Promise.all([
+      admin
+        .from('leads')
+        .update({
+          processing_status: 'IDLE',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingSource.lead_id),
+      admin
+        .from('lead_sources')
+        .update({ query_snapshot: sourceSnapshot(message, intent) })
+        .eq('workspace_id', workspaceId)
+        .eq('source_type', sourceType)
+        .eq('external_id', externalId),
+    ]);
 
     return {
       leadId: existingSource.lead_id,
@@ -124,18 +167,7 @@ export async function upsertLeadFromInbound(
     lead_id: lead.id,
     source_type: sourceType,
     external_id: externalId,
-    query_snapshot: {
-      channel: message.channel,
-      chat_id: message.chatId,
-      author_id: message.authorId,
-      author_username: message.authorUsername,
-      author_display_name: message.authorDisplayName,
-      intent: intent.intent,
-      keywords: intent.keywords,
-      text_preview: message.text.slice(0, 280),
-      is_group: message.isGroup,
-      provider_message_id: message.providerMessageId,
-    },
+    query_snapshot: sourceSnapshot(message, intent),
   });
   if (sourceError) {
     await admin.from('lead_contacts').delete().eq('lead_id', lead.id);

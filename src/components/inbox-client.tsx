@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import EmptyState from "@/components/empty-state";
+import TelegramConversationDrawer from "@/components/telegram-conversation-drawer";
+import type { InboxConversationDetail } from "@/lib/inbound/conversation";
 import type { InboxThreadItem } from "@/lib/inbound/list-inbox";
 
 function formatWhen(iso: string | null): string {
@@ -27,6 +29,33 @@ export default function InboxClient() {
   const [threads, setThreads] = useState<InboxThreadItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null);
+  const [conversation, setConversation] = useState<InboxConversationDetail | null>(null);
+  const [conversationLoading, setConversationLoading] = useState(false);
+  const [conversationError, setConversationError] = useState<string | null>(null);
+
+  async function openConversation(threadId: string) {
+    setOpenThreadId(threadId);
+    setConversation(null);
+    setConversationError(null);
+    setConversationLoading(true);
+    try {
+      const response = await fetch(`/api/inbox/${encodeURIComponent(threadId)}`, {
+        cache: "no-store",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Impossibile caricare la conversazione");
+      }
+      setConversation(data.conversation as InboxConversationDetail);
+    } catch (reason) {
+      setConversationError(
+        reason instanceof Error ? reason.message : "Errore conversazione",
+      );
+    } finally {
+      setConversationLoading(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -35,7 +64,15 @@ export default function InboxClient() {
         const res = await fetch("/api/inbox", { cache: "no-store" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Impossibile caricare i messaggi");
-        if (!cancelled) setThreads((data.threads as InboxThreadItem[]) ?? []);
+        if (!cancelled) {
+          const loadedThreads = (data.threads as InboxThreadItem[]) ?? [];
+          setThreads(loadedThreads);
+          const leadId = new URLSearchParams(window.location.search).get("lead");
+          const requested = leadId
+            ? loadedThreads.find((thread) => thread.leadId === leadId)
+            : null;
+          if (requested) void openConversation(requested.threadId);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Errore caricamento");
@@ -87,7 +124,11 @@ export default function InboxClient() {
           </div>
           <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 bg-white">
             {social.map((t) => (
-              <InboxRow key={t.threadId} item={t} />
+              <InboxRow
+                key={t.threadId}
+                item={t}
+                onOpen={() => void openConversation(t.threadId)}
+              />
             ))}
           </ul>
         </section>
@@ -103,16 +144,37 @@ export default function InboxClient() {
           </div>
           <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 bg-white">
             {other.map((t) => (
-              <InboxRow key={t.threadId} item={t} />
+              <InboxRow
+                key={t.threadId}
+                item={t}
+                onOpen={() => void openConversation(t.threadId)}
+              />
             ))}
           </ul>
         </section>
+      ) : null}
+      {openThreadId ? (
+        <TelegramConversationDrawer
+          detail={conversation}
+          loading={conversationLoading}
+          error={conversationError}
+          onClose={() => {
+            setOpenThreadId(null);
+            setConversation(null);
+          }}
+        />
       ) : null}
     </div>
   );
 }
 
-function InboxRow({ item }: { item: InboxThreadItem }) {
+function InboxRow({
+  item,
+  onOpen,
+}: {
+  item: InboxThreadItem;
+  onOpen: () => void;
+}) {
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 space-y-1">
@@ -142,13 +204,14 @@ function InboxRow({ item }: { item: InboxThreadItem }) {
       </div>
       <div className="shrink-0 text-right text-xs text-stone-500">
         <p>{formatWhen(item.lastMessageAt)}</p>
-        <a
-          href={`/leads`}
-          title="Apri l’elenco attività per gestire il contatto"
+        <button
+          type="button"
+          onClick={onOpen}
+          title="Apri contatto, gruppo, stato risposta e cronologia completa"
           className="mt-1 inline-block font-medium text-stone-800 underline-offset-2 hover:underline"
         >
-          Vai alle attività →
-        </a>
+          Apri conversazione →
+        </button>
       </div>
     </li>
   );

@@ -156,6 +156,8 @@ function toView(lead: LeadRow): LeadView {
     hasWebsite: Boolean(lead.website_url),
     reasons,
     raw: lead,
+    inboxHref:
+      lead.category === "inbound_request" ? `/inbox?lead=${lead.id}` : undefined,
     timeline: reasons.slice(0, 8).map((r, i) => ({
       id: `${lead.id}-r${i}`,
       timestampLabel: r.scoreDelta ? `Δ ${r.scoreDelta > 0 ? "+" : ""}${r.scoreDelta}` : "info",

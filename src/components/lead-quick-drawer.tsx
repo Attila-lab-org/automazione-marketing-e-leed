@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import PolicyBadge, { type PolicyMode } from "./policy-badge";
 import ScoreBadge, { type ScoreBreakdownItem } from "./score-badge";
 import Timeline, { type TimelineEvent } from "./timeline";
@@ -22,6 +23,7 @@ export type LeadQuickDrawerLead = {
   processingStatusLabel?: string;
   policyMode?: PolicyMode;
   timeline?: TimelineEvent[];
+  inboxHref?: string;
 };
 
 export type LeadQuickDrawerProps = {
@@ -166,6 +168,15 @@ export default function LeadQuickDrawer({
               Azioni rapide
             </h3>
             <div className="grid grid-cols-2 gap-2">
+              {lead.inboxHref ? (
+                <Link
+                  href={lead.inboxHref}
+                  title="Apri gruppo, contatto, risposta automatica e cronologia Telegram."
+                  className="col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-left text-xs font-semibold text-sky-900 transition-colors hover:bg-sky-100"
+                >
+                  Apri conversazione Telegram →
+                </Link>
+              ) : null}
               <button
                 type="button"
                 title="Crea un sito dimostrativo usando i dati già disponibili. Non invia email."
