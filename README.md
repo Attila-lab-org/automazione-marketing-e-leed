@@ -43,7 +43,18 @@ QA visuale: `/demo/qa-v3` e `/demo/qa-v3/email-preview`.
 - `RESEND_PROVIDER_MODE=mock|live`, `RESEND_API_KEY` (live only — do not enable until authorized)
 - `CRON_SECRET` for **`/api/cron/jobs`**
 - `NEXT_PUBLIC_APP_URL` for demo/email preview URLs
-- `OWNER_CONTACT_URL` — http(s) destinazione commerciale dopo click owner CTA (`/demo/[slug]/interesse`)
+- `OWNER_CONTACT_URL` — http(s) destinazione commerciale dopo click owner CTA (`/demo/[slug]/interesse`). Se assente (es. Production env locked su Vercel), fallback: `https://www.attila-lab.net/`
+
+## Deploy canonico
+
+| | Valore |
+|---|---|
+| GitHub | `Attila-lab-org/automazione-marketing-e-leed` (`main`) |
+| Vercel team | **Lorattiggio** |
+| Vercel project | `automazione-marketing-e-leed-o1wt` |
+| Production URL | https://automazione-marketing-e-leed-o1wt.vercel.app |
+
+Non usare il vecchio progetto Hobby **GustaGo / sales-automation-os** (residuo di test).
 
 ## Docs
 

@@ -33,6 +33,10 @@ Thumbs.db
 *.swp
 *.swo
 
+# Local Vercel/env dumps
+.env.vercel.tmp
+supabase/.temp/
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts

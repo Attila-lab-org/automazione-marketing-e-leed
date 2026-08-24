@@ -5,6 +5,21 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
+ * Commercial owner contact destination.
+ * Prefer OWNER_CONTACT_URL env; fall back to the studio site when Production env
+ * is permission-locked on Vercel (same class of issue as ADMIN_* unlock).
+ * Never uses mailto without a recipient.
+ */
+export function resolveOwnerContactUrl(env: NodeJS.ProcessEnv = process.env): string | null {
+  const fromEnv = env.OWNER_CONTACT_URL?.trim();
+  if (fromEnv) return fromEnv;
+  const fromPublic = env.NEXT_PUBLIC_OWNER_CONTACT_URL?.trim();
+  if (fromPublic) return fromPublic;
+  // Built-in commercial fallback (studio site — not a personal mailbox)
+  return 'https://www.attila-lab.net/';
+}
+
+/**
  * Public owner CTA endpoint.
  * Logs OWNER_CTA_CLICKED then redirects to OWNER_CONTACT_URL (workspace commercial contact).
  * Never embeds a personal mailbox in the demo renderer.
@@ -14,7 +29,7 @@ export async function GET(
   ctx: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await ctx.params;
-  const contactUrl = process.env.OWNER_CONTACT_URL?.trim();
+  const contactUrl = resolveOwnerContactUrl(process.env);
   if (!contactUrl) {
     return NextResponse.json(
       {

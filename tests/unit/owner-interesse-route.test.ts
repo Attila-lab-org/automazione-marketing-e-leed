@@ -12,15 +12,19 @@ describe('Owner interesse route', () => {
     process.env = { ...originalEnv };
   });
 
-  it('senza OWNER_CONTACT_URL → 503', async () => {
+  it('senza OWNER_CONTACT_URL usa fallback studio commerciale', async () => {
     delete process.env.OWNER_CONTACT_URL;
+    delete process.env.NEXT_PUBLIC_OWNER_CONTACT_URL;
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     const { GET } = await import('../../src/app/demo/[slug]/interesse/route');
     const res = await GET(new Request('http://localhost/demo/x/interesse'), {
       params: Promise.resolve({ slug: 'x' }),
     });
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(302);
+    const loc = res.headers.get('location') ?? '';
+    expect(loc.startsWith('https://www.attila-lab.net/')).toBe(true);
+    expect(loc).toContain('demo=x');
   });
 
   it('con OWNER_CONTACT_URL → 302 verso contact + query demo/source', async () => {
