@@ -108,7 +108,7 @@ export async function buildVisualEmailDraft(
 
   const appUrl = resolveAppUrl(env);
   const demoUrl = `${appUrl}${demo.publicPath}`;
-  const previewImageUrl = `${appUrl}${demo.publicPath}/email-preview`;
+  const previewImageUrl = `${appUrl}${demo.publicPath}/email-preview?v=3`;
   // Preferisci il nome branding della demo (locale), non un contatto test
   const brandingName =
     (demo.data as { branding?: { business_name?: string | null } })?.branding?.business_name?.trim() ||
@@ -120,7 +120,7 @@ export async function buildVisualEmailDraft(
     ? `${appUrl}${demo.publicPath}/interesse?channel=whatsapp`
     : null;
 
-  const previewImageBlock = `<a href="${demoUrl}" style="display:block;text-decoration:none"><img src="${previewImageUrl}" alt="Anteprima ${businessName}" width="600" style="display:block;max-width:100%;width:100%;height:auto;border:0;border-radius:12px" /></a>`;
+  const previewImageBlock = `<a href="${demoUrl}" style="display:block;text-decoration:none"><img src="${previewImageUrl}" alt="Anteprima ${businessName}" width="600" height="360" style="display:block;max-width:100%;width:100%;height:auto;border:0;border-radius:12px" /></a>`;
   const ctaBlock = buildCtaBlock(demoUrl);
   const whatsappBlock = buildWhatsAppBlock(whatsappUrl);
 
