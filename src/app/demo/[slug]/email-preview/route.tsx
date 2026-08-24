@@ -155,12 +155,13 @@ export async function GET(
                 }}
               />
             )}
+            {/* Scrim forte: il testo non deve perdersi su foto chiare (bicchieri, tovaglia) */}
             <div
               style={{
                 position: 'absolute',
                 inset: 0,
                 background:
-                  'linear-gradient(180deg, rgba(44,36,30,0.25) 0%, rgba(44,36,30,0.55) 55%, rgba(44,36,30,0.88) 100%)',
+                  'linear-gradient(180deg, rgba(20,14,10,0.45) 0%, rgba(20,14,10,0.62) 40%, rgba(20,14,10,0.92) 100%)',
                 display: 'flex',
               }}
             />
@@ -170,7 +171,7 @@ export async function GET(
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'flex-end',
-                padding: '48px',
+                padding: '40px 44px',
                 width: '100%',
                 color: '#fffdf9',
               }}
@@ -178,61 +179,96 @@ export async function GET(
               <div
                 style={{
                   display: 'flex',
-                  fontSize: 13,
-                  letterSpacing: 1,
-                  opacity: 0.55,
-                  marginBottom: 10,
-                  fontFamily: 'system-ui, sans-serif',
+                  flexDirection: 'column',
+                  background: 'rgba(18,12,8,0.72)',
+                  borderRadius: 20,
+                  padding: '28px 32px',
+                  maxWidth: 920,
+                  border: '1px solid rgba(255,253,249,0.12)',
                 }}
               >
-                Anteprima preparata per {name}
-              </div>
-              {city ? (
-                <div style={{ display: 'flex', fontSize: 16, letterSpacing: 5, textTransform: 'uppercase', opacity: 0.8 }}>
-                  {city}
-                </div>
-              ) : null}
-              <div style={{ display: 'flex', fontSize: 20, opacity: 0.85, marginTop: 8 }}>{name}</div>
-              <div style={{ display: 'flex', fontSize: 52, fontWeight: 600, lineHeight: 1.05, marginTop: 10, maxWidth: 920 }}>
-                {headline}
-              </div>
-              {sub ? (
-                <div style={{ display: 'flex', fontSize: 22, opacity: 0.88, marginTop: 14, maxWidth: 780, lineHeight: 1.35 }}>
-                  {sub}
-                </div>
-              ) : null}
-              {rating != null ? (
-                <div style={{ display: 'flex', fontSize: 20, marginTop: 18 }}>
-                  {Number(rating).toFixed(1)}
-                  {reviews != null
-                    ? ` · ${Number(reviews).toLocaleString('it-IT')} recensioni Google`
-                    : ' su Google'}
-                </div>
-              ) : null}
-              <div
-                style={{
-                  marginTop: 26,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-end',
-                }}
-              >
+                {city ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      fontSize: 15,
+                      letterSpacing: 4,
+                      textTransform: 'uppercase',
+                      opacity: 0.85,
+                      fontFamily: 'system-ui, sans-serif',
+                      marginBottom: 10,
+                    }}
+                  >
+                    {city}
+                  </div>
+                ) : null}
+                {/* Nome locale in evidenza — non deve perdersi dietro headline generica */}
                 <div
                   style={{
-                    background: accent,
-                    color: '#fffdf9',
-                    padding: '16px 28px',
-                    borderRadius: 999,
-                    fontSize: 22,
+                    display: 'flex',
+                    fontSize: 52,
                     fontWeight: 700,
+                    lineHeight: 1.05,
+                    letterSpacing: 0.5,
+                    maxWidth: 900,
                   }}
                 >
-                  {cta}
+                  {name}
                 </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <div style={{ width: 96, height: 56, borderRadius: 10, background: 'rgba(255,255,255,0.18)' }} />
-                  <div style={{ width: 96, height: 56, borderRadius: 10, background: 'rgba(255,255,255,0.12)' }} />
-                  <div style={{ width: 96, height: 56, borderRadius: 10, background: 'rgba(255,255,255,0.08)' }} />
+                <div
+                  style={{
+                    display: 'flex',
+                    fontSize: 26,
+                    fontWeight: 500,
+                    lineHeight: 1.2,
+                    marginTop: 14,
+                    maxWidth: 860,
+                    opacity: 0.95,
+                  }}
+                >
+                  {headline}
+                </div>
+                {sub ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      fontSize: 18,
+                      opacity: 0.9,
+                      marginTop: 12,
+                      maxWidth: 760,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {sub}
+                  </div>
+                ) : null}
+                {rating != null ? (
+                  <div style={{ display: 'flex', fontSize: 18, marginTop: 14, opacity: 0.9 }}>
+                    {Number(rating).toFixed(1)}
+                    {reviews != null
+                      ? ` · ${Number(reviews).toLocaleString('it-IT')} recensioni Google`
+                      : ' su Google'}
+                  </div>
+                ) : null}
+                <div
+                  style={{
+                    marginTop: 22,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      background: accent,
+                      color: '#fffdf9',
+                      padding: '14px 26px',
+                      borderRadius: 999,
+                      fontSize: 20,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {cta}
+                  </div>
                 </div>
               </div>
             </div>

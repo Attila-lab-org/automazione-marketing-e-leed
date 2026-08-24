@@ -8,7 +8,7 @@
   --restaurant-primary: #2c241e;
   --restaurant-accent: #b86a45;
   --restaurant-border: color-mix(in srgb, var(--restaurant-text) 12%, transparent);
-  --restaurant-overlay: color-mix(in srgb, var(--restaurant-primary) 55%, transparent);
+  --restaurant-overlay: color-mix(in srgb, var(--restaurant-primary) 78%, transparent);
   --font-display: var(--font-restaurant-display), Georgia, 'Times New Roman', serif;
   --font-sans: var(--font-restaurant-sans), system-ui, sans-serif;
   --space-section: clamp(3.5rem, 8vw, 7.5rem);
@@ -328,8 +328,8 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--restaurant-primary) 25%, transparent) 0%, var(--restaurant-overlay) 72%, var(--restaurant-primary) 100%),
-    radial-gradient(ellipse at 20% 20%, color-mix(in srgb, var(--restaurant-accent) 22%, transparent), transparent 55%);
+    linear-gradient(180deg, color-mix(in srgb, var(--restaurant-primary) 48%, transparent) 0%, var(--restaurant-overlay) 68%, var(--restaurant-primary) 100%),
+    radial-gradient(ellipse at 20% 20%, color-mix(in srgb, var(--restaurant-accent) 18%, transparent), transparent 55%);
 }
 
 .heroContent {
@@ -349,13 +349,15 @@
   line-height: 1.05;
   font-size: clamp(2.6rem, 7vw, 5.6rem);
   max-width: 14ch;
+  text-shadow: 0 2px 28px rgba(0, 0, 0, 0.55);
 }
 
 .heroSub {
   font-size: clamp(1.02rem, 2.1vw, 1.28rem);
   max-width: 36rem;
-  opacity: 0.9;
+  opacity: 0.95;
   line-height: 1.5;
+  text-shadow: 0 1px 16px rgba(0, 0, 0, 0.45);
 }
 
 .heroMeta {
