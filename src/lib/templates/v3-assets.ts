@@ -57,12 +57,12 @@ export const RESTAURANT_PREMIUM_V3_CONCEPT_COPY = {
   ownerBody:
     'Hai visto cosa può diventare il tuo locale online. Da 350€ la trasformiamo nella versione reale sul tuo brand — partiamo da un messaggio WhatsApp.',
   ownerCta: 'Parliamone',
-  ownerCtaWhatsApp: 'Voglio rinnovare da 350€',
+  ownerCtaWhatsApp: 'Scrivici su WhatsApp',
   ownerCtaSite: 'Scopri Attila Lab',
   ownerMicro: 'Un tap · Messaggio già pronto · Nessun impegno',
   cta: 'Prenota un tavolo',
   ribbonTitle: 'Anteprima riservata',
   ribbonBody: 'Concept dimostrativo · rinnova la tua attività da 350€',
   ribbonCta: 'Info',
-  ribbonCtaWhatsApp: 'Da 350€',
+  ribbonCtaWhatsApp: 'WhatsApp',
 } as const;

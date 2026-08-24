@@ -5,7 +5,7 @@ type Props = {
   href: string;
 };
 
-/** Persistent owner WhatsApp chip — offer-led, low friction. */
+/** Persistent owner WhatsApp chip — contact only, no price (price lives in owner offer). */
 export function RestaurantV3OwnerFab({ href }: Props) {
   return (
     <a
@@ -14,10 +14,7 @@ export function RestaurantV3OwnerFab({ href }: Props) {
       aria-label={RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaWhatsApp}
     >
       <span className={styles.ownerFabDot} aria-hidden />
-      <span className={styles.ownerFabText}>
-        <strong>350€</strong>
-        <span>WhatsApp</span>
-      </span>
+      WhatsApp
     </a>
   );
 }

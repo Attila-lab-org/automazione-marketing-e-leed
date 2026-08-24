@@ -41,6 +41,9 @@ export function RestaurantV3OwnerCTA({
             {ownerCtaLabel || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaSite}
           </a>
         </div>
+        <p className={styles.ownerOfferHint}>
+          L’offerta da {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerOfferPrice} è sul progetto, non sul messaggio.
+        </p>
         <ol className={styles.ownerSteps}>
           <li>WhatsApp in un tap</li>
           <li>Messaggio già pronto con l’offerta</li>
