@@ -24,8 +24,18 @@ export async function enrichLeadEmail(
       email: lead.email,
       sourceUrl: null,
       sourceType: null,
+      sameDomain: false,
       status: 'ALREADY_PRESENT',
       candidates: [lead.email],
+      candidateEvidence: [
+        {
+          email: lead.email,
+          sourceUrl: null,
+          sourceType: null,
+          sameDomain: false,
+          confidence: 1,
+        },
+      ],
       confidence: 1,
     };
   }
@@ -36,8 +46,10 @@ export async function enrichLeadEmail(
       email: null,
       sourceUrl: null,
       sourceType: null,
+      sameDomain: false,
       status: 'NO_WEBSITE',
       candidates: [],
+      candidateEvidence: [],
       confidence: 0,
     };
   }
@@ -77,8 +89,10 @@ export async function enrichLeadEmail(
       meta: {
         sourceUrl: result.sourceUrl,
         sourceType: result.sourceType,
+        sameDomain: result.sameDomain,
         confidence: result.confidence,
         candidates: result.candidates,
+        candidateEvidence: result.candidateEvidence,
       },
     });
   }

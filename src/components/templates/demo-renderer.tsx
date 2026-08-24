@@ -11,21 +11,35 @@ import {
   type DemoInstanceDataV3,
 } from '@/lib/templates/restaurant-premium-v3';
 import type { KnownRendererKey } from '@/lib/templates/registry';
+import type { RestaurantPremiumV3CommercialProps } from '@/components/templates/restaurant-premium-v3';
 
 export type DemoRendererProps = {
   rendererKey: KnownRendererKey;
   data: DemoInstanceData | DemoInstanceDataV2 | DemoInstanceDataV3;
   compact?: boolean;
   demoSlug?: string;
-};
+} & RestaurantPremiumV3CommercialProps;
 
-export default function DemoRenderer({ rendererKey, data, compact, demoSlug }: DemoRendererProps) {
+export default function DemoRenderer({
+  rendererKey,
+  data,
+  compact,
+  demoSlug,
+  offerPrice,
+  showOwnerBridge,
+  whatsappEnabled,
+  siteEnabled,
+}: DemoRendererProps) {
   if (rendererKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) {
     return (
       <RestaurantPremiumV3
         data={data as DemoInstanceDataV3}
         compact={compact}
         demoSlug={demoSlug}
+        offerPrice={offerPrice}
+        showOwnerBridge={showOwnerBridge}
+        whatsappEnabled={whatsappEnabled}
+        siteEnabled={siteEnabled}
       />
     );
   }

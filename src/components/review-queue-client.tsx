@@ -19,6 +19,7 @@ type QueueItem = {
   demoUrl: string | null;
   demoSiteId: string | null;
   email: string | null;
+  emailEvidenceLabel?: string | null;
   blockers: string[];
 };
 
@@ -271,8 +272,18 @@ export default function ReviewQueueClient() {
             {
               label: item.email ? "Email trovata" : "Email mancante",
               ok: Boolean(item.email),
-              tooltip: item.email ?? "Enrichment email non ha trovato un indirizzo pubblico.",
+              tooltip: item.emailEvidenceLabel
+                ? `${item.email ?? ""} · ${item.emailEvidenceLabel}`
+                : item.email ?? "Enrichment email non ha trovato un indirizzo pubblico.",
             },
+            ...(item.emailEvidenceLabel
+              ? [
+                  {
+                    label: item.emailEvidenceLabel,
+                    ok: true as const,
+                  },
+                ]
+              : []),
             {
               label: item.previewImageUrl ? "Preview pronta" : "Preview assente",
               ok: Boolean(item.previewImageUrl),

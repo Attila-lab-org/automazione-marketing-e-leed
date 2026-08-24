@@ -53,14 +53,14 @@ export const RESTAURANT_PREMIUM_V3_CONCEPT_COPY = {
   finalCtaBody: 'Quando siete pronti, riservate il vostro momento.',
   ownerBridgeEyebrow: 'Per il proprietario',
   ownerBridgeHeadline: 'Ti piace come si presenta {name} online?',
+  /** Used only when OWNER_OFFER_PRICE is set — see owner-commercial helpers. */
   ownerBridgeBody:
-    'Questa non è ancora la versione definitiva: è un’anteprima. Da 350€ la trasformiamo nella presenza reale del tuo locale.',
+    'Questa non è ancora la versione definitiva: è un’anteprima. La trasformiamo nella presenza reale del tuo locale.',
   ownerBridgeMore: 'Vedi l’offerta completa',
   ownerHeadline: 'Cambia e rinnova la tua attività.',
-  ownerOfferPrice: '350€',
   ownerOfferLabel: 'Presenza digitale completa',
   ownerBody:
-    'Hai visto cosa può diventare il tuo locale online. Da 350€ la trasformiamo nella versione reale sul tuo brand — partiamo da un messaggio WhatsApp.',
+    'Hai visto cosa può diventare il tuo locale online. La trasformiamo nella versione reale sul tuo brand — partiamo da un messaggio WhatsApp.',
   ownerCta: 'Parliamone',
   ownerCtaWhatsApp: 'Scrivici su WhatsApp',
   ownerCtaSite: 'Scopri Attila Lab',
@@ -68,7 +68,7 @@ export const RESTAURANT_PREMIUM_V3_CONCEPT_COPY = {
   cta: 'Prenota un tavolo',
   ctaShort: 'Prenota',
   ribbonTitle: 'Anteprima riservata',
-  ribbonBody: 'Concept dimostrativo · rinnova la tua attività da 350€',
+  ribbonBody: 'Concept dimostrativo · rinnova la tua attività',
   ribbonCta: 'Info',
   ribbonCtaWhatsApp: 'WhatsApp',
 } as const;

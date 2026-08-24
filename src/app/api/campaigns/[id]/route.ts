@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withAdmin } from '@/lib/api/with-admin';
 import { enqueueCampaignPreparation } from '@/lib/campaigns/prepare';
+import { resumeCampaign } from '@/lib/campaigns/resume';
 import { approveCampaignLeads } from '@/lib/campaigns/review-queue';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
@@ -85,6 +86,16 @@ export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
       .eq('id', id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, status: 'PAUSED' });
+  }
+  if (body.action === 'resume') {
+    try {
+      const result = await resumeCampaign(admin, workspace.id, id);
+      return NextResponse.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Resume fallito';
+      const status = message === 'Campagna non trovata' ? 404 : 500;
+      return NextResponse.json({ error: message }, { status });
+    }
   }
   return NextResponse.json({ error: 'action non supportata' }, { status: 400 });
 });

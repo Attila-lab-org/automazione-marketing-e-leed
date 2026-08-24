@@ -13,6 +13,13 @@ type ProviderItem = {
   detail: string;
 };
 
+type CommercialItem = {
+  id: string;
+  name: string;
+  status: "READY" | "MISSING";
+  detail: string;
+};
+
 const TOOLTIPS: Record<string, string> = {
   supabase: "System of record: probe su workspaces.",
   google_places: "Places API (New) Text Search — stato runtime.",
@@ -29,6 +36,7 @@ export default function ProvidersRuntimeList({
   const [providers, setProviders] = useState<
     Array<ProviderItem & { health: ProviderHealth }>
   >([]);
+  const [commercial, setCommercial] = useState<CommercialItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,6 +53,7 @@ export default function ProvidersRuntimeList({
             health: mapRuntimeStatus(p.status),
           })),
         );
+        setCommercial((data.commercial as CommercialItem[]) ?? []);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Errore status");
@@ -57,9 +66,7 @@ export default function ProvidersRuntimeList({
   }, []);
 
   if (error) {
-    return (
-      <p className="text-sm text-red-600">{error}</p>
-    );
+    return <p className="text-sm text-red-600">{error}</p>;
   }
 
   if (providers.length === 0) {
@@ -67,22 +74,55 @@ export default function ProvidersRuntimeList({
   }
 
   return (
-    <div
-      className={
-        layout === "grid"
-          ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
-          : "space-y-3"
-      }
-    >
-      {providers.map((p) => (
-        <ProviderStatus
-          key={p.id}
-          name={p.name}
-          status={p.health}
-          tooltip={TOOLTIPS[p.id] ?? p.detail}
-          detail={p.detail}
-        />
-      ))}
+    <div className="space-y-6">
+      <div
+        className={
+          layout === "grid"
+            ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+            : "space-y-3"
+        }
+      >
+        {providers.map((p) => (
+          <ProviderStatus
+            key={p.id}
+            name={p.name}
+            status={p.health}
+            tooltip={TOOLTIPS[p.id] ?? p.detail}
+            detail={p.detail}
+          />
+        ))}
+      </div>
+
+      {commercial.length > 0 ? (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-stone-800">
+            Config commerciale owner (READY / MISSING)
+          </h3>
+          <p className="text-xs text-stone-500">
+            Nessun valore o secret mostrato — solo stato di configurazione.
+          </p>
+          <ul className="space-y-2">
+            {commercial.map((c) => (
+              <li
+                key={c.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm"
+              >
+                <span className="font-medium text-stone-800">{c.name}</span>
+                <span
+                  className={
+                    c.status === "READY"
+                      ? "rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800"
+                      : "rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800"
+                  }
+                >
+                  {c.status}
+                </span>
+                <span className="w-full text-xs text-stone-500">{c.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -36,22 +36,38 @@ const sans = DM_Sans({
   display: 'swap',
 });
 
+export type RestaurantPremiumV3CommercialProps = {
+  /** OWNER_OFFER_PRICE — omit/null = no price in copy/CTA. */
+  offerPrice?: string | null;
+  /** OWNER_SHOW_BRIDGE — default false (85% restaurant / 15% commercial). */
+  showOwnerBridge?: boolean;
+  /** When false, hide WhatsApp CTAs (OWNER_WHATSAPP missing). */
+  whatsappEnabled?: boolean;
+  /** When false, hide site CTAs (OWNER_CONTACT_URL missing). */
+  siteEnabled?: boolean;
+};
+
 export type RestaurantPremiumV3Props = {
   data: DemoInstanceDataV3;
   compact?: boolean;
   /** Public demo slug — enables /demo/[slug]/interesse owner CTA. */
   demoSlug?: string;
-};
+} & RestaurantPremiumV3CommercialProps;
 
 /**
  * Landing focus (dual audience):
  * - Diner simulation: ONE booking goal → header + hero + final CTA only
- * - Owner conversion: ribbon + mid-page bridge + final offer + WhatsApp FAB
+ * - Owner conversion: discreet ribbon + final offer + WhatsApp FAB
+ * - Mid-page OwnerBridge optional (default OFF)
  */
 export default function RestaurantPremiumV3({
   data,
   compact = false,
   demoSlug,
+  offerPrice = null,
+  showOwnerBridge = false,
+  whatsappEnabled = true,
+  siteEnabled = true,
 }: RestaurantPremiumV3Props) {
   useReveal();
   const scrolled = useHeaderScroll();
@@ -81,14 +97,14 @@ export default function RestaurantPremiumV3({
   });
   const ownerCta =
     data.content.owner_cta_label?.trim() || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaSite;
-  const ownerWhatsAppHref = resolveOwnerCtaHref({
-    demoSlug,
-    channel: 'whatsapp',
-  });
-  const siteHref = resolveOwnerCtaHref({
-    demoSlug,
-    channel: 'site',
-  });
+  const ownerWhatsAppHref =
+    whatsappEnabled && demoSlug
+      ? resolveOwnerCtaHref({ demoSlug, channel: 'whatsapp' })
+      : null;
+  const siteHref =
+    siteEnabled && demoSlug
+      ? resolveOwnerCtaHref({ demoSlug, channel: 'site' })
+      : null;
 
   const tokenStyle = {
     ['--restaurant-primary' as string]: primary,
@@ -107,6 +123,7 @@ export default function RestaurantPremiumV3({
           businessName={name}
           whatsappHref={ownerWhatsAppHref}
           siteHref={siteHref}
+          offerPrice={offerPrice}
         />
       ) : null}
       <RestaurantV3Header
@@ -131,8 +148,12 @@ export default function RestaurantPremiumV3({
       <RestaurantV3Trust rating={data.signals.rating} reviewCount={data.signals.review_count} />
       <RestaurantV3Intro description={description} imageSrc={gallery[0]} />
       <RestaurantV3Experience />
-      {!compact ? (
-        <RestaurantV3OwnerBridge businessName={name} whatsappHref={ownerWhatsAppHref} />
+      {!compact && showOwnerBridge ? (
+        <RestaurantV3OwnerBridge
+          businessName={name}
+          whatsappHref={ownerWhatsAppHref}
+          offerPrice={offerPrice}
+        />
       ) : null}
       <RestaurantV3Story />
       <RestaurantV3Gallery images={gallery} />
@@ -153,9 +174,10 @@ export default function RestaurantPremiumV3({
           whatsappHref={ownerWhatsAppHref}
           siteHref={siteHref}
           businessName={name}
+          offerPrice={offerPrice}
         />
       ) : null}
-      {!compact && demoSlug ? <RestaurantV3OwnerFab href={ownerWhatsAppHref} /> : null}
+      {!compact && ownerWhatsAppHref ? <RestaurantV3OwnerFab href={ownerWhatsAppHref} /> : null}
       <footer className={styles.footer}>
         <span>{name}</span>
         <span>Concept demo · Restaurant Premium V3</span>

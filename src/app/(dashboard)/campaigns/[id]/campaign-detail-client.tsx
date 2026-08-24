@@ -64,7 +64,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
     setCounts(data.counts ?? {});
     setTotals(data.totals ?? null);
   }, [campaignId]);
-  async function runAction(action: "prepare" | "approve" | "pause") {
+  async function runAction(action: "prepare" | "approve" | "pause" | "resume") {
     if (action === "approve") {
       const n = (totals?.review ?? 0) + (totals?.ready ?? 0);
       const ok = window.confirm(
@@ -93,8 +93,16 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
         );
       } else if (action === "approve") {
         setMessage(`Approvati ${data.approved ?? 0} lead — invio in coda.`);
+      } else if (action === "pause") {
+        setMessage("Campagna in pausa (i follow-up dovuti restano in attesa).");
       } else {
-        setMessage("Campagna in pausa.");
+        const released =
+          typeof data.releasedJobs === "number" ? data.releasedJobs : 0;
+        setMessage(
+          released > 0
+            ? `Campagna ripresa — ${released} job deferred rilasciati.`
+            : "Campagna ripresa.",
+        );
       }
       await refresh();
     } catch (err) {
@@ -171,14 +179,25 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
           >
             Approva e avvia
           </button>
-          <button
-            type="button"
-            disabled={busy || campaign.status === "PAUSED"}
-            onClick={() => void runAction("pause")}
-            className="rounded-lg border border-amber-300 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
-          >
-            Pausa
-          </button>
+          {campaign.status === "PAUSED" ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void runAction("resume")}
+              className="rounded-lg border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"
+            >
+              Riprendi
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void runAction("pause")}
+              className="rounded-lg border border-amber-300 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+            >
+              Pausa
+            </button>
+          )}
         </div>
 
         {message ? <p className="mt-3 text-sm text-emerald-700">{message}</p> : null}

@@ -21,6 +21,8 @@ export type SendGuardDisposition =
 
 const PAUSE_RETRY_MS = 15 * 60 * 1000;
 
+export { PAUSE_RETRY_MS };
+
 export function nextSendWindowOpen(
   window: { start?: string; end?: string; timezone?: string } | null | undefined,
   now: Date = new Date(),

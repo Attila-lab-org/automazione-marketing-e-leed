@@ -39,13 +39,16 @@ QA visuale: `/demo/qa-v3` e `/demo/qa-v3/email-preview`.
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - `ADMIN_EMAIL` (allowlist) and/or workspace membership; `ADMIN_SESSION_SECRET` preferred in production
-- `GOOGLE_PLACES_API_KEY`, `GOOGLE_PLACES_MODE=live|mock`
-- `RESEND_PROVIDER_MODE=mock|live`, `RESEND_API_KEY` (live only — do not enable until authorized)
+- `GOOGLE_PLACES_PROVIDER_MODE=live|mock`, `GOOGLE_PLACES_API_KEY` (live only)
+- `RESEND_PROVIDER_MODE=mock|live`, `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_WEBHOOK_SECRET` (live only — do not enable until authorized)
 - `CRON_SECRET` for **`/api/cron/jobs`**
 - `NEXT_PUBLIC_APP_URL` for demo/email preview URLs
-- `OWNER_CONTACT_URL` — http(s) destinazione commerciale (`?channel=site`). Fallback: `https://www.attila-lab.net/`
-- `OWNER_WHATSAPP` — numero internazionale o URL `wa.me` (`?channel=whatsapp`). Messaggio precompilato con nome demo.
+- `OWNER_CONTACT_URL` — http(s) destinazione commerciale (`?channel=site`). Se mancante: nessun redirect arbitrario
+- `OWNER_WHATSAPP` — numero internazionale o URL `wa.me` (`?channel=whatsapp`). Se mancante: nessun CTA WhatsApp
+- `OWNER_OFFER_PRICE` — opzionale (es. `350€`); se vuoto nessun prezzo in demo/WhatsApp
+- `OWNER_SHOW_BRIDGE` — opzionale; mid-page OwnerBridge default **OFF**
 
+Settings → Config commerciale mostra READY / MISSING senza esporre i valori.
 ## Deploy canonico
 
 | | Valore |

@@ -83,21 +83,27 @@ export function normalizeWhatsAppPhone(raw: string): string | null {
 /**
  * Build a WhatsApp deep link with a prefilled commercial message.
  * Accepts phone digits, wa.me URL, or api.whatsapp.com URL.
+ * Offer price is included only when explicitly provided (OWNER_OFFER_PRICE).
  */
 export function buildWhatsAppUrl(args: {
   phoneOrUrl: string;
   businessName?: string | null;
   slug?: string | null;
+  offerPrice?: string | null;
 }): string | null {
   const raw = args.phoneOrUrl.trim();
   if (!raw) return null;
+
+  const priceLine = args.offerPrice?.trim()
+    ? `Mi interessa cambiare e rinnovare la presenza digitale da ${args.offerPrice.trim()}.`
+    : 'Mi interessa cambiare e rinnovare la presenza digitale.';
 
   const text = [
     'Ciao Attila Lab,',
     args.businessName?.trim()
       ? `ho visto l'anteprima demo per ${args.businessName.trim()}.`
       : "ho visto l'anteprima demo del mio locale.",
-    'Mi interessa cambiare e rinnovare la presenza digitale da 350€.',
+    priceLine,
     'Possiamo parlarne?',
     args.slug?.trim() ? `(rif: ${args.slug.trim()})` : '',
   ]

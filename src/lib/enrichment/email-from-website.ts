@@ -1,12 +1,26 @@
 import { lookup } from 'dns/promises';
 import { isIPv4, isIPv6 } from 'net';
 
+export type EmailSourceType = 'mailto' | 'page_text';
+
+/** Provenance for a single email candidate (never invent emails). */
+export interface EmailCandidateEvidence {
+  email: string;
+  sourceUrl: string | null;
+  sourceType: EmailSourceType | null;
+  sameDomain: boolean;
+  confidence: number;
+}
+
 export interface EmailEnrichmentResult {
   email: string | null;
+  /** Provenance of the SELECTED primary email (not the first page with any email). */
   sourceUrl: string | null;
-  sourceType: 'mailto' | 'page_text' | null;
+  sourceType: EmailSourceType | null;
+  sameDomain: boolean;
   status: 'FOUND' | 'NOT_FOUND' | 'NO_WEBSITE' | 'ERROR' | 'BLOCKED_URL' | 'ALREADY_PRESENT';
   candidates: string[];
+  candidateEvidence: EmailCandidateEvidence[];
   confidence: number;
 }
 
@@ -129,6 +143,18 @@ function rankEmails(emails: string[], domain: string | null, mailto: Set<string>
   });
 }
 
+function confidenceFor(
+  email: string,
+  domain: string | null,
+  mailto: Set<string>,
+): number {
+  if (domain && email.endsWith(`@${domain}`)) {
+    return mailto.has(email) ? 0.95 : 0.8;
+  }
+  if (mailto.has(email)) return 0.55;
+  return 0.4;
+}
+
 async function fetchHtmlSafe(startUrl: string): Promise<string | null> {
   let current = (await assertSafePublicUrlResolved(startUrl)).toString();
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
@@ -178,37 +204,52 @@ function candidatePaths(base: URL): string[] {
   return paths.map((p) => new URL(p, base).toString());
 }
 
+function emptyResult(
+  status: EmailEnrichmentResult['status'],
+): EmailEnrichmentResult {
+  return {
+    email: null,
+    sourceUrl: null,
+    sourceType: null,
+    sameDomain: false,
+    status,
+    candidates: [],
+    candidateEvidence: [],
+    confidence: 0,
+  };
+}
+
 export class HttpEmailEnrichmentProvider implements EmailEnrichmentProvider {
   async enrichFromWebsite(websiteUrl: string): Promise<EmailEnrichmentResult> {
     let base: URL;
     try {
       base = await assertSafePublicUrlResolved(websiteUrl);
     } catch {
-      return {
-        email: null,
-        sourceUrl: null,
-        sourceType: null,
-        status: 'BLOCKED_URL',
-        candidates: [],
-        confidence: 0,
-      };
+      return emptyResult('BLOCKED_URL');
     }
 
     const domain = normalizeDomain(base.toString());
     const candidates = new Set<string>();
     const mailtoSet = new Set<string>();
-    let sourceUrl: string | null = null;
-    let sourceType: 'mailto' | 'page_text' | null = null;
+    /** First-seen provenance per email (selected email uses its own, not first page). */
+    const evidenceByEmail = new Map<
+      string,
+      { sourceUrl: string; sourceType: EmailSourceType }
+    >();
 
     for (const url of candidatePaths(base)) {
       const html = await fetchHtmlSafe(url);
       if (!html) continue;
       const extracted = extractEmails(html);
       for (const e of extracted.mailto) mailtoSet.add(e);
-      for (const e of extracted.emails) candidates.add(e);
-      if (extracted.emails.length > 0 && !sourceUrl) {
-        sourceUrl = url;
-        sourceType = extracted.mailto.length > 0 ? 'mailto' : 'page_text';
+      for (const e of extracted.emails) {
+        candidates.add(e);
+        if (!evidenceByEmail.has(e)) {
+          evidenceByEmail.set(e, {
+            sourceUrl: url,
+            sourceType: extracted.mailto.includes(e) ? 'mailto' : 'page_text',
+          });
+        }
       }
       if (candidates.size > 0 && mailtoSet.size > 0) break;
     }
@@ -219,23 +260,74 @@ export class HttpEmailEnrichmentProvider implements EmailEnrichmentProvider {
       ranked.find((e) => mailtoSet.has(e)) ??
       null;
 
-    const confidence = best
-      ? domain && best.endsWith(`@${domain}`)
-        ? mailtoSet.has(best)
-          ? 0.95
-          : 0.8
-        : 0.4
-      : 0;
+    const candidateEvidence: EmailCandidateEvidence[] = ranked.map((email) => {
+      const ev = evidenceByEmail.get(email);
+      const sameDomain = Boolean(domain && email.endsWith(`@${domain}`));
+      return {
+        email,
+        sourceUrl: ev?.sourceUrl ?? null,
+        sourceType: ev?.sourceType ?? null,
+        sameDomain,
+        confidence: confidenceFor(email, domain, mailtoSet),
+      };
+    });
+
+    if (!best) {
+      return {
+        ...emptyResult('NOT_FOUND'),
+        candidates: ranked,
+        candidateEvidence,
+      };
+    }
+
+    const selected = evidenceByEmail.get(best);
+    const sameDomain = Boolean(domain && best.endsWith(`@${domain}`));
+    const confidence = confidenceFor(best, domain, mailtoSet);
 
     return {
       email: best,
-      sourceUrl,
-      sourceType,
-      status: best ? 'FOUND' : 'NOT_FOUND',
+      sourceUrl: selected?.sourceUrl ?? null,
+      sourceType: selected?.sourceType ?? null,
+      sameDomain,
+      status: 'FOUND',
       candidates: ranked,
+      candidateEvidence,
       confidence,
     };
   }
 }
 
 export const defaultEmailEnrichmentProvider = new HttpEmailEnrichmentProvider();
+
+/** Discreet Review Queue label from selected-email evidence. */
+export function formatEmailEvidenceLabel(ev: {
+  sourceUrl?: string | null;
+  sourceType?: string | null;
+  confidence?: number | null;
+}): string | null {
+  const path = (() => {
+    if (!ev.sourceUrl) return null;
+    try {
+      const u = new URL(ev.sourceUrl);
+      return u.pathname === '/' ? '/' : u.pathname;
+    } catch {
+      return null;
+    }
+  })();
+  const type =
+    ev.sourceType === 'mailto' ? 'mailto' : ev.sourceType === 'page_text' ? 'testo pagina' : null;
+  const conf =
+    typeof ev.confidence === 'number'
+      ? ev.confidence >= 0.8
+        ? 'confidence alta'
+        : ev.confidence >= 0.55
+          ? 'confidence media'
+          : 'confidence bassa'
+      : null;
+  const parts = [
+    path ? `trovata su ${path}` : null,
+    type,
+    conf,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
+}

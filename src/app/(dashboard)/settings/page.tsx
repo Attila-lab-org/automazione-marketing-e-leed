@@ -12,7 +12,7 @@ export default function SettingsPage() {
       <SectionSubnav items={[...SETTINGS_SUBNAV]} />
       <PageHeader
         title="Impostazioni"
-        description="Stato provider derivato dal runtime (ENV + probe), non da testo statico. Slice 1: solo Supabase e Google Places possono risultare READY."
+        description="Stato provider e config commerciale owner (READY/MISSING, senza valori/secrets). Resend resta MOCK fino a certificazione autorizzata."
       />
 
       <section aria-label="Stato provider" className="space-y-3">

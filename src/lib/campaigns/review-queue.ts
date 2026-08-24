@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { formatEmailEvidenceLabel } from '@/lib/enrichment/email-from-website';
 import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
 
 export interface ReviewQueueItem {
@@ -11,6 +12,8 @@ export interface ReviewQueueItem {
   score: number;
   confidence: number;
   email: string | null;
+  /** Discreet provenance for selected email, e.g. "trovata su /contatti · mailto · confidence alta" */
+  emailEvidenceLabel: string | null;
   subject: string;
   messagePreview: string;
   body: string;
@@ -68,6 +71,22 @@ export async function listReviewQueue(
     const draft = draftByCl.get(`${row.id}:${row.sequence_step ?? 0}`);
     const prep = (row.preparation ?? {}) as Record<string, unknown>;
     const emailStatus = typeof prep.emailStatus === 'string' ? prep.emailStatus : null;
+    const emailEvidence = (prep.emailEvidence ?? null) as {
+      sourceUrl?: string | null;
+      sourceType?: string | null;
+      confidence?: number | null;
+      email?: string | null;
+    } | null;
+    const emailEvidenceLabel =
+      lead?.email && emailEvidence
+        ? formatEmailEvidenceLabel(emailEvidence)
+        : lead?.email && typeof prep.emailSourceUrl === 'string'
+          ? formatEmailEvidenceLabel({
+              sourceUrl: prep.emailSourceUrl,
+              sourceType: typeof prep.emailSourceType === 'string' ? prep.emailSourceType : null,
+              confidence: typeof prep.emailConfidence === 'number' ? prep.emailConfidence : null,
+            })
+          : null;
     const publicPath = demo?.public_url ?? (demo?.slug ? `/demo/${demo.slug}` : null);
     const demoUrl = publicPath ? `${appUrl}${publicPath}` : null;
     const previewImageUrl = publicPath ? `${appUrl}${publicPath}/email-preview` : null;
@@ -88,6 +107,7 @@ export async function listReviewQueue(
       score: lead?.discovery_score ?? 0,
       confidence: lead?.confidence ?? 0,
       email: lead?.email ?? null,
+      emailEvidenceLabel,
       subject: draft?.subject ?? '(messaggio in preparazione)',
       messagePreview: body ? stripHtml(body).slice(0, 220) : 'Anteprima non ancora generata.',
       body,

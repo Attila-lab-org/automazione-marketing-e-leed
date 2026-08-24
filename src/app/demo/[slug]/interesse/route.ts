@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { getOwnerOfferPrice } from '@/lib/templates/owner-commercial';
 import {
   buildWhatsAppUrl,
   isWhatsAppContactTarget,
@@ -9,22 +10,16 @@ import {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const STUDIO_FALLBACK = 'https://www.attila-lab.net/';
-/** Commercial WhatsApp fallback when OWNER_WHATSAPP env is missing on Production. */
-const STUDIO_WHATSAPP_FALLBACK = '393462689082';
-
 /**
  * Commercial owner contact destination.
- * Prefer OWNER_CONTACT_URL env; fall back to the studio site when Production env
- * is permission-locked on Vercel (same class of issue as ADMIN_* unlock).
- * Never uses mailto without a recipient.
+ * OWNER_CONTACT_URL only — no hardcoded studio fallback.
  */
 export function resolveOwnerContactUrl(env: NodeJS.ProcessEnv = process.env): string | null {
   const fromEnv = env.OWNER_CONTACT_URL?.trim();
   if (fromEnv) return fromEnv;
   const fromPublic = env.NEXT_PUBLIC_OWNER_CONTACT_URL?.trim();
   if (fromPublic) return fromPublic;
-  return STUDIO_FALLBACK;
+  return null;
 }
 
 function parseChannel(raw: string | null): OwnerContactChannel {
@@ -34,7 +29,7 @@ function parseChannel(raw: string | null): OwnerContactChannel {
   return 'auto';
 }
 
-function resolveWhatsAppSource(env: NodeJS.ProcessEnv): string {
+function resolveWhatsAppSource(env: NodeJS.ProcessEnv): string | null {
   const fromEnv = env.OWNER_WHATSAPP?.trim();
   if (fromEnv) return fromEnv;
   if (env.OWNER_CONTACT_URL && isWhatsAppContactTarget(env.OWNER_CONTACT_URL)) {
@@ -46,7 +41,7 @@ function resolveWhatsAppSource(env: NodeJS.ProcessEnv): string {
   ) {
     return env.NEXT_PUBLIC_OWNER_CONTACT_URL.trim();
   }
-  return STUDIO_WHATSAPP_FALLBACK;
+  return null;
 }
 
 function resolveDestination(args: {
@@ -56,30 +51,36 @@ function resolveDestination(args: {
   slug: string;
 }): { url: string; channel: 'whatsapp' | 'site' } | { error: string } {
   const { env, channel, businessName, slug } = args;
+  const offerPrice = getOwnerOfferPrice(env);
 
-  // WhatsApp must never fall through to the marketing website.
   if (channel === 'whatsapp' || channel === 'auto') {
-    const wa = buildWhatsAppUrl({
-      phoneOrUrl: resolveWhatsAppSource(env),
-      businessName,
-      slug,
-    });
-    if (wa) {
-      // auto → WhatsApp first (one-tap conversion); site remains available via ?channel=site
-      if (channel === 'whatsapp' || channel === 'auto') {
+    const source = resolveWhatsAppSource(env);
+    if (source) {
+      const wa = buildWhatsAppUrl({
+        phoneOrUrl: source,
+        businessName,
+        slug,
+        offerPrice,
+      });
+      if (wa) {
         return { url: wa, channel: 'whatsapp' };
       }
     }
     if (channel === 'whatsapp') {
-      return { error: 'OWNER_WHATSAPP non valido' };
+      return { error: 'OWNER_WHATSAPP non configurato' };
     }
   }
 
-  const siteCandidate = resolveOwnerContactUrl(env) ?? STUDIO_FALLBACK;
-  const contactUrl = isWhatsAppContactTarget(siteCandidate) ? STUDIO_FALLBACK : siteCandidate;
+  const siteCandidate = resolveOwnerContactUrl(env);
+  if (!siteCandidate) {
+    return { error: 'OWNER_CONTACT_URL non configurato' };
+  }
+  if (isWhatsAppContactTarget(siteCandidate)) {
+    return { error: 'OWNER_CONTACT_URL non valido per channel=site' };
+  }
 
   try {
-    const dest = new URL(contactUrl);
+    const dest = new URL(siteCandidate);
     if (dest.protocol !== 'http:' && dest.protocol !== 'https:') {
       return { error: 'OWNER_CONTACT_URL non valido' };
     }
@@ -165,7 +166,6 @@ export async function GET(
     return NextResponse.json({ error: 'Destinazione non valida' }, { status: 503 });
   }
 
-  // Site redirects get attribution query; WhatsApp keeps its own text payload
   if (resolved.channel === 'site') {
     dest.searchParams.set('demo', slug);
     dest.searchParams.set('source', 'restaurant-premium-v3-owner-cta');

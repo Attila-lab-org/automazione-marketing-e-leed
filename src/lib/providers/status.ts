@@ -4,6 +4,7 @@
  */
 
 import { getGooglePlacesProvider } from '@/lib/providers/google-places';
+import { getOwnerCommercialStatus } from '@/lib/templates/owner-commercial';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 export type RuntimeProviderHealth = 'ready' | 'mock' | 'error' | 'not_configured';
@@ -15,9 +16,18 @@ export type ProviderStatusItem = {
   detail: string;
 };
 
+export type CommercialConfigItem = {
+  id: 'owner_whatsapp' | 'owner_contact_url' | 'owner_offer_price' | 'owner_show_bridge';
+  name: string;
+  /** READY / MISSING — never include secret values. */
+  status: 'READY' | 'MISSING';
+  detail: string;
+};
+
 export type ProvidersStatusResponse = {
   checkedAt: string;
   providers: ProviderStatusItem[];
+  commercial: CommercialConfigItem[];
 };
 
 function modeOf(env: NodeJS.ProcessEnv, key: string): string {
@@ -130,6 +140,40 @@ function staticMockProvider(
   return { id, name, status: 'error', detail: `mode non valido: ${mode}` };
 }
 
+function commercialConfig(env: NodeJS.ProcessEnv): CommercialConfigItem[] {
+  const st = getOwnerCommercialStatus(env);
+  return [
+    {
+      id: 'owner_whatsapp',
+      name: 'OWNER_WHATSAPP',
+      status: st.whatsapp,
+      detail: st.whatsapp === 'READY' ? 'configurato' : 'mancante — nessun CTA WhatsApp',
+    },
+    {
+      id: 'owner_contact_url',
+      name: 'OWNER_CONTACT_URL',
+      status: st.contactUrl,
+      detail:
+        st.contactUrl === 'READY' ? 'configurato' : 'mancante — nessun redirect site commerciale',
+    },
+    {
+      id: 'owner_offer_price',
+      name: 'OWNER_OFFER_PRICE',
+      status: st.offerPrice,
+      detail:
+        st.offerPrice === 'READY'
+          ? 'prezzo mostrato in template / WhatsApp'
+          : 'vuoto — nessun prezzo in demo',
+    },
+    {
+      id: 'owner_show_bridge',
+      name: 'OWNER_SHOW_BRIDGE',
+      status: st.showBridge ? 'READY' : 'MISSING',
+      detail: st.showBridge ? 'mid-page OwnerBridge ON' : 'default OFF (85% restaurant)',
+    },
+  ];
+}
+
 export async function getProvidersStatus(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ProvidersStatusResponse> {
@@ -152,5 +196,6 @@ export async function getProvidersStatus(
       ),
       staticMockProvider('ai', 'AI', 'AI_PROVIDER_MODE', env),
     ],
+    commercial: commercialConfig(env),
   };
 }

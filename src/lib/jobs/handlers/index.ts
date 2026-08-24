@@ -11,7 +11,12 @@ import { ensureRestaurantPremiumV3 } from '@/lib/demos/ensure-template-v3';
 import { buildVisualEmailDraft, buildFollowupDraft } from '@/lib/messaging/visual-email';
 import { buildSendGuardContext } from '@/lib/send-guard/build-context';
 import { runSendGuard } from '@/lib/send-guard';
-import { classifySendGuardDisposition, SendDeferredError } from '@/lib/send-guard/defer';
+import {
+  classifySendGuardDisposition,
+  PAUSE_RETRY_MS,
+  SendDeferredError,
+} from '@/lib/send-guard/defer';
+
 import { getResendProvider } from '@/lib/providers/resend';
 import { mergePreparation } from '@/lib/campaigns/preparation';
 import { ensureMessageThread } from '@/lib/messaging/persist';
@@ -99,14 +104,17 @@ async function handleLeadEnrichment(
     job.entityId,
     { status: 'GENERATING' },
     {
-      emailStatus: email.status,
-      email: email.email,
-      emailSourceUrl: email.sourceUrl,
-      emailEvidence: email,
-      googleEnrichment: google,
-      enrichedAt: new Date().toISOString(),
-    },
-  );
+          emailStatus: email.status,
+          email: email.email,
+          emailSourceUrl: email.sourceUrl,
+          emailSourceType: email.sourceType,
+          emailConfidence: email.confidence,
+          emailSameDomain: email.sameDomain,
+          emailEvidence: email,
+          googleEnrichment: google,
+          enrichedAt: new Date().toISOString(),
+        },
+      );
 
   await admin
     .from('leads')
@@ -423,7 +431,16 @@ async function handleFollowupStep(
 
   const { data: campaign } = await admin.from('campaigns').select('status').eq('id', cl.campaign_id).single();
   if (campaign?.status === 'PAUSED') {
-    return { skipped: true, reason: 'CAMPAIGN_PAUSED' };
+    // Temporary wait — never complete/skip a due FOLLOWUP during pause
+    throw new SendDeferredError({
+      kind: 'defer',
+      reason: 'CAMPAIGN_PAUSED',
+      notBefore: new Date(Date.now() + PAUSE_RETRY_MS),
+      detail: `Campaign PAUSED: defer FOLLOWUP_STEP fino a Resume`,
+    });
+  }
+  if (campaign && campaign.status !== 'ACTIVE') {
+    return { skipped: true, reason: `CAMPAIGN_${campaign.status}` };
   }
 
   await buildFollowupDraft(admin, job.workspaceId, job.entityId, sequenceStep, env);
