@@ -1,3 +1,6 @@
+import { lookup } from 'dns/promises';
+import { isIPv4, isIPv6 } from 'net';
+
 export interface EmailEnrichmentResult {
   email: string | null;
   sourceUrl: string | null;
@@ -34,23 +37,34 @@ function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
-function isPrivateIp(hostname: string): boolean {
-  if (hostname === 'localhost' || hostname.endsWith('.localhost')) return true;
-  if (hostname === '::1' || hostname === '0.0.0.0') return true;
-  const ipv4 = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (!ipv4) return false;
-  const a = Number(ipv4[1]);
-  const b = Number(ipv4[2]);
-  if (a === 10) return true;
-  if (a === 127) return true;
-  if (a === 0) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
+export function isPrivateIp(hostnameOrIp: string): boolean {
+  const host = hostnameOrIp.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (host === '::1' || host === '0.0.0.0') return true;
+  if (isIPv4(host)) {
+    const parts = host.split('.').map(Number);
+    const a = parts[0]!;
+    const b = parts[1]!;
+    if (a === 10) return true;
+    if (a === 127) return true;
+    if (a === 0) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    return false;
+  }
+  if (isIPv6(host)) {
+    if (host === '::1') return true;
+    if (host.startsWith('fc') || host.startsWith('fd')) return true;
+    if (host.startsWith('fe80')) return true;
+    const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+    if (mapped?.[1] && isPrivateIp(mapped[1])) return true;
+    return false;
+  }
   return false;
 }
 
-/** SSRF gate: only public http(s), no private/link-local/metadata. */
+/** Sync SSRF gate on URL shape (no DNS). */
 export function assertSafePublicUrl(raw: string): URL {
   const url = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
@@ -62,6 +76,25 @@ export function assertSafePublicUrl(raw: string): URL {
   }
   if (isPrivateIp(host)) {
     throw new Error('BLOCKED_URL: IP privato/link-local');
+  }
+  return url;
+}
+
+/** Resolve DNS and reject private/link-local/metadata destinations. */
+export async function assertSafePublicUrlResolved(raw: string): Promise<URL> {
+  const url = assertSafePublicUrl(raw);
+  let addresses: string[];
+  try {
+    const result = await lookup(url.hostname, { all: true, verbatim: true });
+    addresses = result.map((r) => r.address);
+  } catch {
+    throw new Error('BLOCKED_URL: DNS resolution failed');
+  }
+  if (addresses.length === 0) throw new Error('BLOCKED_URL: DNS empty');
+  for (const addr of addresses) {
+    if (isPrivateIp(addr)) {
+      throw new Error(`BLOCKED_URL: DNS risolto a IP privato (${addr})`);
+    }
   }
   return url;
 }
@@ -97,9 +130,9 @@ function rankEmails(emails: string[], domain: string | null, mailto: Set<string>
 }
 
 async function fetchHtmlSafe(startUrl: string): Promise<string | null> {
-  let current = assertSafePublicUrl(startUrl).toString();
+  let current = (await assertSafePublicUrlResolved(startUrl)).toString();
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    assertSafePublicUrl(current);
+    await assertSafePublicUrlResolved(current);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
@@ -149,7 +182,7 @@ export class HttpEmailEnrichmentProvider implements EmailEnrichmentProvider {
   async enrichFromWebsite(websiteUrl: string): Promise<EmailEnrichmentResult> {
     let base: URL;
     try {
-      base = assertSafePublicUrl(websiteUrl);
+      base = await assertSafePublicUrlResolved(websiteUrl);
     } catch {
       return {
         email: null,
@@ -181,7 +214,6 @@ export class HttpEmailEnrichmentProvider implements EmailEnrichmentProvider {
     }
 
     const ranked = rankEmails([...candidates], domain, mailtoSet);
-    // Prefer same-domain; never invent info@domain
     const best =
       ranked.find((e) => domain && e.endsWith(`@${domain}`)) ??
       ranked.find((e) => mailtoSet.has(e)) ??

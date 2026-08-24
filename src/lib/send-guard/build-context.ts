@@ -168,7 +168,9 @@ export async function buildSendGuardContext(
   const dailyLimit = campaign?.daily_send_limit ?? 100;
   const sendWindow = (campaign?.send_window ?? {}) as { start?: string; end?: string; timezone?: string };
   const withinSendWindow = isWithinSendWindow(sendWindow);
-  const rateLimitAvailable = (sentLastHour ?? 0) < ratePerHour && (sentToday ?? 0) < dailyLimit;
+  const hourlyRateAvailable = (sentLastHour ?? 0) < ratePerHour;
+  const dailyRateAvailable = (sentToday ?? 0) < dailyLimit;
+  const rateLimitAvailable = hourlyRateAvailable && dailyRateAvailable;
 
   const snap = (cl.policy_snapshot ?? {}) as Record<string, unknown>;
   const mode = (snap.mode as PolicyConfig['mode']) ?? 'MANUAL';
@@ -210,7 +212,10 @@ export async function buildSendGuardContext(
     campaign: {
       status: (campaign?.status as CampaignStatus) ?? 'PAUSED',
       rateLimitAvailable,
+      hourlyRateAvailable,
+      dailyRateAvailable,
       withinSendWindow,
+      sendWindow,
       outreachPausedAll: paused,
     },
     policy: {

@@ -5,6 +5,14 @@ import { RESTAURANT_PREMIUM_V2_DEFAULTS } from '@/lib/templates/restaurant-premi
 
 export const runtime = 'edge';
 
+/** ImageResponse can load https(s) images; data: / relative → use CSS hero fallback. */
+function heroSrcForOg(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const v = raw.trim();
+  if (v.startsWith('https://') || v.startsWith('http://')) return v;
+  return null;
+}
+
 export async function GET(
   _request: Request,
   ctx: { params: Promise<{ slug: string }> },
@@ -35,16 +43,21 @@ export async function GET(
     contact?: { city?: string | null };
   };
 
-  const name = data.branding?.business_name ?? 'Attività';
-  const headline = data.content?.headline ?? RESTAURANT_PREMIUM_V2_DEFAULTS.content.headline ?? name;
-  const sub = data.content?.subheadline ?? RESTAURANT_PREMIUM_V2_DEFAULTS.content.subheadline ?? '';
-  const cta = data.content?.cta ?? 'Vedi anteprima completa';
-  const accent = data.branding?.accent_color ?? '#d97706';
-  const primary = data.branding?.primary_color ?? '#1c1917';
-  const city = data.contact?.city ?? '';
+  const defaults = RESTAURANT_PREMIUM_V2_DEFAULTS;
+  const name = data.branding?.business_name?.trim() || 'Attività';
+  const headline = data.content?.headline?.trim() || defaults.content.headline || name;
+  const sub = data.content?.subheadline?.trim() || defaults.content.subheadline || '';
+  const cta = data.content?.cta?.trim() || defaults.content.cta || 'Prenota un tavolo';
+  const accent = data.branding?.accent_color || defaults.branding.accent_color || '#d97706';
+  const primary = data.branding?.primary_color || defaults.branding.primary_color || '#1c1917';
+  const city = data.contact?.city?.trim() || '';
   const rating = data.signals?.rating;
   const reviews = data.signals?.review_count;
   const wordmark = name.toUpperCase();
+  const logoUrl = heroSrcForOg(data.branding?.logo_url);
+  const heroUrl =
+    heroSrcForOg(data.branding?.hero_image) ??
+    heroSrcForOg(defaults.branding.hero_image);
 
   return new ImageResponse(
     (
@@ -53,78 +66,130 @@ export async function GET(
           width: '100%',
           height: '100%',
           display: 'flex',
-          background: primary,
-          color: 'white',
+          flexDirection: 'column',
+          background: '#fafaf9',
+          color: primary,
           fontFamily: 'Georgia, serif',
-          position: 'relative',
         }}
       >
+        {/* Navbar / wordmark — first viewport of Restaurant Premium V2 */}
         <div
           style={{
-            position: 'absolute',
-            inset: 0,
-            background: `linear-gradient(135deg, ${primary} 0%, #44403c 55%, ${accent} 100%)`,
             display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '22px 40px',
+            borderBottom: '1px solid #e7e5e4',
+            background: 'rgba(255,255,255,0.92)',
           }}
-        />
+        >
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} width={140} height={36} style={{ objectFit: 'contain' }} alt="" />
+          ) : (
+            <div style={{ fontSize: 14, letterSpacing: 6, fontWeight: 700 }}>{wordmark}</div>
+          )}
+          <div style={{ display: 'flex', gap: 28, fontSize: 16, color: '#78716c' }}>
+            <span>Esperienza</span>
+            <span>Ambiente</span>
+            <span>Contatti</span>
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: accent }}>{cta}</div>
+        </div>
+
+        {/* Hero = first viewport */}
         <div
           style={{
             position: 'relative',
             display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            width: '100%',
-            height: '100%',
-            padding: 48,
+            flex: 1,
+            overflow: 'hidden',
+            background: primary,
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 18, letterSpacing: 6, fontWeight: 700 }}>{wordmark}</div>
+          {heroUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={heroUrl}
+              width={1200}
+              height={620}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                opacity: 0.72,
+              }}
+              alt=""
+            />
+          ) : (
             <div
               style={{
-                fontSize: 14,
-                opacity: 0.7,
-                border: '1px solid rgba(255,255,255,0.35)',
-                padding: '8px 14px',
-                borderRadius: 999,
+                position: 'absolute',
+                inset: 0,
+                background: `linear-gradient(135deg, ${primary} 0%, #44403c 55%, ${accent} 100%)`,
+                display: 'flex',
               }}
-            >
-              Concept demo
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 900 }}>
+            />
+          )}
+          <div
+            style={{
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'flex-end',
+              padding: '48px 48px 40px',
+              width: '100%',
+              color: 'white',
+            }}
+          >
             {city ? (
-              <div style={{ fontSize: 20, letterSpacing: 4, textTransform: 'uppercase', opacity: 0.75 }}>
+              <div style={{ fontSize: 18, letterSpacing: 5, textTransform: 'uppercase', opacity: 0.75 }}>
                 {city}
               </div>
             ) : null}
-            <div style={{ fontSize: 58, fontWeight: 700, lineHeight: 1.05 }}>{headline}</div>
-            {sub ? <div style={{ fontSize: 24, opacity: 0.85, lineHeight: 1.35 }}>{sub}</div> : null}
-            {rating != null && reviews != null ? (
-              <div style={{ fontSize: 22, opacity: 0.9 }}>
-                ★ {rating.toFixed(1)} · {reviews.toLocaleString('it-IT')} recensioni Google
+            <div style={{ fontSize: 22, opacity: 0.85, marginTop: 8 }}>{name}</div>
+            <div style={{ fontSize: 52, fontWeight: 700, lineHeight: 1.05, marginTop: 10, maxWidth: 900 }}>
+              {headline}
+            </div>
+            {sub ? (
+              <div style={{ fontSize: 22, opacity: 0.88, lineHeight: 1.35, marginTop: 14, maxWidth: 820 }}>
+                {sub}
               </div>
             ) : null}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <div style={{ width: 120, height: 72, borderRadius: 12, background: 'rgba(255,255,255,0.15)' }} />
-              <div style={{ width: 120, height: 72, borderRadius: 12, background: 'rgba(255,255,255,0.1)' }} />
-              <div style={{ width: 120, height: 72, borderRadius: 12, background: 'rgba(255,255,255,0.08)' }} />
-            </div>
+            {rating != null ? (
+              <div style={{ fontSize: 20, marginTop: 18, opacity: 0.95 }}>
+                ★ {Number(rating).toFixed(1)}
+                {reviews != null ? ` · ${Number(reviews).toLocaleString('it-IT')} recensioni Google` : ''}
+              </div>
+            ) : null}
             <div
               style={{
-                background: accent,
-                color: 'white',
-                padding: '18px 32px',
-                borderRadius: 999,
-                fontSize: 24,
-                fontWeight: 700,
+                marginTop: 28,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
               }}
             >
-              {cta}
+              <div
+                style={{
+                  background: accent,
+                  color: 'white',
+                  padding: '16px 28px',
+                  borderRadius: 999,
+                  fontSize: 22,
+                  fontWeight: 700,
+                }}
+              >
+                {cta}
+              </div>
+              {/* Accenno struttura pagina successiva */}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ width: 100, height: 58, borderRadius: 10, background: 'rgba(255,255,255,0.18)' }} />
+                <div style={{ width: 100, height: 58, borderRadius: 10, background: 'rgba(255,255,255,0.12)' }} />
+                <div style={{ width: 100, height: 58, borderRadius: 10, background: 'rgba(255,255,255,0.08)' }} />
+              </div>
             </div>
           </div>
         </div>

@@ -9,6 +9,7 @@ import { listPublishedTemplates } from '@/lib/demos/ensure-template';
 import { buildVisualEmailDraft, buildFollowupDraft } from '@/lib/messaging/visual-email';
 import { buildSendGuardContext } from '@/lib/send-guard/build-context';
 import { runSendGuard } from '@/lib/send-guard';
+import { classifySendGuardDisposition, SendDeferredError } from '@/lib/send-guard/defer';
 import { getResendProvider } from '@/lib/providers/resend';
 import { mergePreparation } from '@/lib/campaigns/preparation';
 import { ensureMessageThread } from '@/lib/messaging/persist';
@@ -300,7 +301,13 @@ async function handleSendMessage(
 
   const ctx = await buildSendGuardContext(admin, job.workspaceId, job.entityId, sequenceStep);
   const guard = runSendGuard(ctx);
-  if (!guard.allowed) throw new Error(guard.blockers.join('; '));
+  const disposition = classifySendGuardDisposition(ctx, guard);
+  if (disposition.kind === 'defer') {
+    throw new SendDeferredError(disposition);
+  }
+  if (disposition.kind === 'block') {
+    throw new Error(disposition.detail);
+  }
 
   const { data: cl } = await admin
     .from('campaign_leads')
@@ -435,7 +442,7 @@ export async function runJobBatch(
 ) {
   const queue = new SupabaseJobQueue(admin);
   await queue.recoverStuckJobs();
-  const results: Array<{ jobId: string; ok: boolean; error?: string }> = [];
+  const results: Array<{ jobId: string; ok: boolean; deferred?: boolean; error?: string }> = [];
 
   for (let i = 0; i < limit; i += 1) {
     const job = await queue.claim({ workerId, workspaceId });
@@ -456,6 +463,20 @@ export async function runJobBatch(
       await queue.complete(job.id, result);
       results.push({ jobId: job.id, ok: true });
     } catch (err) {
+      if (err instanceof SendDeferredError) {
+        await queue.defer(job.id, {
+          notBefore: err.defer.notBefore,
+          reason: `${err.defer.reason}: ${err.defer.detail}`,
+          workerId,
+        });
+        results.push({
+          jobId: job.id,
+          ok: true,
+          deferred: true,
+          error: `DEFERRED:${err.defer.reason}`,
+        });
+        continue;
+      }
       const message = err instanceof Error ? err.message : 'job failed';
       await queue.fail(job.id, { errorCode: 'JOB_FAILED', errorDetail: message, workerId });
       results.push({ jobId: job.id, ok: false, error: message });

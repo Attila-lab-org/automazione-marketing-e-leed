@@ -51,11 +51,23 @@ export interface FailOptions {
   now?: Date;
 }
 
+export interface DeferOptions {
+  notBefore: Date;
+  reason: string;
+  workerId?: string;
+  now?: Date;
+}
+
 export interface JobQueue {
   enqueue(input: EnqueueJobInput): Promise<EnqueueResult>;
   claim(options: ClaimOptions): Promise<AutomationJob | null>;
   complete(jobId: string, result: Record<string, unknown>, workerId?: string): Promise<AutomationJob>;
   fail(jobId: string, options: FailOptions): Promise<AutomationJob>;
+  /**
+   * Commercial defer: job torna claimable dopo notBefore senza consumare
+   * budget retry tecnici e senza passare a FAILED.
+   */
+  defer(jobId: string, options: DeferOptions): Promise<AutomationJob>;
   cancel(jobId: string, reason?: string): Promise<AutomationJob>;
   /** Cancel atomico dei job pendenti di un'entità (es. follow-up su reply §12.2). */
   cancelPendingByEntity(entityType: string, entityId: string, reason?: string): Promise<number>;
@@ -217,6 +229,37 @@ export class InMemoryJobQueue implements JobQueue {
           leaseOwner: null,
           leaseExpiresAt: null,
         };
+    this.jobs.set(jobId, updated);
+    return { ...updated };
+  }
+
+  async defer(jobId: string, options: DeferOptions): Promise<AutomationJob> {
+    const job = this.requireJob(jobId);
+    this.assertRunning(job, options.workerId);
+    const now = options.now ?? this.now();
+    const notBefore =
+      options.notBefore.getTime() > now.getTime()
+        ? options.notBefore
+        : new Date(now.getTime() + 60_000);
+    // Undo claim attempt burn — commercial wait must not consume technical retries
+    const restoredAttempts = Math.max(0, job.attemptCount - 1);
+    const updated: AutomationJob = {
+      ...job,
+      status: 'QUEUED',
+      attemptCount: restoredAttempts,
+      errorCode: 'DEFERRED',
+      errorDetail: options.reason,
+      nextRetryAt: notBefore.toISOString(),
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      completedAt: null,
+      result: {
+        deferred: true,
+        reason: options.reason,
+        notBefore: notBefore.toISOString(),
+        deferredAt: now.toISOString(),
+      },
+    };
     this.jobs.set(jobId, updated);
     return { ...updated };
   }

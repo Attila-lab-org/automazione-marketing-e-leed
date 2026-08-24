@@ -36,8 +36,14 @@ export interface SendGuardContext {
     status: CampaignStatus;
     /** rate limit campaign/workspace disponibile (§11.2, §18). */
     rateLimitAvailable: boolean;
+    /** Slot orario ancora disponibile (se false → defer HOURLY). */
+    hourlyRateAvailable?: boolean;
+    /** Quota giornaliera ancora disponibile (se false → defer DAILY). */
+    dailyRateAvailable?: boolean;
     /** Finestra oraria campagna (default true se non configurata). */
     withinSendWindow?: boolean;
+    /** Config send window per calcolo notBefore defer. */
+    sendWindow?: { start?: string; end?: string; timezone?: string } | null;
     /** Kill switch globale §19.2: OUTREACH_PAUSED_ALL. */
     outreachPausedAll: boolean;
   };
@@ -112,7 +118,11 @@ function checkCampaign(ctx: SendGuardContext): SendGuardCheck {
   if (ctx.campaign.withinSendWindow === false) {
     reasons.push('fuori dalla send window della campagna (§18)');
   }
-  if (!ctx.campaign.rateLimitAvailable) {
+  if (ctx.campaign.hourlyRateAvailable === false) {
+    reasons.push('hourly rate limit esaurito (§18)');
+  } else if (ctx.campaign.dailyRateAvailable === false) {
+    reasons.push('daily send limit esaurito (§18)');
+  } else if (!ctx.campaign.rateLimitAvailable) {
     reasons.push('rate limit campaign/workspace esaurito (§18)');
   }
   return { name: 'campaign', passed: reasons.length === 0, reasons };

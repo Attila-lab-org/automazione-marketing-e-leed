@@ -132,6 +132,46 @@ export class SupabaseJobQueue implements JobQueue {
     return mapRow(data as Record<string, unknown>);
   }
 
+  async defer(
+    jobId: string,
+    options: { notBefore: Date; reason: string; workerId?: string },
+  ): Promise<AutomationJob> {
+    const { data: current } = await this.admin
+      .from('automation_jobs')
+      .select('attempt_count')
+      .eq('id', jobId)
+      .single();
+    const attempts = Math.max(0, Number(current?.attempt_count ?? 1) - 1);
+    const notBefore =
+      options.notBefore.getTime() > Date.now()
+        ? options.notBefore
+        : new Date(Date.now() + 60_000);
+
+    const { data, error } = await this.admin
+      .from('automation_jobs')
+      .update({
+        status: 'QUEUED',
+        attempt_count: attempts,
+        error_code: 'DEFERRED',
+        error_detail: options.reason,
+        next_retry_at: notBefore.toISOString(),
+        lease_owner: null,
+        lease_expires_at: null,
+        completed_at: null,
+        result: {
+          deferred: true,
+          reason: options.reason,
+          notBefore: notBefore.toISOString(),
+          deferredAt: new Date().toISOString(),
+        },
+      })
+      .eq('id', jobId)
+      .select('*')
+      .single();
+    if (error || !data) throw new Error(`Job defer fallito — ${error?.message ?? ''}`);
+    return mapRow(data as Record<string, unknown>);
+  }
+
   async cancel(jobId: string): Promise<AutomationJob> {
     const { data, error } = await this.admin
       .from('automation_jobs')

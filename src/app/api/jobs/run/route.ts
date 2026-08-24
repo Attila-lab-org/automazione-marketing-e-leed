@@ -6,16 +6,11 @@ import { ensureDefaultWorkspace } from '@/lib/workspace';
 
 export const runtime = 'nodejs';
 
-function authorized(request: Request): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return false;
-  return request.headers.get('authorization') === `Bearer ${cronSecret}`;
-}
-
+/**
+ * DEV / admin-only manual worker flush.
+ * Production cron MUST use `/api/cron/jobs` with Bearer CRON_SECRET (no admin cookie).
+ */
 export const POST = withAdmin(async (request: Request) => {
-  if (!authorized(request)) {
-    return NextResponse.json({ error: 'CRON_SECRET non valido' }, { status: 403 });
-  }
   if (!isSupabaseConfigured(process.env) || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json({ error: 'Supabase non configurato' }, { status: 503 });
   }
@@ -25,9 +20,13 @@ export const POST = withAdmin(async (request: Request) => {
   const results = await runJobBatch(
     admin,
     workspace.id,
-    body.workerId ?? `worker-${Date.now()}`,
+    body.workerId ?? `admin-manual-${Date.now()}`,
     body.limit ?? 10,
     process.env,
   );
-  return NextResponse.json({ results, processed: results.length });
+  return NextResponse.json({
+    results,
+    processed: results.length,
+    note: 'Admin manual flush — production cron is POST/GET /api/cron/jobs',
+  });
 });
