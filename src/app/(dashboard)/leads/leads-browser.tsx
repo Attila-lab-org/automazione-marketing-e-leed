@@ -310,7 +310,7 @@ export default function LeadsBrowser({
         throw new Error(`Discovery fallita (HTTP ${res.status})`);
       }
       if (!res.ok) throw new Error(data.error ?? "Discovery fallita");
-      setResultBanner(data.message);
+      setResultBanner(data.message ?? "Discovery completata");
       setModalOpen(false);
       setLoading(true);
       setReloadToken((n) => n + 1);
