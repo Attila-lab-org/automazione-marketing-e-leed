@@ -1,8 +1,13 @@
+import { notFound } from 'next/navigation';
+import { areQaFixturesAllowed } from '@/lib/qa/gate';
+
 /**
- * Static QA fixtures for Safe Live Email Test Mode UI screenshots.
- * Not linked in nav — used by scripts/qa-test-mode-screenshots.mjs
+ * DEV visual fixture only — not E2E certification.
+ * No personal data. Blocked in production unless ALLOW_PUBLIC_QA=1.
  */
 export default function QaTestModeCreatePage() {
+  if (!areQaFixturesAllowed()) notFound();
+
   return (
     <main className="min-h-screen bg-stone-100 p-8">
       <div className="mx-auto w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl">
@@ -40,7 +45,7 @@ export default function QaTestModeCreatePage() {
             Email destinatario test
             <input
               readOnly
-              value="attiliomazzetti@gmail.com"
+              value="test@example.com"
               className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
             />
           </label>

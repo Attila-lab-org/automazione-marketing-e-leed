@@ -16,14 +16,14 @@ type ProviderItem = {
 type CommercialItem = {
   id: string;
   name: string;
-  status: "READY" | "MISSING";
+  status: "READY" | "MISSING" | "INVALID";
   detail: string;
 };
 
 const TOOLTIPS: Record<string, string> = {
   supabase: "System of record: probe su workspaces.",
   google_places: "Places API (New) Text Search — stato runtime.",
-  resend: "Outreach email: mock in questo slice.",
+  resend: "Outreach email: MOCK oppure LIVE · TEST ONLY (mai entrambi).",
   browser_worker: "Analisi/screenshot: mock in questo slice.",
   ai: "AI messaging: mock in questo slice.",
 };
@@ -112,7 +112,9 @@ export default function ProvidersRuntimeList({
                   className={
                     c.status === "READY"
                       ? "rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800"
-                      : "rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800"
+                      : c.status === "INVALID"
+                        ? "rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-800"
+                        : "rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800"
                   }
                 >
                   {c.status}

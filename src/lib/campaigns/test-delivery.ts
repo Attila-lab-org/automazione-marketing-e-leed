@@ -47,7 +47,8 @@ export function isTestRecipientAllowlisted(
 
 export type DeliveryResolution = {
   deliveryMode: CampaignDeliveryMode;
-  intendedRecipient: string;
+  /** Prospect email evidence at send time — null when unavailable in TEST. */
+  intendedRecipient: string | null;
   actualDeliveryRecipient: string;
 };
 
@@ -55,6 +56,7 @@ export type DeliveryResolution = {
  * Resolve who Resend may contact.
  * PRODUCTION → lead email (unchanged).
  * TEST → campaign.test_recipient must be exactly allowlisted; never fall back to lead.
+ * TEST does NOT require prospect email (intended may be null).
  */
 export function resolveTestDelivery(args: {
   deliveryMode: CampaignDeliveryMode | string | null | undefined;
@@ -100,11 +102,12 @@ export function resolveTestDelivery(args: {
     );
   }
 
-  // Intended = lead email for audit (may be empty only if somehow missing — still block send to lead)
-  const intended = lead && isValidEmailShape(lead) ? normalizeEmailAddress(lead) : lead || '(nessuna email lead)';
+  // Intended = prospect email evidence only (null if enrichment found none)
+  const intended =
+    lead && isValidEmailShape(lead) ? normalizeEmailAddress(lead) : null;
 
-  // Hard safety: never equalize to lead unless lead itself is allowlisted AND chosen as test_recipient
-  if (lead && normalizeEmailAddress(lead) === actual && !allowlist.includes(actual)) {
+  // Hard safety: never fall back to lead unless lead itself is the allowlisted test_recipient
+  if (intended && intended === actual && !allowlist.includes(actual)) {
     throw new BlockedTestRecipientError('fallback al lead bloccato');
   }
 

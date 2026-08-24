@@ -14,6 +14,11 @@ import type {
   LeadScore,
   PolicyConfig,
 } from '@/lib/types/domain';
+import {
+  isTestRecipientAllowlisted,
+  isValidEmailShape,
+  normalizeEmailAddress,
+} from '@/lib/campaigns/test-delivery';
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -66,11 +71,17 @@ function discoveryScoreToLeadScore(
   };
 }
 
+/**
+ * Build Send Guard context.
+ * PRODUCTION: recipient = lead.email (required).
+ * TEST: recipient = campaign.test_recipient (actual delivery); prospect email optional.
+ */
 export async function buildSendGuardContext(
   admin: SupabaseClient,
   workspaceId: string,
   campaignLeadId: string,
   sequenceStep: number,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<SendGuardContext> {
   const paused = await getOutreachPausedAll(admin, workspaceId);
 
@@ -90,7 +101,9 @@ export async function buildSendGuardContext(
       .single(),
     admin
       .from('campaigns')
-      .select('status, rate_limit_per_hour, daily_send_limit, send_window')
+      .select(
+        'status, rate_limit_per_hour, daily_send_limit, send_window, delivery_mode, test_recipient',
+      )
       .eq('id', cl.campaign_id)
       .single(),
     admin
@@ -104,8 +117,21 @@ export async function buildSendGuardContext(
       : Promise.resolve({ data: null }),
   ]);
 
-  const email = lead?.email ?? null;
-  const normalized = email ? normalizeEmail(email) : null;
+  const isTest = campaign?.delivery_mode === 'TEST';
+  const leadEmail = lead?.email ?? null;
+
+  // Guard validates EFFECTIVE recipient: TEST → allowlisted test_recipient; PRODUCTION → lead email
+  let recipientEmail: string | null = leadEmail;
+  if (isTest) {
+    const testRaw = campaign?.test_recipient?.trim() ?? '';
+    recipientEmail =
+      testRaw && isValidEmailShape(testRaw) && isTestRecipientAllowlisted(testRaw, env)
+        ? normalizeEmailAddress(testRaw)
+        : testRaw || null;
+  }
+
+  const emailValid = Boolean(recipientEmail && isValidEmailShape(recipientEmail));
+  const normalized = recipientEmail ? normalizeEmail(recipientEmail) : null;
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
@@ -166,7 +192,11 @@ export async function buildSendGuardContext(
 
   const ratePerHour = campaign?.rate_limit_per_hour ?? 20;
   const dailyLimit = campaign?.daily_send_limit ?? 100;
-  const sendWindow = (campaign?.send_window ?? {}) as { start?: string; end?: string; timezone?: string };
+  const sendWindow = (campaign?.send_window ?? {}) as {
+    start?: string;
+    end?: string;
+    timezone?: string;
+  };
   const withinSendWindow = isWithinSendWindow(sendWindow);
   const hourlyRateAvailable = (sentLastHour ?? 0) < ratePerHour;
   const dailyRateAvailable = (sentToday ?? 0) < dailyLimit;
@@ -185,14 +215,15 @@ export async function buildSendGuardContext(
     campaignId: cl.campaign_id,
     version: 1,
   });
+  // Policy validEmail: PRODUCTION needs lead email; TEST uses effective recipient validity
   const evaluation = evaluatePolicyGate(policySnap, {
     action: 'send',
     score: discoveryScoreToLeadScore(
       lead?.discovery_score,
       lead?.discovery_confidence,
-      email ? 90 : 0,
+      emailValid ? 90 : isTest ? 70 : 0,
     ),
-    validEmail: Boolean(email),
+    validEmail: emailValid,
     businessStatus: (lead?.business_status as BusinessStatus) ?? 'NEW',
   });
 
@@ -201,8 +232,8 @@ export async function buildSendGuardContext(
 
   return {
     recipient: {
-      email,
-      emailValid: Boolean(email && email.includes('@')),
+      email: recipientEmail,
+      emailValid,
       suppressed: Boolean(suppression?.id),
     },
     lead: {

@@ -12,7 +12,7 @@ export default function SettingsPage() {
       <SectionSubnav items={[...SETTINGS_SUBNAV]} />
       <PageHeader
         title="Impostazioni"
-        description="Stato provider e config commerciale owner (READY/MISSING, senza valori/secrets). Resend resta MOCK fino a certificazione autorizzata."
+        description="Stato provider e config commerciale owner (READY/MISSING/INVALID, senza valori/secrets). Resend MOCK oppure LIVE · TEST ONLY secondo runtime."
       />
 
       <section aria-label="Stato provider" className="space-y-3">
@@ -23,8 +23,8 @@ export default function SettingsPage() {
       </section>
 
       <EmptyState
-        title="Outreach in pausa sicura"
-        description="RESEND / Browser Worker / AI restano in mock. Nessuna email può partire da questo slice. Usa Leads → Trova lead per certificare Google Places → Supabase."
+        title="Safe live test"
+        description="Produzione outreach resta bloccata. Campagne TEST possono usare Resend live solo verso destinatari allowlisted. Verifica APP URL + allowlist sopra."
         nextAction={{
           label: "Vai ai Leads",
           href: "/leads",

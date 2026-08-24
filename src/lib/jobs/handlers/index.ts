@@ -89,7 +89,22 @@ async function handleLeadEnrichment(
   const google = await enrichLeadFromGoogleIfNeeded(admin, job.workspaceId, leadId, env);
   const email = await enrichLeadEmail(admin, job.workspaceId, leadId);
 
-  if (!email.email) {
+  const { data: clRow } = await admin
+    .from('campaign_leads')
+    .select('campaign_id')
+    .eq('id', job.entityId)
+    .maybeSingle();
+  const { data: campaign } = clRow?.campaign_id
+    ? await admin
+        .from('campaigns')
+        .select('delivery_mode')
+        .eq('id', clRow.campaign_id)
+        .maybeSingle()
+    : { data: null };
+  const isTestCampaign = campaign?.delivery_mode === 'TEST';
+
+  // PRODUCTION: prospect email required. TEST: continue without skip (intended may be null).
+  if (!email.email && !isTestCampaign) {
     await updateCampaignLead(
       admin,
       job.entityId,
@@ -109,17 +124,18 @@ async function handleLeadEnrichment(
     job.entityId,
     { status: 'GENERATING' },
     {
-          emailStatus: email.status,
-          email: email.email,
-          emailSourceUrl: email.sourceUrl,
-          emailSourceType: email.sourceType,
-          emailConfidence: email.confidence,
-          emailSameDomain: email.sameDomain,
-          emailEvidence: email,
-          googleEnrichment: google,
-          enrichedAt: new Date().toISOString(),
-        },
-      );
+      emailStatus: email.email ? email.status : 'EMAIL_NOT_FOUND',
+      email: email.email ?? null,
+      emailSourceUrl: email.sourceUrl ?? null,
+      emailSourceType: email.sourceType ?? null,
+      emailConfidence: email.confidence ?? null,
+      emailSameDomain: email.sameDomain ?? null,
+      emailEvidence: email,
+      googleEnrichment: google,
+      intendedRecipientAvailable: Boolean(email.email),
+      enrichedAt: new Date().toISOString(),
+    },
+  );
 
   await admin
     .from('leads')
@@ -138,7 +154,11 @@ async function handleLeadEnrichment(
     priority: 60,
   });
 
-  return { emailStatus: email.status };
+  return {
+    emailStatus: email.email ? email.status : 'EMAIL_NOT_FOUND',
+    intendedRecipientAvailable: Boolean(email.email),
+    testContinuedWithoutEmail: isTestCampaign && !email.email,
+  };
 }
 
 async function handleDemoGeneration(
@@ -351,7 +371,19 @@ async function handleSendMessage(
     );
   }
 
-  const ctx = await buildSendGuardContext(admin, job.workspaceId, job.entityId, sequenceStep);
+  // Live TEST must never emit localhost demo/preview URLs
+  if (providerMode === 'live') {
+    const { assertAppUrlSafeForLiveSend } = await import('@/lib/app-url');
+    assertAppUrlSafeForLiveSend(env);
+  }
+
+  const ctx = await buildSendGuardContext(
+    admin,
+    job.workspaceId,
+    job.entityId,
+    sequenceStep,
+    env,
+  );
   const guard = runSendGuard(ctx);
   const disposition = classifySendGuardDisposition(ctx, guard);
   if (disposition.kind === 'defer') {

@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 
 export type ManualLeadInput = {
   businessName: string;
@@ -31,10 +31,10 @@ function normalizePhone(raw: string | null | undefined): string | null {
 
 /**
  * Manual lead into the same leads table / pipeline (source = MANUAL).
- * Does not invent emails; requires an explicit address from the operator.
+ * Fails closed if contact/source provenance insert fails.
  */
 export async function createManualLead(
-  admin: SupabaseClient,
+  admin: AppSupabaseClient,
   workspaceId: string,
   input: ManualLeadInput,
 ) {
@@ -48,6 +48,20 @@ export async function createManualLead(
   const phone = input.phone?.trim() || null;
   const city = input.city?.trim() || null;
   const category = input.category?.trim() || 'restaurant';
+
+  const { data: existing, error: existingError } = await admin
+    .from('leads')
+    .select('id, name, email')
+    .eq('workspace_id', workspaceId)
+    .eq('normalized_email', normalizedEmail)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(`Lead manuale: dedupe fallita — ${existingError.message}`);
+  }
+  if (existing) {
+    throw new Error(`Lead con email ${normalizedEmail} già presente (id ${existing.id})`);
+  }
 
   const { data: lead, error } = await admin
     .from('leads')
@@ -74,7 +88,7 @@ export async function createManualLead(
     throw new Error(`Lead manuale: ${error?.message ?? 'inserimento fallito'}`);
   }
 
-  await admin.from('lead_contacts').insert({
+  const { error: contactError } = await admin.from('lead_contacts').insert({
     workspace_id: workspaceId,
     lead_id: lead.id,
     type: 'EMAIL',
@@ -84,12 +98,16 @@ export async function createManualLead(
     is_primary: true,
     source: 'MANUAL',
   });
+  if (contactError) {
+    await admin.from('leads').delete().eq('id', lead.id);
+    throw new Error(`Lead manuale: lead_contacts fallito — ${contactError.message}`);
+  }
 
-  await admin.from('lead_sources').insert({
+  const { error: sourceError } = await admin.from('lead_sources').insert({
     workspace_id: workspaceId,
     lead_id: lead.id,
     source_type: 'MANUAL',
-    raw_payload: {
+    query_snapshot: {
       business_name: name,
       email: normalizedEmail,
       website_url: website,
@@ -98,6 +116,11 @@ export async function createManualLead(
       category,
     },
   });
+  if (sourceError) {
+    await admin.from('lead_contacts').delete().eq('lead_id', lead.id);
+    await admin.from('leads').delete().eq('id', lead.id);
+    throw new Error(`Lead manuale: lead_sources fallito — ${sourceError.message}`);
+  }
 
   return lead;
 }

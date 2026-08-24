@@ -6,6 +6,7 @@ import {
   approveCampaignLeads,
   updateDraftContent,
 } from '@/lib/campaigns/review-queue';
+import { resolveAppUrl } from '@/lib/app-url';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 
@@ -17,7 +18,7 @@ export const GET = withAdmin(async () => {
   }
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const appUrl = resolveAppUrl(process.env);
   const items = await listReviewQueue(admin, workspace.id, appUrl);
   return NextResponse.json({ items, count: items.length });
 });

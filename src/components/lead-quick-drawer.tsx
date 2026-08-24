@@ -179,7 +179,7 @@ export default function LeadQuickDrawer({
               <button
                 type="button"
                 disabled
-                title="Messaggi disattivati: Resend resta in mock."
+                title="Prepara messaggio dalla Review Queue / campagna — non da questo drawer."
                 className="cursor-not-allowed rounded-lg border border-stone-200 px-3 py-2 text-left text-xs font-medium text-stone-300"
               >
                 Prepara messaggio

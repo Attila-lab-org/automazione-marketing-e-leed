@@ -1,6 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { formatEmailEvidenceLabel } from '@/lib/enrichment/email-from-website';
 import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
+import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 
 export interface ReviewQueueItem {
   id: string;
@@ -12,7 +12,6 @@ export interface ReviewQueueItem {
   score: number;
   confidence: number;
   email: string | null;
-  /** Discreet provenance for selected email, e.g. "trovata su /contatti · mailto · confidence alta" */
   emailEvidenceLabel: string | null;
   deliveryMode: 'PRODUCTION' | 'TEST';
   testRecipient: string | null;
@@ -31,7 +30,7 @@ function stripHtml(html: string): string {
 }
 
 export async function listReviewQueue(
-  admin: SupabaseClient,
+  admin: AppSupabaseClient,
   workspaceId: string,
   appUrl: string,
 ): Promise<ReviewQueueItem[]> {
@@ -51,11 +50,17 @@ export async function listReviewQueue(
   const clIds = rows.map((r) => r.id);
   const campaignIds = [...new Set(rows.map((r) => r.campaign_id))];
 
-  const [{ data: leads }, { data: demos }, { data: drafts }, { data: campaigns }] = await Promise.all([
-    admin.from('leads').select('id, name, category, city, email, discovery_score, confidence').in('id', leadIds),
+  const [leadsRes, demosRes, draftsRes, campaignsRes] = await Promise.all([
+    admin
+      .from('leads')
+      .select('id, name, category, city, email, discovery_score, discovery_confidence')
+      .in('id', leadIds),
     demoIds.length
       ? admin.from('demo_sites').select('id, slug, public_url').in('id', demoIds)
-      : Promise.resolve({ data: [] as { id: string; slug: string; public_url: string | null }[] }),
+      : Promise.resolve({
+          data: [] as { id: string; slug: string; public_url: string | null }[],
+          error: null,
+        }),
     admin
       .from('message_drafts')
       .select('campaign_lead_id, subject, body, sequence_step')
@@ -66,15 +71,28 @@ export async function listReviewQueue(
       .in('id', campaignIds),
   ]);
 
-  const leadById = new Map((leads ?? []).map((l) => [l.id, l]));
-  const demoById = new Map((demos ?? []).map((d) => [d.id, d]));
+  if (leadsRes.error) throw new Error(`Review queue leads: ${leadsRes.error.message}`);
+  if (demosRes.error) throw new Error(`Review queue demos: ${demosRes.error.message}`);
+  if (draftsRes.error) throw new Error(`Review queue drafts: ${draftsRes.error.message}`);
+  if (campaignsRes.error) throw new Error(`Review queue campaigns: ${campaignsRes.error.message}`);
+
+  const leads = leadsRes.data ?? [];
+  const demos = demosRes.data ?? [];
+  const drafts = draftsRes.data ?? [];
+  const campaigns = campaignsRes.data ?? [];
+
+  const leadById = new Map(leads.map((l) => [l.id, l]));
+  const demoById = new Map(demos.map((d) => [d.id, d]));
   const draftByCl = new Map(
-    (drafts ?? []).map((d) => [`${d.campaign_lead_id}:${d.sequence_step ?? 0}`, d]),
+    drafts.map((d) => [`${d.campaign_lead_id}:${d.sequence_step ?? 0}`, d]),
   );
-  const campaignById = new Map((campaigns ?? []).map((c) => [c.id, c]));
+  const campaignById = new Map(campaigns.map((c) => [c.id, c]));
 
   return rows.map((row) => {
     const lead = leadById.get(row.lead_id);
+    if (!lead) {
+      throw new Error(`Review queue: lead ${row.lead_id} non trovato (query/schema drift)`);
+    }
     const demo = row.demo_site_id ? demoById.get(row.demo_site_id) : null;
     const draft = draftByCl.get(`${row.id}:${row.sequence_step ?? 0}`);
     const prep = (row.preparation ?? {}) as Record<string, unknown>;
@@ -86,9 +104,9 @@ export async function listReviewQueue(
       email?: string | null;
     } | null;
     const emailEvidenceLabel =
-      lead?.email && emailEvidence
+      lead.email && emailEvidence
         ? formatEmailEvidenceLabel(emailEvidence)
-        : lead?.email && typeof prep.emailSourceUrl === 'string'
+        : lead.email && typeof prep.emailSourceUrl === 'string'
           ? formatEmailEvidenceLabel({
               sourceUrl: prep.emailSourceUrl,
               sourceType: typeof prep.emailSourceType === 'string' ? prep.emailSourceType : null,
@@ -99,11 +117,6 @@ export async function listReviewQueue(
     const demoUrl = publicPath ? `${appUrl}${publicPath}` : null;
     const previewImageUrl = publicPath ? `${appUrl}${publicPath}/email-preview` : null;
     const body = draft?.body ?? '';
-    const blockers: string[] = [];
-    if (!lead?.email) blockers.push('EMAIL_NOT_FOUND');
-    if (emailStatus === 'NOT_FOUND') blockers.push('EMAIL_NOT_FOUND');
-    if (!row.demo_site_id) blockers.push('DEMO_NOT_READY');
-    if (row.status === 'FAILED') blockers.push('PREPARATION_FAILED');
 
     const campaign = campaignById.get(row.campaign_id);
     const deliveryMode =
@@ -111,16 +124,28 @@ export async function listReviewQueue(
     const testRecipient =
       typeof campaign?.test_recipient === 'string' ? campaign.test_recipient : null;
 
+    const blockers: string[] = [];
+    if (deliveryMode === 'PRODUCTION') {
+      if (!lead.email) blockers.push('EMAIL_NOT_FOUND');
+      if (emailStatus === 'NOT_FOUND' || emailStatus === 'EMAIL_NOT_FOUND') {
+        blockers.push('EMAIL_NOT_FOUND');
+      }
+    } else if (!testRecipient) {
+      blockers.push('TEST_RECIPIENT_MISSING');
+    }
+    if (!row.demo_site_id) blockers.push('DEMO_NOT_READY');
+    if (row.status === 'FAILED') blockers.push('PREPARATION_FAILED');
+
     return {
       id: row.id,
       campaignId: row.campaign_id,
       status: row.status,
-      companyName: lead?.name ?? 'Lead sconosciuto',
-      category: lead?.category ?? '—',
-      city: lead?.city ?? '—',
-      score: lead?.discovery_score ?? 0,
-      confidence: lead?.confidence ?? 0,
-      email: lead?.email ?? null,
+      companyName: lead.name,
+      category: lead.category ?? '—',
+      city: lead.city ?? '—',
+      score: lead.discovery_score ?? 0,
+      confidence: lead.discovery_confidence ?? 0,
+      email: lead.email ?? null,
       emailEvidenceLabel,
       deliveryMode,
       testRecipient,
@@ -137,7 +162,7 @@ export async function listReviewQueue(
 }
 
 export async function updateDraftContent(
-  admin: SupabaseClient,
+  admin: AppSupabaseClient,
   workspaceId: string,
   campaignLeadId: string,
   patch: { subject?: string; body?: string },
@@ -151,7 +176,12 @@ export async function updateDraftContent(
   if (clError || !cl) throw new Error(clError?.message ?? 'Lead campagna non trovato');
 
   const step = cl.sequence_step ?? 0;
-  const updates: Record<string, unknown> = {
+  const updates: {
+    is_override: boolean;
+    updated_at: string;
+    subject?: string;
+    body?: string;
+  } = {
     is_override: true,
     updated_at: new Date().toISOString(),
   };
@@ -176,7 +206,7 @@ export async function updateDraftContent(
 }
 
 export async function approveCampaignLeads(
-  admin: SupabaseClient,
+  admin: AppSupabaseClient,
   workspaceId: string,
   campaignId: string,
   campaignLeadIds?: string[],
@@ -221,7 +251,7 @@ export async function approveCampaignLeads(
 }
 
 export async function updateCampaignLeadStatus(
-  admin: SupabaseClient,
+  admin: AppSupabaseClient,
   workspaceId: string,
   campaignLeadId: string,
   status: 'SKIPPED' | 'STOPPED' | 'APPROVED',

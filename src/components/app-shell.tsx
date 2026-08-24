@@ -110,20 +110,80 @@ const SECTION_LABELS: Record<string, string> = {
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [outreachPaused, setOutreachPaused] = useState(false);
+  const [pauseState, setPauseState] = useState<"ok" | "unknown">("unknown");
   const [killSwitchOpen, setKillSwitchOpen] = useState(false);
   const [pauseLoading, setPauseLoading] = useState(true);
+  const [resendBadge, setResendBadge] = useState<{
+    label: string;
+    detail: string;
+    mode: string;
+  }>({ label: "RESEND …", detail: "Caricamento runtime…", mode: "loading" });
 
   const refreshPause = useCallback(() => {
     fetch("/api/settings/outreach-pause")
-      .then((r) => r.json())
-      .then((data) => setOutreachPaused(Boolean(data.paused)))
-      .catch(() => setOutreachPaused(false))
+      .then((r) => {
+        if (!r.ok) throw new Error("pause status failed");
+        return r.json();
+      })
+      .then((data) => {
+        setOutreachPaused(Boolean(data.paused));
+        setPauseState("ok");
+      })
+      .catch(() => {
+        // Fail-closed visual: never pretend outreach is active when read fails
+        setPauseState("unknown");
+        setOutreachPaused(true);
+      })
       .finally(() => setPauseLoading(false));
   }, []);
 
   useEffect(() => {
     refreshPause();
   }, [refreshPause]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/providers/status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const resend = (data.providers as Array<{ id: string; status: string; detail: string }>)?.find(
+          (p) => p.id === "resend",
+        );
+        if (!resend) return;
+        if (resend.status === "mock") {
+          setResendBadge({
+            label: "RESEND MOCK",
+            detail: resend.detail,
+            mode: "mock",
+          });
+        } else if (resend.status === "ready") {
+          setResendBadge({
+            label: "RESEND LIVE · TEST ONLY",
+            detail: resend.detail,
+            mode: "live",
+          });
+        } else {
+          setResendBadge({
+            label: "RESEND ERROR",
+            detail: resend.detail,
+            mode: "error",
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResendBadge({
+            label: "RESEND UNKNOWN",
+            detail: "Impossibile leggere runtime provider",
+            mode: "error",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function setPause(paused: boolean) {
     await fetch("/api/settings/outreach-pause", {
@@ -266,38 +326,61 @@ export default function AppShell({ children }: { children: ReactNode }) {
             />
           </div>
 
-          {/* Badge ambiente */}
+          {/* Badge Resend runtime (single source of truth) */}
           <span
-            title="Resend, Browser Worker e AI restano in mock. Google Places può essere live. Nessuna email parte da questo slice."
-            className="cursor-help whitespace-nowrap rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800"
+            title={resendBadge.detail}
+            className={`cursor-help whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+              resendBadge.mode === "live"
+                ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                : resendBadge.mode === "mock"
+                  ? "border-amber-300 bg-amber-50 text-amber-800"
+                  : "border-stone-300 bg-stone-100 text-stone-700"
+            }`}
           >
-            Outreach mock
+            {resendBadge.label}
           </span>
 
           {/* Kill switch globale (§19.2) */}
           <button
             type="button"
-            disabled={pauseLoading}
+            disabled={pauseLoading || pauseState === "unknown"}
             onClick={() =>
               outreachPaused ? void setPause(false) : setKillSwitchOpen(true)
             }
             title={
-              outreachPaused
-                ? "Riattiva invii e follow-up (kill switch globale, §19.2)."
-                : "Blocca immediatamente nuovi invii e follow-up in tutto il workspace (§19.2)."
+              pauseState === "unknown"
+                ? "Stato pausa sconosciuto — fail-closed (SAFE PAUSED). Riprova dopo aver ricaricato."
+                : outreachPaused
+                  ? "Riattiva invii e follow-up (kill switch globale, §19.2)."
+                  : "Blocca immediatamente nuovi invii e follow-up in tutto il workspace (§19.2)."
             }
             className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors ${
-              outreachPaused
-                ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                : "bg-red-600 text-white hover:bg-red-700"
+              pauseState === "unknown"
+                ? "bg-stone-500 text-white"
+                : outreachPaused
+                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                  : "bg-red-600 text-white hover:bg-red-700"
             }`}
           >
-            {outreachPaused ? "Riprendi outreach" : "Pausa tutto l'outreach"}
+            {pauseState === "unknown"
+              ? "SAFE PAUSED · UNKNOWN"
+              : outreachPaused
+                ? "Riprendi outreach"
+                : "Pausa tutto l'outreach"}
           </button>
         </header>
 
-        {/* Banner kill switch attivo */}
-        {outreachPaused ? (
+        {/* Banner kill switch / unknown */}
+        {pauseState === "unknown" ? (
+          <div
+            role="alert"
+            className="border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-sm text-amber-900"
+          >
+            <span className="font-semibold">SAFE PAUSED · UNKNOWN:</span>{" "}
+            impossibile leggere lo stato del kill switch. UI fail-closed (backend resta
+            fail-closed indipendentemente).
+          </div>
+        ) : outreachPaused ? (
           <div
             role="alert"
             className="border-b border-red-200 bg-red-50 px-6 py-2.5 text-sm text-red-800"

@@ -34,21 +34,34 @@ export class ResendLive implements ResendProvider {
     this.client = new Resend(config.apiKey);
   }
 
-  async send(message: OutboundEmail): Promise<SendResult> {
-    const headers: Record<string, string> = { ...(message.headers ?? {}) };
-    if (message.idempotencyKey) {
-      headers['Idempotency-Key'] = message.idempotencyKey;
-    }
+  /** Exposed for unit tests — do not use outside adapter. */
+  get _clientForTests(): Resend {
+    return this.client;
+  }
 
-    const result = await this.client.emails.send({
+  async send(message: OutboundEmail): Promise<SendResult> {
+    // Normal email headers only — Idempotency-Key belongs in SDK send options.
+    const headers: Record<string, string> | undefined = message.headers
+      ? { ...message.headers }
+      : undefined;
+
+    const emailPayload = {
       from: message.from,
       to: message.to,
       subject: message.subject,
       html: message.html ?? message.text ?? '',
       text: message.text,
-      headers,
+      ...(headers ? { headers } : {}),
       replyTo: message.headers?.['Reply-To'],
-    });
+    };
+
+    const sendOptions = message.idempotencyKey
+      ? { idempotencyKey: message.idempotencyKey }
+      : undefined;
+
+    const result = sendOptions
+      ? await this.client.emails.send(emailPayload, sendOptions)
+      : await this.client.emails.send(emailPayload);
 
     if (result.error) {
       throw new Error(`ResendLive.send: ${result.error.message}`);

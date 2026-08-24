@@ -23,6 +23,17 @@ describe('Safe Live Email Test Mode — delivery resolve', () => {
     expect(r.actualDeliveryRecipient).not.toBe(r.intendedRecipient);
   });
 
+  it('Caso A-bis: TEST senza prospect email → intended null, actual allowlisted', () => {
+    const r = resolveTestDelivery({
+      deliveryMode: 'TEST',
+      testRecipient: 'test@attila-lab.net',
+      leadEmail: null,
+      env,
+    });
+    expect(r.intendedRecipient).toBeNull();
+    expect(r.actualDeliveryRecipient).toBe('test@attila-lab.net');
+  });
+
   it('Caso B: TEST + non allowlisted → BLOCK, zero Resend implied', () => {
     expect(() =>
       resolveTestDelivery({

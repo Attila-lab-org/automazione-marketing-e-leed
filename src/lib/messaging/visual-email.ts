@@ -1,3 +1,4 @@
+import { resolveAppUrl } from '@/lib/app-url';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadDemoById } from '@/lib/demos/load';
 
@@ -78,7 +79,7 @@ export async function buildVisualEmailDraft(
     .eq('id', campaign.message_template_version_id)
     .single();
 
-  const appUrl = env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const appUrl = resolveAppUrl(env);
   const demoUrl = `${appUrl}${demo.publicPath}`;
   const previewImageUrl = `${appUrl}${demo.publicPath}/email-preview`;
   const businessName = lead?.name ?? 'la tua attività';
@@ -149,7 +150,7 @@ export async function buildFollowupDraft(
   ]);
 
   const demo = cl.demo_site_id ? await loadDemoById(admin, workspaceId, cl.demo_site_id) : null;
-  const appUrl = env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const appUrl = resolveAppUrl(env);
   const demoUrl = demo ? `${appUrl}${demo.publicPath}` : appUrl;
   const businessName = lead?.name ?? 'la tua attività';
 

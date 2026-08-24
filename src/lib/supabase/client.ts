@@ -1,17 +1,11 @@
 /**
- * Supabase client factory — Phase 1.
- *
- * - Browser client: anon key, sicuro lato client (RLS applicata §16.4).
- * - Server client: cookie-based per le route Next.js (sessione utente).
- * - Admin client: service role, SOLO server-side — mai esposto al client (§18).
- *
- * Ogni factory fallisce con messaggio chiaro se mancano le env (mock-friendly:
- * i test unitari non toccano mai queste factory).
+ * Supabase client factory — typed against Database (migrations 0001..0016).
  */
 
 import { createBrowserClient as createSsrBrowserClient } from '@supabase/ssr';
 import { createServerClient as createSsrServerClient, type CookieOptions } from '@supabase/ssr';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
+import type { AppSupabaseClient, Database } from '@/lib/types/supabase-database';
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name];
@@ -30,10 +24,13 @@ export function isSupabaseConfigured(env: NodeJS.ProcessEnv = process.env): bool
 }
 
 /** Client browser (anon key + RLS). */
-export function createBrowserSupabaseClient(env: NodeJS.ProcessEnv = process.env): SupabaseClient {
+export function createBrowserSupabaseClient(
+  env: NodeJS.ProcessEnv = process.env,
+): AppSupabaseClient {
   const url = requireEnv(env, 'NEXT_PUBLIC_SUPABASE_URL');
   const anonKey = requireEnv(env, 'NEXT_PUBLIC_SUPABASE_ANON_KEY');
-  return createSsrBrowserClient(url, anonKey);
+  // @supabase/ssr generic slot order differs slightly from supabase-js; Database typing is preserved.
+  return createSsrBrowserClient<Database>(url, anonKey) as unknown as AppSupabaseClient;
 }
 
 export interface CookieAdapter {
@@ -49,26 +46,27 @@ export interface CookieAdapter {
 export function createServerSupabaseClient(
   cookies: CookieAdapter,
   env: NodeJS.ProcessEnv = process.env,
-): SupabaseClient {
+): AppSupabaseClient {
   const url = requireEnv(env, 'NEXT_PUBLIC_SUPABASE_URL');
   const anonKey = requireEnv(env, 'NEXT_PUBLIC_SUPABASE_ANON_KEY');
-  return createSsrServerClient(url, anonKey, {
+  return createSsrServerClient<Database>(url, anonKey, {
     cookies: {
       get: (name: string) => cookies.get(name),
       set: (name: string, value: string, options: CookieOptions) => cookies.set(name, value, options),
       remove: (name: string, options: CookieOptions) => cookies.remove(name, options),
     },
-  });
+  }) as unknown as AppSupabaseClient;
 }
 
 /**
- * Admin client (service role — bypassa RLS). SOLO server-side: domain services,
- * worker, job orchestrator. La service key non arriva mai al client (§11.2, §18).
+ * Admin client (service role — bypassa RLS). SOLO server-side.
  */
-export function createAdminSupabaseClient(env: NodeJS.ProcessEnv = process.env): SupabaseClient {
+export function createAdminSupabaseClient(
+  env: NodeJS.ProcessEnv = process.env,
+): AppSupabaseClient {
   const url = requireEnv(env, 'NEXT_PUBLIC_SUPABASE_URL');
   const serviceRoleKey = requireEnv(env, 'SUPABASE_SERVICE_ROLE_KEY');
-  return createClient(url, serviceRoleKey, {
+  return createClient<Database>(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }

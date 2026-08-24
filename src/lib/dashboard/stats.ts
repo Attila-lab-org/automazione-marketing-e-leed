@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 
 export interface DashboardStats {
   leadsTotal: number;
@@ -11,8 +11,12 @@ export interface DashboardStats {
   hotInterested: number;
 }
 
+function assertOk(label: string, error: { message: string } | null) {
+  if (error) throw new Error(`Dashboard ${label}: ${error.message}`);
+}
+
 export async function getDashboardStats(
-  admin: SupabaseClient,
+  admin: AppSupabaseClient,
   workspaceId: string,
 ): Promise<DashboardStats> {
   const [
@@ -30,7 +34,7 @@ export async function getDashboardStats(
       .from('leads')
       .select('id', { count: 'exact', head: true })
       .eq('workspace_id', workspaceId)
-      .in('qualification_status', ['PREQUALIFIED', 'QUALIFIED']),
+      .eq('qualification_status', 'PREQUALIFIED'),
     admin
       .from('campaigns')
       .select('id', { count: 'exact', head: true })
@@ -50,7 +54,8 @@ export async function getDashboardStats(
       .from('messages')
       .select('id', { count: 'exact', head: true })
       .eq('workspace_id', workspaceId)
-      .eq('status', 'SENT'),
+      .eq('direction', 'OUTBOUND')
+      .not('sent_at', 'is', null),
     admin
       .from('message_events')
       .select('id', { count: 'exact', head: true })
@@ -60,8 +65,17 @@ export async function getDashboardStats(
       .from('leads')
       .select('id', { count: 'exact', head: true })
       .eq('workspace_id', workspaceId)
-      .in('business_status', ['INTERESTED', 'HOT']),
+      .in('business_status', ['INTERESTED', 'WON']),
   ]);
+
+  assertOk('leadsTotal', leadsRes.error);
+  assertOk('leadsQualified', qualifiedRes.error);
+  assertOk('campaignsActive', campaignsRes.error);
+  assertOk('demosReady', demosRes.error);
+  assertOk('emailsQueued', queuedRes.error);
+  assertOk('emailsSent', sentRes.error);
+  assertOk('replies', repliesRes.error);
+  assertOk('hotInterested', hotRes.error);
 
   return {
     leadsTotal: leadsRes.count ?? 0,

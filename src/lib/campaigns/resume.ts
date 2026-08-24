@@ -1,11 +1,12 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 
 /**
  * Resume a PAUSED campaign and release deferred jobs waiting on CAMPAIGN_PAUSED
  * so they become claimable immediately (no attempt burn).
+ * Does NOT touch automation_jobs.updated_at (column does not exist in 0007).
  */
 export async function resumeCampaign(
-  admin: SupabaseClient,
+  admin: AppSupabaseClient,
   workspaceId: string,
   campaignId: string,
 ): Promise<{ ok: true; status: 'ACTIVE'; releasedJobs: number }> {
@@ -31,15 +32,17 @@ export async function resumeCampaign(
 }
 
 async function releasePausedDeferredJobs(
-  admin: SupabaseClient,
+  admin: AppSupabaseClient,
   workspaceId: string,
   campaignId: string,
 ): Promise<number> {
-  const { data: leads } = await admin
+  const { data: leads, error: leadsError } = await admin
     .from('campaign_leads')
     .select('id')
     .eq('workspace_id', workspaceId)
     .eq('campaign_id', campaignId);
+
+  if (leadsError) throw new Error(`Resume: campaign_leads — ${leadsError.message}`);
 
   const entityIds = (leads ?? []).map((l) => l.id);
   if (entityIds.length === 0) return 0;
@@ -49,7 +52,6 @@ async function releasePausedDeferredJobs(
     .from('automation_jobs')
     .update({
       next_retry_at: now,
-      updated_at: now,
     })
     .eq('workspace_id', workspaceId)
     .eq('status', 'QUEUED')
@@ -59,8 +61,7 @@ async function releasePausedDeferredJobs(
     .select('id');
 
   if (error) {
-    // Best-effort: resume still succeeds even if job bump fails
-    return 0;
+    throw new Error(`Resume: release deferred jobs fallito — ${error.message}`);
   }
   return jobs?.length ?? 0;
 }

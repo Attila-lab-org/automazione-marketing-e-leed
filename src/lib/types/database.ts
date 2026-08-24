@@ -757,6 +757,8 @@ export interface CampaignLeadRow {
   status: CampaignLeadStatus;
   policy_version_id: string;
   policy_snapshot: Json;
+  /** 0013 — enrichment/demo/send metadata (jsonb). */
+  preparation: Json;
   sequence_step: number;
   next_action_at: string | null;
   demo_site_id: string | null;
@@ -774,6 +776,7 @@ export interface CampaignLeadInsert {
   status?: CampaignLeadStatus;
   policy_version_id: string;
   policy_snapshot: Json;
+  preparation?: Json;
   sequence_step?: number;
   next_action_at?: string | null;
   demo_site_id?: string | null;

@@ -3,6 +3,7 @@
  * Nessun secret viene restituito al client.
  */
 
+import { getAppUrlStatus } from '@/lib/app-url';
 import { getGooglePlacesProvider } from '@/lib/providers/google-places';
 import { getOwnerCommercialStatus } from '@/lib/templates/owner-commercial';
 import { getTestDeliveryStatus } from '@/lib/campaigns/test-delivery';
@@ -24,10 +25,11 @@ export type CommercialConfigItem = {
     | 'owner_offer_price'
     | 'owner_show_bridge'
     | 'resend_test_allowlist'
-    | 'test_campaign_safety';
+    | 'test_campaign_safety'
+    | 'app_url';
   name: string;
-  /** READY / MISSING — never include secret values. */
-  status: 'READY' | 'MISSING';
+  /** READY / MISSING / INVALID — never include secret values. */
+  status: 'READY' | 'MISSING' | 'INVALID';
   detail: string;
 };
 
@@ -150,6 +152,7 @@ function staticMockProvider(
 function commercialConfig(env: NodeJS.ProcessEnv): CommercialConfigItem[] {
   const st = getOwnerCommercialStatus(env);
   const test = getTestDeliveryStatus(env);
+  const appUrl = getAppUrlStatus(env);
   return [
     {
       id: 'owner_whatsapp',
@@ -180,6 +183,12 @@ function commercialConfig(env: NodeJS.ProcessEnv): CommercialConfigItem[] {
       detail: st.showBridge ? 'mid-page OwnerBridge ON' : 'default OFF (85% restaurant)',
     },
     {
+      id: 'app_url',
+      name: 'APP URL (NEXT_PUBLIC_APP_URL)',
+      status: appUrl.status,
+      detail: appUrl.detail,
+    },
+    {
       id: 'resend_test_allowlist',
       name: 'RESEND_TEST_RECIPIENT_ALLOWLIST',
       status: test.allowlist,
@@ -203,7 +212,12 @@ function commercialConfig(env: NodeJS.ProcessEnv): CommercialConfigItem[] {
 function probeResend(env: NodeJS.ProcessEnv): ProviderStatusItem {
   const mode = modeOf(env, 'RESEND_PROVIDER_MODE');
   if (mode === 'mock') {
-    return { id: 'resend', name: 'Resend', status: 'mock', detail: 'RESEND_PROVIDER_MODE=mock' };
+    return {
+      id: 'resend',
+      name: 'Resend',
+      status: 'mock',
+      detail: 'RESEND MOCK · RESEND_PROVIDER_MODE=mock',
+    };
   }
   if (mode === 'live') {
     if (!env.RESEND_API_KEY?.trim() || !env.RESEND_FROM?.trim()) {
@@ -218,10 +232,41 @@ function probeResend(env: NodeJS.ProcessEnv): ProviderStatusItem {
       id: 'resend',
       name: 'Resend',
       status: 'ready',
-      detail: 'RESEND_PROVIDER_MODE=live · key/from present (TEST campaigns only until authorized)',
+      detail: 'RESEND LIVE · TEST ONLY (PRODUCTION hard-blocked)',
     };
   }
   return { id: 'resend', name: 'Resend', status: 'error', detail: `mode non valido: ${mode}` };
+}
+
+/** Single source of truth for header / operator badge. */
+export function getResendRuntimeBadge(env: NodeJS.ProcessEnv = process.env): {
+  label: 'RESEND MOCK' | 'RESEND LIVE · TEST ONLY' | 'RESEND ERROR';
+  mode: 'mock' | 'live' | 'error';
+  detail: string;
+} {
+  const mode = modeOf(env, 'RESEND_PROVIDER_MODE');
+  if (mode === 'mock') {
+    return {
+      label: 'RESEND MOCK',
+      mode: 'mock',
+      detail: 'Nessuna email reale. Provider mock.',
+    };
+  }
+  if (mode === 'live') {
+    if (!env.RESEND_API_KEY?.trim() || !env.RESEND_FROM?.trim()) {
+      return {
+        label: 'RESEND ERROR',
+        mode: 'error',
+        detail: 'mode=live ma key/from mancanti',
+      };
+    }
+    return {
+      label: 'RESEND LIVE · TEST ONLY',
+      mode: 'live',
+      detail: 'Live solo per campagne TEST allowlisted. PRODUCTION bloccata.',
+    };
+  }
+  return { label: 'RESEND ERROR', mode: 'error', detail: `mode non valido: ${mode}` };
 }
 
 export async function getProvidersStatus(
