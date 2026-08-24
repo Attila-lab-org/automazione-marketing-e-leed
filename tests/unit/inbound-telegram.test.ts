@@ -3,6 +3,10 @@ import { buildAutoReplyText } from '../../src/lib/inbound/auto-reply';
 import { INBOUND_CHANNEL_REGISTRY } from '../../src/lib/inbound/channels';
 import { getInboundAdapter } from '../../src/lib/inbound/adapters';
 import { classifyInboundIntent } from '../../src/lib/inbound/intent';
+import {
+  DEFAULT_TELEGRAM_SETTINGS,
+  normalizeTelegramSettings,
+} from '../../src/lib/inbound/telegram-settings';
 import type { NormalizedInboundMessage } from '../../src/lib/inbound/types';
 import { parseTelegramUpdate } from '../../src/lib/providers/telegram/parse';
 import { TelegramMock } from '../../src/lib/providers/telegram/mock';
@@ -50,6 +54,25 @@ describe('inbound intent classifier', () => {
       classifyInboundIntent(baseMessage({ text: 'sito web crypto casino' })).matched,
     ).toBe(false);
   });
+
+  it('usa le parole chiave configurate dalla dashboard', () => {
+    const configured = {
+      ...DEFAULT_TELEGRAM_SETTINGS.keywords,
+      website: ['restyling portale'],
+    };
+    expect(
+      classifyInboundIntent(
+        baseMessage({ text: 'Vorrei un restyling portale aziendale' }),
+        configured,
+      ).intent,
+    ).toBe('WEBSITE_REQUEST');
+    expect(
+      classifyInboundIntent(
+        baseMessage({ text: 'Vorrei un sito web aziendale' }),
+        configured,
+      ).matched,
+    ).toBe(false);
+  });
 });
 
 describe('auto-reply policy', () => {
@@ -70,6 +93,31 @@ describe('auto-reply policy', () => {
     expect(
       buildAutoReplyText({ message: baseMessage({ text: 'che bella giornata' }), intent }),
     ).toBeNull();
+  });
+
+  it('compila il testo personalizzato con i campi disponibili', () => {
+    const message = baseMessage({ authorDisplayName: 'Mario Rossi' });
+    const intent = classifyInboundIntent(message);
+    expect(
+      buildAutoReplyText({
+        message,
+        intent,
+        studioName: 'Attila Lab',
+        template: 'Ciao {nome}, {studio} può aiutarti con {richiesta}.',
+      }),
+    ).toBe('Ciao Mario, Attila Lab può aiutarti con un sito web.');
+  });
+});
+
+describe('telegram dashboard settings', () => {
+  it('parte fermo e limita i valori salvati', () => {
+    const settings = normalizeTelegramSettings({
+      replyTemplate: ' Ciao {nome} ',
+      keywords: { website: ['sito su misura', 'sito su misura', ''] },
+    });
+    expect(settings.enabled).toBe(false);
+    expect(settings.replyTemplate).toBe('Ciao {nome}');
+    expect(settings.keywords.website).toEqual(['sito su misura']);
   });
 });
 
