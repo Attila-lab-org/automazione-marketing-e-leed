@@ -13,6 +13,7 @@ import { RestaurantV3Header } from './RestaurantV3Header';
 import { RestaurantV3Hero } from './RestaurantV3Hero';
 import { RestaurantV3Intro } from './RestaurantV3Intro';
 import { RestaurantV3Location } from './RestaurantV3Location';
+import { RestaurantV3OwnerBridge } from './RestaurantV3OwnerBridge';
 import { RestaurantV3OwnerCTA } from './RestaurantV3OwnerCTA';
 import { RestaurantV3OwnerFab } from './RestaurantV3OwnerFab';
 import { RestaurantV3OwnerRibbon } from './RestaurantV3OwnerRibbon';
@@ -42,6 +43,11 @@ export type RestaurantPremiumV3Props = {
   demoSlug?: string;
 };
 
+/**
+ * Landing focus (dual audience):
+ * - Diner simulation: ONE booking goal → header + hero + final CTA only
+ * - Owner conversion: ribbon + mid-page bridge + final offer + WhatsApp FAB
+ */
 export default function RestaurantPremiumV3({
   data,
   compact = false,
@@ -68,6 +74,7 @@ export default function RestaurantPremiumV3({
     data.content.about?.trim() ||
     RESTAURANT_PREMIUM_V3_CONCEPT_COPY.description;
   const cta = data.content.cta?.trim() || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.cta;
+  const ctaShort = RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ctaShort;
   const ctaHref = resolveRestaurantCtaHref({
     ctaUrl: data.content.cta_url,
     phone: data.contact.phone,
@@ -105,7 +112,7 @@ export default function RestaurantPremiumV3({
       <RestaurantV3Header
         name={wordmarkFromName(name) || name}
         logoUrl={data.branding.logo_url}
-        ctaLabel={cta}
+        ctaLabel={ctaShort}
         ctaHref={ctaHref}
         scrolled={scrolled}
       />
@@ -124,10 +131,13 @@ export default function RestaurantPremiumV3({
       <RestaurantV3Trust rating={data.signals.rating} reviewCount={data.signals.review_count} />
       <RestaurantV3Intro description={description} imageSrc={gallery[0]} />
       <RestaurantV3Experience />
-      <RestaurantV3Story ctaLabel={cta} ctaHref={ctaHref} />
+      {!compact ? (
+        <RestaurantV3OwnerBridge businessName={name} whatsappHref={ownerWhatsAppHref} />
+      ) : null}
+      <RestaurantV3Story />
       <RestaurantV3Gallery images={gallery} />
       <div id="prenota">
-        <RestaurantV3DigitalValue ctaLabel={cta} ctaHref={ctaHref} />
+        <RestaurantV3DigitalValue />
       </div>
       <RestaurantV3Location
         address={data.contact.address}

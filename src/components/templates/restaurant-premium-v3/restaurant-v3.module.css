@@ -653,24 +653,111 @@
   align-items: center;
 }
 
-@media (min-width: 900px) {
-  .valueInner {
-    grid-template-columns: 1.4fr auto;
-  }
-}
-
 .valueInner h2 {
   font-family: var(--font-display);
   font-weight: 500;
   letter-spacing: -0.02em;
   line-height: 1.05;
-  font-size: clamp(2rem, 4vw, 3rem);
+  font-size: clamp(1.85rem, 3.5vw, 2.85rem);
   margin: 0.5rem 0 0.75rem;
+  max-width: 18ch;
 }
 
 .valueInner p {
   opacity: 0.82;
   max-width: 36rem;
+  margin: 0;
+}
+
+/* Mid-page owner bridge — commercial focus without booking CTA spam */
+.ownerBridge {
+  padding: clamp(3rem, 7vw, 5rem) var(--space-gutter);
+  background: linear-gradient(120deg, #161310 0%, #221c18 55%, #1a1612 100%);
+  color: #f3ebe3;
+  border-block: 1px solid color-mix(in srgb, #25d366 18%, transparent);
+}
+
+.ownerBridgeInner {
+  display: grid;
+  gap: 2rem;
+  align-items: center;
+}
+
+@media (min-width: 860px) {
+  .ownerBridgeInner {
+    grid-template-columns: 1.35fr 0.85fr;
+    gap: 3rem;
+  }
+}
+
+.ownerBridgeCopy h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  font-size: clamp(1.7rem, 3.4vw, 2.6rem);
+  margin: 0.55rem 0 0.85rem;
+  max-width: 18ch;
+}
+
+.ownerBridgeCopy p {
+  margin: 0;
+  opacity: 0.8;
+  max-width: 34rem;
+  line-height: 1.55;
+}
+
+.ownerBridgeAside {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  align-items: flex-start;
+  padding: 1.35rem 1.5rem;
+  border-radius: 1.25rem;
+  border: 1px solid color-mix(in srgb, #25d366 28%, transparent);
+  background: color-mix(in srgb, #25d366 8%, transparent);
+}
+
+.ownerBridgePrice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0;
+}
+
+.ownerBridgePrice span {
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 5vw, 3.2rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: #7dffb0;
+}
+
+.ownerBridgePrice small {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  font-weight: 600;
+}
+
+.ownerBridgeAside .btnWhatsApp {
+  min-width: 100%;
+  box-shadow: none;
+}
+
+.ownerBridgeMore {
+  color: color-mix(in srgb, #fff 75%, transparent);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, #fff 35%, transparent);
+  padding-bottom: 1px;
+}
+
+.ownerBridgeMore:hover {
+  color: #fff;
 }
 
 /* Location */

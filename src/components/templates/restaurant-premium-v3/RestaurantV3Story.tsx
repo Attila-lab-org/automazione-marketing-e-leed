@@ -1,12 +1,8 @@
 import styles from './restaurant-v3.module.css';
 import { RESTAURANT_PREMIUM_V3_ASSETS, RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '@/lib/templates/v3-assets';
 
-type Props = {
-  ctaLabel: string;
-  ctaHref: string;
-};
-
-export function RestaurantV3Story({ ctaLabel, ctaHref }: Props) {
+/** Mid-page narrative without repeating the restaurant booking CTA. */
+export function RestaurantV3Story() {
   return (
     <section className={`${styles.section} ${styles.sectionNarrow}`} data-reveal>
       <div className={styles.story}>
@@ -18,11 +14,6 @@ export function RestaurantV3Story({ ctaLabel, ctaHref }: Props) {
           <p className={styles.eyebrow}>Racconto</p>
           <h2>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.storyHeadline}</h2>
           <p>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.storyBody}</p>
-          <p style={{ marginTop: '1.25rem' }}>
-            <a className={`${styles.btn} ${styles.btnPrimary}`} href={ctaHref}>
-              {ctaLabel}
-            </a>
-          </p>
         </div>
       </div>
     </section>
