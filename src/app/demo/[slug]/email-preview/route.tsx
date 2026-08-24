@@ -7,15 +7,16 @@ import { RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '@/lib/templates/v3-assets';
 
 export const runtime = 'edge';
 
-/** Formato email-safe: piccolo, senza foto remote (PNG ~1.5MB faceva fallire Gmail). */
-const EMAIL_OG = { width: 600, height: 360 } as const;
+/** 600×340 — proporzione email, senza overflow Satori. */
+const W = 600;
+const H = 340;
 
 const CACHE_HEADERS = {
-  'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+  'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
 };
 
 function truncate(text: string, max: number): string {
-  const t = text.trim();
+  const t = text.trim().replace(/\s+/g, ' ');
   if (t.length <= max) return t;
   return `${t.slice(0, max - 1).trimEnd()}…`;
 }
@@ -42,144 +43,165 @@ export async function GET(
     };
     content?: {
       headline?: string | null;
-      subheadline?: string | null;
       cta?: string | null;
     };
     signals?: { rating?: number | null; review_count?: number | null };
     contact?: { city?: string | null };
   };
 
-  const name = truncate(data.branding?.business_name?.trim() || 'Attività', 42);
+  const name = truncate(data.branding?.business_name?.trim() || 'Attività', 36);
   const headline = truncate(
     data.content?.headline?.trim() ||
       (isV3 ? RESTAURANT_PREMIUM_V3_CONCEPT_COPY.headline : RESTAURANT_PREMIUM_V2_DEFAULTS.content.headline) ||
       name,
-    72,
+    64,
   );
-  const cta =
+  const cta = truncate(
     data.content?.cta?.trim() ||
-    (isV3 ? RESTAURANT_PREMIUM_V3_CONCEPT_COPY.cta : 'Prenota un tavolo');
+      (isV3 ? RESTAURANT_PREMIUM_V3_CONCEPT_COPY.cta : 'Prenota un tavolo'),
+    22,
+  );
   const accent = data.branding?.accent_color || (isV3 ? '#b86a45' : '#d97706');
   const primary = data.branding?.primary_color || (isV3 ? '#2c241e' : '#1c1917');
-  const city = data.contact?.city?.trim() || '';
+  const city = truncate(data.contact?.city?.trim() || '', 24);
   const rating = data.signals?.rating;
   const reviews = data.signals?.review_count;
+  const nameSize = name.length > 24 ? 26 : name.length > 16 ? 30 : 34;
 
   return new ImageResponse(
     (
       <div
         style={{
-          width: '100%',
-          height: '100%',
+          width: W,
+          height: H,
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: 'space-between',
-          background: `linear-gradient(145deg, ${primary} 0%, #3d2f28 48%, ${accent} 140%)`,
-          color: '#fffdf9',
+          background: '#ebe4da',
           fontFamily: 'Georgia, serif',
-          padding: '28px 32px',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* Chrome browser finto — comunica “anteprima sito” */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            height: 36,
+            paddingLeft: 14,
+            paddingRight: 14,
+            background: '#f7f3ee',
+            borderBottom: '1px solid #d9d0c4',
+          }}
+        >
+          <div style={{ display: 'flex', width: 10, height: 10, borderRadius: 999, background: '#e8a0a0' }} />
+          <div style={{ display: 'flex', width: 10, height: 10, borderRadius: 999, background: '#e8d08a' }} />
+          <div style={{ display: 'flex', width: 10, height: 10, borderRadius: 999, background: '#a8d4a0' }} />
           <div
             style={{
               display: 'flex',
-              fontSize: 12,
-              letterSpacing: 2,
-              textTransform: 'uppercase',
-              opacity: 0.75,
+              flex: 1,
+              marginLeft: 10,
+              height: 22,
+              borderRadius: 6,
+              background: '#fff',
+              border: '1px solid #ddd4c8',
+              alignItems: 'center',
+              paddingLeft: 10,
+              paddingRight: 10,
+              fontSize: 11,
+              color: '#7a6f65',
               fontFamily: 'system-ui, sans-serif',
             }}
           >
-            Anteprima personalizzata
+            anteprima · {name.toLowerCase()}
           </div>
-          {city ? (
-            <div
-              style={{
-                display: 'flex',
-                fontSize: 12,
-                letterSpacing: 1.5,
-                textTransform: 'uppercase',
-                opacity: 0.7,
-                fontFamily: 'system-ui, sans-serif',
-              }}
-            >
-              {truncate(city, 28)}
-            </div>
-          ) : null}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 540 }}>
-          <div
-            style={{
-              display: 'flex',
-              fontSize: name.length > 28 ? 28 : 34,
-              fontWeight: 700,
-              lineHeight: 1.1,
-              letterSpacing: 0.2,
-            }}
-          >
-            {name}
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              fontSize: 16,
-              lineHeight: 1.35,
-              opacity: 0.92,
-              maxWidth: 520,
-            }}
-          >
-            {headline}
-          </div>
-          {rating != null ? (
-            <div
-              style={{
-                display: 'flex',
-                fontSize: 13,
-                opacity: 0.85,
-                fontFamily: 'system-ui, sans-serif',
-                marginTop: 4,
-              }}
-            >
-              {Number(rating).toFixed(1)}
-              {reviews != null
-                ? ` · ${Number(reviews).toLocaleString('it-IT')} recensioni Google`
-                : ' su Google'}
-            </div>
-          ) : null}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div
-            style={{
-              display: 'flex',
-              background: accent,
-              color: '#fffdf9',
-              padding: '12px 20px',
-              borderRadius: 999,
-              fontSize: 15,
-              fontWeight: 700,
-              fontFamily: 'system-ui, sans-serif',
-            }}
-          >
-            {truncate(cta, 28)}
-          </div>
+        {/* Hero card */}
+        <div
+          style={{
+            display: 'flex',
+            flex: 1,
+            flexDirection: 'column',
+            justifyContent: 'flex-end',
+            padding: '22px 24px 20px',
+            background: `linear-gradient(160deg, ${primary} 0%, #4a342c 55%, ${accent} 160%)`,
+          }}
+        >
           <div
             style={{
               display: 'flex',
               fontSize: 11,
-              opacity: 0.65,
+              color: 'rgba(255,253,249,0.72)',
               fontFamily: 'system-ui, sans-serif',
+              marginBottom: 8,
             }}
           >
-            Concept demo
+            {city ? `${city} · anteprima personalizzata` : 'Anteprima personalizzata'}
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              fontSize: nameSize,
+              fontWeight: 700,
+              color: '#fffdf9',
+              lineHeight: 1.12,
+              marginBottom: 8,
+              maxWidth: 540,
+            }}
+          >
+            {name}
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              fontSize: 14,
+              color: 'rgba(255,253,249,0.9)',
+              lineHeight: 1.35,
+              marginBottom: 14,
+              maxWidth: 500,
+            }}
+          >
+            {headline}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div
+              style={{
+                display: 'flex',
+                background: accent,
+                color: '#fffdf9',
+                padding: '10px 18px',
+                borderRadius: 999,
+                fontSize: 13,
+                fontWeight: 700,
+                fontFamily: 'system-ui, sans-serif',
+              }}
+            >
+              {cta}
+            </div>
+            {rating != null ? (
+              <div
+                style={{
+                  display: 'flex',
+                  fontSize: 12,
+                  color: 'rgba(255,253,249,0.82)',
+                  fontFamily: 'system-ui, sans-serif',
+                }}
+              >
+                ★ {Number(rating).toFixed(1)}
+                {reviews != null ? ` · ${Number(reviews).toLocaleString('it-IT')}` : ''}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
     ),
     {
-      ...EMAIL_OG,
+      width: W,
+      height: H,
       headers: CACHE_HEADERS,
     },
   );

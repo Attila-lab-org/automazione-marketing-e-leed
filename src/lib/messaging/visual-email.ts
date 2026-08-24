@@ -48,13 +48,15 @@ async function upsertDraft(
 }
 
 /** Intro HTML v2 — CTA chiari, WhatsApp opzionale. Firma studio (non il destinatario). */
-export const VISUAL_INTRO_BODY_V2 = `<p style="margin:0 0 16px;font-family:Georgia,serif;font-size:16px;line-height:1.55;color:#2c241e">Buongiorno,</p>
-<p style="margin:0 0 20px;font-family:Georgia,serif;font-size:16px;line-height:1.55;color:#2c241e">abbiamo preparato un'anteprima personalizzata per <strong>{{business_name}}</strong>.</p>
-{{preview_image_block}}
-<div style="margin:28px 0 8px">{{cta_block}}</div>
-{{whatsapp_block}}
-<p style="margin:28px 0 0;font-family:system-ui,-apple-system,sans-serif;font-size:12px;line-height:1.45;color:#7a6f65">Concept dimostrativo — non è ancora il sito definitivo.</p>
-<p style="margin:22px 0 0;font-family:Georgia,serif;font-size:15px;line-height:1.55;color:#2c241e">Cordiali saluti,<br/>{{sender_name}}</p>`;
+export const VISUAL_INTRO_BODY_V2 = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 auto;font-family:Georgia,serif">
+<tr><td style="padding:0 0 16px;font-size:16px;line-height:1.55;color:#2c241e">Buongiorno,</td></tr>
+<tr><td style="padding:0 0 20px;font-size:16px;line-height:1.55;color:#2c241e">abbiamo preparato un'anteprima personalizzata per <strong>{{business_name}}</strong>.</td></tr>
+<tr><td style="padding:0">{{preview_image_block}}</td></tr>
+<tr><td style="padding:24px 0 8px">{{cta_block}}</td></tr>
+<tr><td style="padding:0">{{whatsapp_block}}</td></tr>
+<tr><td style="padding:24px 0 0;font-family:system-ui,-apple-system,sans-serif;font-size:12px;line-height:1.45;color:#7a6f65">Concept dimostrativo — non è ancora il sito definitivo.</td></tr>
+<tr><td style="padding:20px 0 0;font-size:15px;line-height:1.55;color:#2c241e">Cordiali saluti,<br/>{{sender_name}}</td></tr>
+</table>`;
 
 function buildCtaBlock(demoUrl: string): string {
   return `<a href="${demoUrl}" style="display:inline-block;padding:14px 22px;background:#1c1917;color:#fffdf9;text-decoration:none;border-radius:999px;font-family:system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600">Vedi l'anteprima completa</a>`;
@@ -108,7 +110,7 @@ export async function buildVisualEmailDraft(
 
   const appUrl = resolveAppUrl(env);
   const demoUrl = `${appUrl}${demo.publicPath}`;
-  const previewImageUrl = `${appUrl}${demo.publicPath}/email-preview?v=3`;
+  const previewImageUrl = `${appUrl}${demo.publicPath}/email-preview?v=4`;
   // Preferisci il nome branding della demo (locale), non un contatto test
   const brandingName =
     (demo.data as { branding?: { business_name?: string | null } })?.branding?.business_name?.trim() ||
@@ -120,7 +122,8 @@ export async function buildVisualEmailDraft(
     ? `${appUrl}${demo.publicPath}/interesse?channel=whatsapp`
     : null;
 
-  const previewImageBlock = `<a href="${demoUrl}" style="display:block;text-decoration:none"><img src="${previewImageUrl}" alt="Anteprima ${businessName}" width="600" height="360" style="display:block;max-width:100%;width:100%;height:auto;border:0;border-radius:12px" /></a>`;
+  // Table wrapper: Gmail non allarga/zoomma l'immagine oltre 600px
+  const previewImageBlock = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 0 8px 0"><tr><td style="padding:0"><a href="${demoUrl}" style="display:block;text-decoration:none;border:0;outline:none"><img src="${previewImageUrl}" alt="Anteprima ${businessName}" width="600" height="340" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:10px;outline:none" /></a></td></tr></table>`;
   const ctaBlock = buildCtaBlock(demoUrl);
   const whatsappBlock = buildWhatsAppBlock(whatsappUrl);
 
