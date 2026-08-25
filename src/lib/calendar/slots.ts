@@ -11,14 +11,43 @@ export type SlotLike = Pick<
  */
 export function pickFirstCompatibleSlot(
   slots: SlotLike[],
-  opts?: { nowIso?: string; afterIso?: string | null },
+  opts?: {
+    nowIso?: string;
+    afterIso?: string | null;
+    excludeStartsAt?: string[];
+    excludeSlotIds?: string[];
+  },
 ): SlotLike | null {
-  const floor = new Date(opts?.afterIso ?? opts?.nowIso ?? new Date().toISOString()).getTime();
-  const available = slots
+  const alternatives = listAlternativeSlots(slots, {
+    nowIso: opts?.afterIso ?? opts?.nowIso,
+    excludeStartsAt: opts?.excludeStartsAt,
+    excludeSlotIds: opts?.excludeSlotIds,
+    limit: 1,
+  });
+  return alternatives[0] ?? null;
+}
+
+/** Slot liberi diversi da un appuntamento già fissato (per riprogrammazione). */
+export function listAlternativeSlots(
+  slots: SlotLike[],
+  opts?: {
+    nowIso?: string;
+    excludeStartsAt?: string[];
+    excludeSlotIds?: string[];
+    limit?: number;
+  },
+): SlotLike[] {
+  const floor = new Date(opts?.nowIso ?? new Date().toISOString()).getTime();
+  const excludedStarts = new Set((opts?.excludeStartsAt ?? []).map((iso) => new Date(iso).getTime()));
+  const excludedIds = new Set(opts?.excludeSlotIds ?? []);
+  const limit = opts?.limit ?? 5;
+  return slots
     .filter((s) => s.status === 'AVAILABLE')
+    .filter((s) => !excludedIds.has(s.id))
+    .filter((s) => !excludedStarts.has(new Date(s.starts_at).getTime()))
     .filter((s) => new Date(s.starts_at).getTime() >= floor)
-    .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
-  return available[0] ?? null;
+    .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
+    .slice(0, limit);
 }
 
 export function formatSlotForHuman(slot: SlotLike, locale = 'it-IT'): string {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatSlotForHuman,
+  listAlternativeSlots,
   pickFirstCompatibleSlot,
   slotsForAiPrompt,
   wantsImmediateBooking,
@@ -66,10 +67,33 @@ describe('booking intent signals', () => {
     expect(wantsImmediateBooking(c)).toBe(true);
   });
 
-  it('non prenota su sola richiesta senza accettazione forte', () => {
-    const c = mockClassifyInbound('Vorrei una chiamata');
-    expect(c.bookingRequest).toBe(true);
+  it('riconosce cambio giorno come riprogrammazione', () => {
+    const c = mockClassifyInbound('si cambia giorno');
+    expect(c.rescheduleAppointment).toBe(true);
+    expect(c.followUpLater).toBe(false);
     expect(wantsImmediateBooking(c)).toBe(false);
+  });
+
+  it('non ripropone lo stesso orario come unica alternativa', () => {
+    const same = {
+      id: 's1',
+      starts_at: '2026-08-26T11:19:00.000Z',
+      ends_at: '2026-08-26T11:49:00.000Z',
+      timezone: 'Europe/Rome',
+      status: 'AVAILABLE' as const,
+    };
+    const other = {
+      id: 's2',
+      starts_at: '2026-08-27T09:00:00.000Z',
+      ends_at: '2026-08-27T09:30:00.000Z',
+      timezone: 'Europe/Rome',
+      status: 'AVAILABLE' as const,
+    };
+    const alts = listAlternativeSlots([same, other], {
+      excludeStartsAt: ['2026-08-26T11:19:00.000Z'],
+      nowIso: '2026-08-25T10:00:00.000Z',
+    });
+    expect(alts.map((s) => s.id)).toEqual(['s2']);
   });
 
   it('propone solo slot reali nella bozza', () => {

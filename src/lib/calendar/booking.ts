@@ -5,9 +5,11 @@ import {
   bookFirstCompatibleSlot,
   cancelAppointment,
   getActiveAppointmentForLead,
+  listAvailableSlots,
   rescheduleAppointment,
   type BookAppointmentResult,
 } from './service';
+import { formatSlotForHuman, listAlternativeSlots, type SlotLike } from './slots';
 import { recordOperatorAlert } from '@/lib/sales/reply-persist';
 import { validateSalesTransition } from '@/lib/sales/states';
 
@@ -22,18 +24,62 @@ export type ConversationBookingOutcome =
       eventId: string;
     }
   | {
-      action: 'NO_SLOT';
+      action: 'NO_SLOT' | 'PROPOSE_ALTERNATIVES';
       message: string;
     }
   | {
       action: 'NONE';
     };
 
+/** Normalizza i flag booking: evita che un cambio giorno finisca come follow_up_later. */
+export function normalizeBookingClassification(
+  c: InboundClassification,
+): InboundClassification {
+  const text = `${c.summary} ${c.preferredTimeHint ?? ''}`.toLowerCase();
+  const looksReschedule =
+    c.rescheduleAppointment ||
+    /cambia (giorno|orario|data)|riprogramma|sposta|altro giorno|alternative/.test(text);
+  const looksBooking =
+    c.bookingAccepted ||
+    c.bookingRequest ||
+    c.intent === 'call_accept' ||
+    looksReschedule;
+  if (!looksBooking) return c;
+  return {
+    ...c,
+    followUpLater: false,
+    followUpAt: null,
+    rescheduleAppointment: looksReschedule ? true : c.rescheduleAppointment,
+    recommendedState:
+      c.recommendedState === 'FOLLOW_UP_LATER'
+        ? looksReschedule
+          ? 'CALL_PROPOSED'
+          : c.bookingAccepted
+            ? 'CALL_BOOKED'
+            : 'CALL_PROPOSED'
+        : c.recommendedState,
+  };
+}
+
 export function wantsImmediateBooking(c: InboundClassification): boolean {
   if (c.cancelAppointment || c.rescheduleAppointment) return false;
-  // Prenota solo su consenso chiaro: non basta chiedere info su una chiamata.
   if (c.bookingAccepted && c.bookingConfidence >= 0.6) return true;
   return false;
+}
+
+function hasSpecificTimeHint(hint: string | null): boolean {
+  if (!hint?.trim()) return false;
+  return /\d{1,2}[:.]\d{2}|\d{1,2}\s*(am|pm)|luned|marted|mercoled|gioved|venerd|sabat|domenic|\d{1,2}\s*\/\s*\d{1,2}/i.test(
+    hint,
+  );
+}
+
+function proposeAlternativesMessage(alternatives: SlotLike[]): string {
+  const labels = alternatives.map((slot) => formatSlotForHuman(slot));
+  if (labels.length === 1) {
+    return `Va benissimo spostarla. Ho questo orario libero: ${labels[0]}. Ti va bene o preferisci un altro giorno?`;
+  }
+  return `Va benissimo spostarla. Orari liberi: ${labels.join('; ')}. Quale preferisci?`;
 }
 
 export async function applyConversationBooking(args: {
@@ -44,7 +90,7 @@ export async function applyConversationBooking(args: {
   classification: InboundClassification;
   leadName?: string | null;
 }): Promise<ConversationBookingOutcome> {
-  const c = args.classification;
+  const c = normalizeBookingClassification(args.classification);
   const existing = await getActiveAppointmentForLead(args.admin, args.workspaceId, args.leadId);
   const title = `Chiamata · ${args.leadName?.trim() || 'Cliente'}`;
 
@@ -60,8 +106,17 @@ export async function applyConversationBooking(args: {
     return { action: 'CANCELLED', eventId: existing.id };
   }
 
-  if (c.rescheduleAppointment) {
-    if (existing) {
+  if (c.rescheduleAppointment && existing) {
+    const allSlots = await listAvailableSlots(args.admin, args.workspaceId, { limit: 40 });
+    const excludeStartsAt = existing.starts_at ? [existing.starts_at] : [];
+    const alternatives = listAlternativeSlots(allSlots, {
+      excludeStartsAt,
+      excludeSlotIds: existing.slot_id ? [existing.slot_id] : [],
+      limit: 5,
+    });
+
+    const canAutoMove = hasSpecificTimeHint(c.preferredTimeHint) || c.bookingAccepted;
+    if (canAutoMove && alternatives.length > 0) {
       const result = await rescheduleAppointment(args.admin, {
         workspaceId: args.workspaceId,
         eventId: existing.id,
@@ -70,29 +125,56 @@ export async function applyConversationBooking(args: {
         title,
         description: c.preferredTimeHint,
         source: 'AI',
+        excludeStartsAt,
       });
-      if (!result.ok) {
-        await recordOperatorAlert({
-          admin: args.admin,
-          workspaceId: args.workspaceId,
-          leadId: args.leadId,
-          threadId: args.threadId,
-          kind: 'calendar_no_slot',
-          message: 'Attila: riprogrammazione fallita — nessuno slot disponibile',
-        });
+      if (result.ok) {
+        await markThreadBooked(args.admin, args.workspaceId, args.threadId, result);
         return {
-          action: 'NO_SLOT',
-          message:
-            'Al momento non ho altri orari liberi in agenda. Ti ricontatto appena si libera uno slot.',
+          action: 'RESCHEDULED',
+          result,
+          confirmationText: `Ho riprogrammato la chiamata per ${result.label}. A presto.`,
         };
       }
-      await markThreadBooked(args.admin, args.workspaceId, args.threadId, result);
+    }
+
+    if (alternatives.length > 0) {
+      await args.admin
+        .from('message_threads')
+        .update({
+          commercial_state: 'CALL_PROPOSED',
+          next_step: 'Scegliere nuovo orario',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', args.threadId);
       return {
-        action: 'RESCHEDULED',
-        result,
-        confirmationText: `Ho riprogrammato la chiamata per ${result.label}. A presto.`,
+        action: 'PROPOSE_ALTERNATIVES',
+        message: proposeAlternativesMessage(alternatives),
       };
     }
+
+    await recordOperatorAlert({
+      admin: args.admin,
+      workspaceId: args.workspaceId,
+      leadId: args.leadId,
+      threadId: args.threadId,
+      kind: 'calendar_no_slot',
+      message: 'Attila: cliente vuole cambiare giorno, ma non ci sono slot alternativi',
+    });
+    await args.admin
+      .from('message_threads')
+      .update({
+        commercial_state: 'CALL_PROPOSED',
+        next_step: 'Aggiungere slot e ripropore',
+        human_required_reason: null,
+        assigned_mode: 'AI',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', args.threadId);
+    return {
+      action: 'NO_SLOT',
+      message:
+        'Va benissimo spostarla. Dimmi pure che giorni ti sono più comodi e ti propongo subito un orario libero.',
+    };
   }
 
   if (!wantsImmediateBooking(c)) {
@@ -100,6 +182,16 @@ export async function applyConversationBooking(args: {
   }
 
   if (existing) {
+    if (c.preferredTimeHint || /cambia|sposta|altro|alternativa/.test(c.summary.toLowerCase())) {
+      return applyConversationBooking({
+        ...args,
+        classification: {
+          ...c,
+          rescheduleAppointment: true,
+          bookingAccepted: Boolean(c.preferredTimeHint) || c.bookingAccepted,
+        },
+      });
+    }
     return {
       action: 'BOOKED',
       result: {
@@ -145,7 +237,7 @@ export async function applyConversationBooking(args: {
     return {
       action: 'NO_SLOT',
       message:
-        'Perfetto, sono d’accordo a fissare. Al momento non ho slot liberi in agenda: ti propongo un orario appena se ne libera uno.',
+        'Perfetto, sono d’accordo a fissare. Al momento non ho slot liberi in agenda: dimmi pure i giorni che preferisci e ti propongo un orario appena disponibile.',
     };
   }
 

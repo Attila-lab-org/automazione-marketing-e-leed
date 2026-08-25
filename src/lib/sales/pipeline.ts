@@ -21,6 +21,7 @@ import {
   applyConversationBooking,
   getActiveAppointmentForLead,
   listAvailableSlots,
+  normalizeBookingClassification,
   slotsForAiPrompt,
 } from '@/lib/calendar';
 import { formatSlotForHuman } from '@/lib/calendar/slots';
@@ -240,6 +241,7 @@ export async function processSalesInbound(args: {
   } catch {
     classification = mockClassifyInbound(args.text);
   }
+  classification = normalizeBookingClassification(classification);
 
   const { data: thread } = await args.admin
     .from('message_threads')
@@ -356,8 +358,9 @@ export async function processSalesInbound(args: {
       bookingConfirmation = booking.confirmationText;
       appointmentLabel = booking.result.label;
       state = 'CALL_BOOKED';
-    } else if (booking.action === 'NO_SLOT') {
+    } else if (booking.action === 'NO_SLOT' || booking.action === 'PROPOSE_ALTERNATIVES') {
       bookingConfirmation = booking.message;
+      if (booking.action === 'PROPOSE_ALTERNATIVES') state = 'CALL_PROPOSED';
     } else if (booking.action === 'CANCELLED') {
       bookingConfirmation = 'Ho annullato l’appuntamento. Dimmi pure se vuoi riprogrammare.';
       state = 'CALL_PROPOSED';

@@ -346,7 +346,7 @@ export function mockClassifyInbound(text: string): InboundClassification {
       bookingConfidence: 0.9,
     });
   }
-  if (/sposta|riprogramma|cambia orario/.test(t)) {
+  if (/sposta|riprogramma|cambia orario|cambia giorno|cambia data|altro giorno|alternative|altrenativ/.test(t)) {
     return base({
       intent: 'call_accept',
       language: 'it',
@@ -542,13 +542,37 @@ export function mockDraftReply(input: SalesReplyDraftInput): SalesReplyDraft {
       humanRequiredReason: null,
     };
   }
-  if (input.appointmentLabel) {
+  if (input.appointmentLabel && !input.classification.rescheduleAppointment) {
     return {
       text: `Confermato: ci sentiamo ${input.appointmentLabel}. Se serve spostare, dimmelo pure.`,
       claimsUsed: [],
       recommendedState: 'CALL_BOOKED',
       nextStep: 'await_call',
       confidence: 0.95,
+      humanRequiredReason: null,
+    };
+  }
+  if (input.classification.rescheduleAppointment) {
+    const slots = input.availableSlots ?? [];
+    if (slots.length) {
+      return {
+        text:
+          slots.length === 1
+            ? `Va benissimo spostarla. Ho questo orario libero: ${slots[0].label}. Ti va bene?`
+            : `Va benissimo spostarla. Orari liberi: ${slots.map((s) => s.label).join('; ')}. Quale preferisci?`,
+        claimsUsed: [],
+        recommendedState: 'CALL_PROPOSED',
+        nextStep: 'confirm_new_slot',
+        confidence: 0.9,
+        humanRequiredReason: null,
+      };
+    }
+    return {
+      text: 'Va benissimo spostarla. Dimmi pure che giorni ti sono più comodi e ti propongo un orario libero.',
+      claimsUsed: [],
+      recommendedState: 'CALL_PROPOSED',
+      nextStep: 'ask_preferred_days',
+      confidence: 0.88,
       humanRequiredReason: null,
     };
   }

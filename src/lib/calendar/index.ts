@@ -1,5 +1,6 @@
 export {
   pickFirstCompatibleSlot,
+  listAlternativeSlots,
   formatSlotForHuman,
   slotsForAiPrompt,
   type SlotLike,
@@ -25,5 +26,6 @@ export {
 export {
   applyConversationBooking,
   wantsImmediateBooking,
+  normalizeBookingClassification,
   type ConversationBookingOutcome,
 } from './booking';

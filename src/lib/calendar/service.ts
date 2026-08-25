@@ -194,10 +194,16 @@ export async function bookFirstCompatibleSlot(
     description?: string | null;
     source?: CalendarEventSource;
     afterIso?: string | null;
+    excludeStartsAt?: string[];
+    excludeSlotIds?: string[];
   },
 ): Promise<BookAppointmentResult> {
   const slots = await listAvailableSlots(admin, args.workspaceId, { limit: 50 });
-  const chosen = pickFirstCompatibleSlot(slots, { afterIso: args.afterIso });
+  const chosen = pickFirstCompatibleSlot(slots, {
+    afterIso: args.afterIso,
+    excludeStartsAt: args.excludeStartsAt,
+    excludeSlotIds: args.excludeSlotIds,
+  });
   if (!chosen) return { ok: false, reason: 'NO_SLOT' };
   return bookSlotAtomic(admin, {
     workspaceId: args.workspaceId,
@@ -234,8 +240,19 @@ export async function rescheduleAppointment(
     description?: string | null;
     source?: CalendarEventSource;
     afterIso?: string | null;
+    excludeStartsAt?: string[];
   },
 ): Promise<BookAppointmentResult> {
+  const { data: previous } = await admin
+    .from('calendar_events')
+    .select('starts_at, slot_id')
+    .eq('workspace_id', args.workspaceId)
+    .eq('id', args.eventId)
+    .maybeSingle();
+  const excludeStartsAt = [
+    ...(args.excludeStartsAt ?? []),
+    ...(previous?.starts_at ? [previous.starts_at] : []),
+  ];
   await cancelAppointment(admin, args.workspaceId, args.eventId);
   return bookFirstCompatibleSlot(admin, {
     workspaceId: args.workspaceId,
@@ -245,6 +262,8 @@ export async function rescheduleAppointment(
     description: args.description,
     source: args.source ?? 'HUMAN',
     afterIso: args.afterIso,
+    excludeStartsAt,
+    excludeSlotIds: previous?.slot_id ? [previous.slot_id] : undefined,
   });
 }
 
