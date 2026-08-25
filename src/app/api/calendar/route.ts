@@ -12,15 +12,19 @@ import type { CalendarEventType } from '@/lib/types/database';
 
 export const runtime = 'nodejs';
 
-function weekBounds(anchorIso?: string | null): { fromIso: string; toIso: string } {
-  const anchor = anchorIso ? new Date(anchorIso) : new Date();
-  const day = anchor.getDay();
+export function weekBounds(anchorIso?: string | null): { fromIso: string; toIso: string } {
+  const dateOnly = anchorIso?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const anchor = dateOnly
+    ? new Date(Date.UTC(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]), 12))
+    : anchorIso
+      ? new Date(anchorIso)
+      : new Date();
+  const day = anchor.getUTCDay();
   const mondayOffset = day === 0 ? -6 : 1 - day;
-  const start = new Date(anchor);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() + mondayOffset);
+  const start = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate()));
+  start.setUTCDate(start.getUTCDate() + mondayOffset);
   const end = new Date(start);
-  end.setDate(end.getDate() + 7);
+  end.setUTCDate(end.getUTCDate() + 7);
   return { fromIso: start.toISOString(), toIso: end.toISOString() };
 }
 

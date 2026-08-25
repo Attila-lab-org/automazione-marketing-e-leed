@@ -49,6 +49,11 @@ function fmtDay(d: Date): string {
   return new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "numeric", month: "short" }).format(d);
 }
 
+function dateKey(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function fmtTime(iso: string | null, tz = "Europe/Rome"): string {
   if (!iso) return "—";
   return new Intl.DateTimeFormat("it-IT", {
@@ -88,7 +93,9 @@ export default function CalendarClient() {
     setError(null);
     try {
       const params = new URLSearchParams({
-        week: weekAnchor.toISOString(),
+        // Invia la data civile, non la mezzanotte convertita in UTC:
+        // in Europa/Roma il lunedì diventava domenica alle 22:00 sul server.
+        week: dateKey(weekAnchor),
         type: filter,
       });
       const res = await fetch(`/api/calendar?${params.toString()}`);
