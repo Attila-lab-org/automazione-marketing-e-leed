@@ -3,6 +3,7 @@ import { withAdmin } from '@/lib/api/with-admin';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 import { stopLeadSequences } from '@/lib/sales/stop';
+import { resumeTelegramAiAndReply } from '@/lib/inbound/telegram-resume';
 
 export const runtime = 'nodejs';
 
@@ -19,15 +20,48 @@ export const POST = withAdmin(async (request: Request) => {
   }
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
+  const { data: currentThread } = await admin
+    .from('message_threads')
+    .select('lead_id, channel')
+    .eq('workspace_id', workspace.id)
+    .eq('id', body.threadId)
+    .maybeSingle();
+  if (!currentThread) {
+    return NextResponse.json({ error: 'Conversazione non trovata' }, { status: 404 });
+  }
   if (body.action === 'take_over') {
-    await admin
+    const { error } = await admin
       .from('message_threads')
-      .update({ assigned_mode: 'HUMAN', updated_at: new Date().toISOString() })
+      .update({
+        assigned_mode: 'HUMAN',
+        human_required_reason: 'Takeover umano attivo',
+        status: 'NEEDS_REPLY',
+        updated_at: new Date().toISOString(),
+      })
       .eq('workspace_id', workspace.id)
       .eq('id', body.threadId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (body.action === 'return_to_ai') {
-    await admin
+    if (currentThread.channel === 'TELEGRAM') {
+      const result = await resumeTelegramAiAndReply({
+        admin,
+        workspaceId: workspace.id,
+        threadId: body.threadId,
+      });
+      const { data: updatedThread } = await admin
+        .from('message_threads')
+        .select('assigned_mode')
+        .eq('id', body.threadId)
+        .maybeSingle();
+      return NextResponse.json({
+        ok: true,
+        assignedMode: updatedThread?.assigned_mode,
+        replied: result.sent,
+        reason: result.reason,
+      });
+    }
+    const { error } = await admin
       .from('message_threads')
       .update({
         assigned_mode: 'AI',
@@ -38,15 +72,10 @@ export const POST = withAdmin(async (request: Request) => {
       })
       .eq('workspace_id', workspace.id)
       .eq('id', body.threadId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (body.action === 'stop') {
-    const { data: thread } = await admin
-      .from('message_threads')
-      .select('lead_id')
-      .eq('workspace_id', workspace.id)
-      .eq('id', body.threadId)
-      .maybeSingle();
-    await admin
+    const { error } = await admin
       .from('message_threads')
       .update({
         commercial_state: 'NOT_INTERESTED',
@@ -55,9 +84,8 @@ export const POST = withAdmin(async (request: Request) => {
       })
       .eq('workspace_id', workspace.id)
       .eq('id', body.threadId);
-    if (thread?.lead_id) {
-      await stopLeadSequences(admin, workspace.id, thread.lead_id);
-    }
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    await stopLeadSequences(admin, workspace.id, currentThread.lead_id);
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, assignedMode: body.action === 'take_over' ? 'HUMAN' : undefined });
 });

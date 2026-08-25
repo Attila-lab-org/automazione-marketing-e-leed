@@ -73,6 +73,15 @@ export default function InboxClient() {
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [view, setView] = useState<InboxView>("manual");
 
+  async function refreshThreads() {
+    const response = await fetch("/api/inbox", { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? "Impossibile caricare i messaggi");
+    const loadedThreads = (data.threads as InboxThreadItem[]) ?? [];
+    setThreads(loadedThreads);
+    return loadedThreads;
+  }
+
   async function openConversation(threadId: string) {
     setOpenThreadId(threadId);
     setConversation(null);
@@ -100,12 +109,8 @@ export default function InboxClient() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/inbox", { cache: "no-store" });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Impossibile caricare i messaggi");
+        const loadedThreads = await refreshThreads();
         if (!cancelled) {
-          const loadedThreads = (data.threads as InboxThreadItem[]) ?? [];
-          setThreads(loadedThreads);
           const leadId = new URLSearchParams(window.location.search).get("lead");
           const requested = leadId
             ? loadedThreads.find((thread) => thread.leadId === leadId)
@@ -234,6 +239,9 @@ export default function InboxClient() {
           onClose={() => {
             setOpenThreadId(null);
             setConversation(null);
+          }}
+          onChanged={async () => {
+            await Promise.all([refreshThreads(), openConversation(openThreadId)]);
           }}
         />
       ) : null}

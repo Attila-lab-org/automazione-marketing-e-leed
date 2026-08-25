@@ -128,11 +128,11 @@ export default function TelegramControlPanel() {
   }
 
   return (
-    <section className="space-y-5 rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+    <section id="telegram" className="scroll-mt-24 space-y-5 rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-stone-900">Ricerca contatti su Telegram</h2>
+            <h2 className="font-semibold text-stone-900">Telegram</h2>
             <span
               className={
                 settings.enabled
@@ -144,9 +144,9 @@ export default function TelegramControlPanel() {
             </span>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-stone-600">
-            Il bot ascolta i messaggi ricevuti nelle chat dove è presente, cerca le
-            frasi indicate sotto, risponde una sola volta e crea il contatto qui in
-            Messaggi.
+            {settings.enabled
+              ? "Telegram è acceso: Attila ascolta le chat collegate, risponde ai contatti e porta avanti la conversazione fino all’appuntamento."
+              : "Telegram è fermo. Completa i passaggi richiesti e premi “Avvia Telegram”: senza quel pulsante Attila non legge e non risponde."}
           </p>
           <p className="mt-1 max-w-2xl text-xs text-stone-500">
             Non può cercare in tutto Telegram: devi aggiungere il bot ai gruppi che
@@ -186,7 +186,7 @@ export default function TelegramControlPanel() {
 
       <div className="space-y-2">
         <label htmlFor="telegram-reply" className="text-sm font-semibold text-stone-800">
-          Risposta automatica
+          Primo messaggio ai nuovi contatti
         </label>
         <textarea
           id="telegram-reply"
@@ -210,17 +210,17 @@ export default function TelegramControlPanel() {
                 setSettings({ ...settings, replyEnabled: event.target.checked })
               }
             />
-            Invia la risposta automatica
+            Contatta automaticamente i nuovi contatti trovati
           </label>
         </div>
       </div>
 
       <div className="space-y-3">
         <div>
-          <h3 className="text-sm font-semibold text-stone-800">Cosa deve cercare</h3>
+          <h3 className="text-sm font-semibold text-stone-800">Come trovare nuovi contatti</h3>
           <p className="text-xs text-stone-500">
-            Scrivi parole o frasi separate da virgola. Il bot interviene solo se ne
-            trova almeno una.
+            Scrivi parole o frasi separate da virgola. Servono soltanto per riconoscere
+            il primo messaggio utile; non limitano le risposte successive.
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">

@@ -68,6 +68,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: navIcon("M4 6h16v12H4zM4 7l8 6 8-6"),
   },
   {
+    href: "/telegram",
+    label: "Telegram",
+    description: "Avvia il bot e controlla le conversazioni automatiche.",
+    match: ["/telegram"],
+    icon: navIcon("M21 4 3 11l7 2 2 7 4-5 4 3 1-14Zm-11 9 6-5"),
+  },
+  {
     href: "/calendar",
     label: "Calendario",
     description: "Appuntamenti, scadenze e slot disponibili.",
@@ -97,6 +104,7 @@ const SECTION_LABELS: Record<string, string> = {
   leads: "Attività",
   segments: "Filtri salvati",
   campaigns: "Campagne",
+  telegram: "Telegram",
   "review-queue": "Da controllare",
   demos: "Anteprime",
   templates: "Modelli",

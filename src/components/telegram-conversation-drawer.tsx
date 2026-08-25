@@ -17,11 +17,13 @@ export default function TelegramConversationDrawer({
   loading,
   error,
   onClose,
+  onChanged,
 }: {
   detail: InboxConversationDetail | null;
   loading: boolean;
   error: string | null;
   onClose: () => void;
+  onChanged?: () => void | Promise<void>;
 }) {
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
@@ -88,15 +90,6 @@ export default function TelegramConversationDrawer({
                     Stato: {detail.commercialState ?? detail.aiDraft.state}
                     {detail.nextStep ? ` · Prossimo passo: ${detail.nextStep}` : ""}
                   </p>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <HandoffButton threadId={detail.threadId} action="take_over" label="Prendi in carico" />
-                    <a
-                      href="/inbox"
-                      className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-700"
-                    >
-                      Modifica
-                    </a>
-                  </div>
                 </section>
               ) : null}
 
@@ -172,10 +165,41 @@ export default function TelegramConversationDrawer({
                   </span>
                 ) : null}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <HandoffButton threadId={detail.threadId} action="take_over" label="Prendi in carico" />
-                <HandoffButton threadId={detail.threadId} action="return_to_ai" label="Ridai all’AI" />
-                <HandoffButton threadId={detail.threadId} action="stop" label="Ferma automazione" />
+              <div className="rounded-xl border border-stone-200 bg-white p-4">
+                <p className="text-sm font-semibold text-stone-900">
+                  {detail.assignedMode === "HUMAN"
+                    ? "Attila è fermo su questa conversazione"
+                    : "Attila gestisce questa conversazione"}
+                </p>
+                <p className="mt-1 text-xs text-stone-600">
+                  {detail.assignedMode === "HUMAN"
+                    ? "Riattivalo: analizzerà l’ultimo messaggio senza risposta e, se sicuro, risponderà subito."
+                    : "Passa alla gestione manuale solo se vuoi rispondere personalmente al cliente."}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {detail.assignedMode === "HUMAN" ? (
+                    <HandoffButton
+                      threadId={detail.threadId}
+                      action="return_to_ai"
+                      label="Attiva Attila e rispondi ora"
+                      onDone={onChanged}
+                    />
+                  ) : (
+                    <HandoffButton
+                      threadId={detail.threadId}
+                      action="take_over"
+                      label="Gestisci tu"
+                      onDone={onChanged}
+                    />
+                  )}
+                  <HandoffButton
+                    threadId={detail.threadId}
+                    action="stop"
+                    label="Chiudi e ferma automazione"
+                    confirmMessage="Vuoi chiudere questa conversazione e fermare ogni automazione sul contatto?"
+                    onDone={onChanged}
+                  />
+                </div>
               </div>
               {detail.channel === "EMAIL" ? (
                 <ManualEmailReply threadId={detail.threadId} />
@@ -370,25 +394,63 @@ function HandoffButton({
   threadId,
   action,
   label,
+  confirmMessage,
+  onDone,
 }: {
   threadId: string;
   action: "take_over" | "return_to_ai" | "stop";
   label: string;
+  confirmMessage?: string;
+  onDone?: () => void | Promise<void>;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
   return (
-    <button
-      type="button"
-      className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-      onClick={() => {
-        void fetch("/api/inbox/handoff", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ threadId, action }),
-        });
-      }}
-    >
-      {label}
-    </button>
+    <div>
+      <button
+        type="button"
+        disabled={busy}
+        className="rounded-md border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+        onClick={async () => {
+          if (confirmMessage && !window.confirm(confirmMessage)) return;
+          setBusy(true);
+          setFeedback(null);
+          try {
+            const response = await fetch("/api/inbox/handoff", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ threadId, action }),
+            });
+            const payload = (await response.json()) as {
+              error?: string;
+              replied?: boolean;
+              reason?: string;
+            };
+            if (!response.ok) throw new Error(payload.error ?? "Operazione non riuscita");
+            setFeedback(
+              action === "return_to_ai"
+                ? payload.replied
+                  ? "Attila è attivo e ha risposto."
+                  : payload.reason === "ALREADY_REPLIED"
+                    ? "Attila è attivo: l’ultimo messaggio aveva già una risposta."
+                    : "Attila è attivo. Questo messaggio richiede un controllo manuale."
+                : action === "take_over"
+                  ? "Ora gestisci tu la conversazione."
+                  : "Conversazione chiusa e automazione fermata.",
+            );
+            await onDone?.();
+          } catch (reason) {
+            setFeedback(reason instanceof Error ? reason.message : "Operazione non riuscita");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? (action === "return_to_ai" ? "Attila sta rispondendo…" : "Aggiorno…") : label}
+      </button>
+      {feedback ? <p className="mt-2 max-w-sm text-xs font-medium text-stone-700">{feedback}</p> : null}
+    </div>
   );
 }
 

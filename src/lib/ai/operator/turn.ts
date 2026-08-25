@@ -201,7 +201,7 @@ export async function* runOperatorTurn(
 
   const detail = traces.find((t) => t.name === 'get_lead_detail' && t.ok)?.result as LeadSearchHit | null | undefined;
   const searched = (traces.find((t) => t.name === 'search_leads' && t.ok)?.result ?? []) as LeadSearchHit[];
-  let leadHits = (detail ? [detail, ...searched] : searched).filter((row) => row && row.id);
+  const leadHits = (detail ? [detail, ...searched] : searched).filter((row) => row && row.id);
   if (plan.ordinal && prevRefs.lastLeadIds[plan.ordinal - 1]) {
     const picked = leadHits.find((l) => l.id === prevRefs.lastLeadIds[plan.ordinal! - 1]);
     if (picked && !detail) leadHits.unshift(picked);
