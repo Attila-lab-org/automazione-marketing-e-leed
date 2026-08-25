@@ -14,6 +14,11 @@ export const OPERATOR_TOOL_NAMES = [
   'get_daily_report',
   'list_conversations',
   'get_conversation',
+  'get_telegram_inbound_status',
+  'list_templates',
+  'list_demos',
+  'inspect_demo',
+  'inspect_template',
 ] as const;
 
 export type OperatorToolName = (typeof OPERATOR_TOOL_NAMES)[number];
@@ -27,6 +32,8 @@ export const WRITE_TOOL_NAMES = [
   'pause_campaign',
   'resume_campaign',
   'update_draft',
+  'personalize_demo',
+  'apply_demo_personalization',
   'delete_lead',
   'sql_query',
   'fetch_url',
@@ -91,6 +98,33 @@ export type ReviewItem = {
   blockers: string[];
 };
 
+export type TemplateSummary = {
+  id: string;
+  name: string;
+  key: string;
+  status: string;
+  demoCount: number;
+};
+
+export type DemoSummary = {
+  id: string;
+  slug: string;
+  publicPath: string;
+  leadName: string;
+  leadId?: string | null;
+  templateName: string;
+  headline?: string | null;
+  subheadline?: string | null;
+  cta?: string | null;
+};
+
+export type TelegramInboundStatus = {
+  enabled: boolean;
+  replyEnabled: boolean;
+  mode: string;
+  summary: string;
+};
+
 export type ConversationHit = {
   threadId: string;
   leadName: string;
@@ -111,7 +145,31 @@ export type OperatorDataSource = {
   getDailyReport(daysAgo?: number): Promise<DailyReport>;
   listConversations(): Promise<ConversationHit[]>;
   getConversation(threadId: string): Promise<ConversationHit | null>;
+  getTelegramInboundStatus(): Promise<TelegramInboundStatus>;
+  listTemplates(): Promise<TemplateSummary[]>;
+  listDemos(): Promise<DemoSummary[]>;
+  inspectDemo(demoId: string): Promise<DemoSummary | null>;
+  inspectTemplate(templateId: string): Promise<TemplateSummary | null>;
 };
+
+export function plannedFromOrchestratorCall(
+  call: import('./orchestrator-schema').OperatorToolCallPlan,
+): PlannedToolCall {
+  const args: Record<string, unknown> = {};
+  if (call.city) args.city = call.city;
+  if (call.query) args.query = call.query;
+  if (call.category) args.category = call.category;
+  if (call.campaignId) args.campaignId = call.campaignId;
+  if (call.leadId) args.leadId = call.leadId;
+  if (call.demoId) args.demoId = call.demoId;
+  if (call.templateId) args.templateId = call.templateId;
+  if (call.threadId) args.threadId = call.threadId;
+  if (call.limit != null) {
+    if (call.name === 'get_daily_report') args.daysAgo = call.limit;
+    else args.limit = call.limit;
+  }
+  return { name: call.name, args };
+}
 
 export type PlannedToolCall = {
   name: OperatorToolName;
@@ -128,9 +186,11 @@ const searchLeadsInput = z
   })
   .strict();
 const campaignIdInput = z.object({ campaignId: z.string().uuid().optional() }).strict();
-const leadIdInput = z.object({ leadId: z.string().uuid() }).strict();
-const threadIdInput = z.object({ threadId: z.string().uuid() }).strict();
+const leadIdInput = z.object({ leadId: z.string().uuid().optional() }).strict();
+const threadIdInput = z.object({ threadId: z.string().uuid().optional() }).strict();
 const dailyInput = z.object({ daysAgo: z.number().int().min(0).max(14).optional() }).strict();
+const demoIdInput = z.object({ demoId: z.string().uuid().optional() }).strict();
+const templateIdInput = z.object({ templateId: z.string().uuid().optional() }).strict();
 
 export const TOOL_INPUT_SCHEMAS: Record<OperatorToolName, z.ZodType> = {
   get_dashboard_summary: optionalId,
@@ -144,6 +204,11 @@ export const TOOL_INPUT_SCHEMAS: Record<OperatorToolName, z.ZodType> = {
   get_daily_report: dailyInput,
   list_conversations: optionalId,
   get_conversation: threadIdInput,
+  get_telegram_inbound_status: optionalId,
+  list_templates: optionalId,
+  list_demos: optionalId,
+  inspect_demo: demoIdInput,
+  inspect_template: templateIdInput,
 };
 
 export const TOOL_LABELS: Record<OperatorToolName, { start: string; done: string }> = {
@@ -161,6 +226,11 @@ export const TOOL_LABELS: Record<OperatorToolName, { start: string; done: string
   get_daily_report: { start: 'Sto leggendo i numeri del periodo…', done: 'Report giornaliero caricato' },
   list_conversations: { start: 'Sto leggendo i messaggi…', done: 'Conversazioni caricate' },
   get_conversation: { start: 'Sto leggendo la conversazione…', done: 'Conversazione caricata' },
+  get_telegram_inbound_status: { start: 'Sto leggendo lo stato Telegram…', done: 'Stato Telegram caricato' },
+  list_templates: { start: 'Sto leggendo i template…', done: 'Template caricati' },
+  list_demos: { start: 'Sto leggendo le demo…', done: 'Demo caricate' },
+  inspect_demo: { start: 'Sto ispezionando la demo…', done: 'Demo ispezionata' },
+  inspect_template: { start: 'Sto ispezionando il template…', done: 'Template ispezionato' },
 };
 
 export function isOperatorToolName(name: string): name is OperatorToolName {
@@ -215,6 +285,9 @@ export async function executeOperatorTool(
         }),
       };
     case 'get_lead_detail':
+      if (typeof args.leadId !== 'string') {
+        return { ok: true, name, result: { missing: true, reason: 'Nessuna attività nel contesto' } };
+      }
       return { ok: true, name, result: await data.getLeadDetail(String(args.leadId)) };
     case 'list_campaigns':
       return { ok: true, name, result: await data.listCampaigns() };
@@ -237,7 +310,33 @@ export async function executeOperatorTool(
     case 'list_conversations':
       return { ok: true, name, result: await data.listConversations() };
     case 'get_conversation':
+      if (typeof args.threadId !== 'string') {
+        return { ok: true, name, result: { missing: true, reason: 'Nessuna conversazione nel contesto' } };
+      }
       return { ok: true, name, result: await data.getConversation(String(args.threadId)) };
+    case 'get_telegram_inbound_status':
+      return { ok: true, name, result: await data.getTelegramInboundStatus() };
+    case 'list_templates':
+      return { ok: true, name, result: await data.listTemplates() };
+    case 'list_demos':
+      return { ok: true, name, result: await data.listDemos() };
+    case 'inspect_demo': {
+      const demoId =
+        typeof args.demoId === 'string'
+          ? args.demoId
+          : envelope.entityType === 'none'
+            ? null
+            : null;
+      if (!demoId) return { ok: true, name, result: { missing: true, reason: 'Nessuna demo nel contesto' } };
+      return { ok: true, name, result: await data.inspectDemo(demoId) };
+    }
+    case 'inspect_template': {
+      const templateId = typeof args.templateId === 'string' ? args.templateId : null;
+      if (!templateId) {
+        return { ok: true, name, result: { missing: true, reason: 'Nessun template nel contesto' } };
+      }
+      return { ok: true, name, result: await data.inspectTemplate(templateId) };
+    }
   }
 }
 

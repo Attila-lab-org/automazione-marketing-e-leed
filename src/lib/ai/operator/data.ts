@@ -6,6 +6,8 @@ import { getOutreachPausedAll } from '@/lib/settings/outreach-pause';
 import { resolveAppUrl } from '@/lib/app-url';
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { europeRomeDayRange } from './time';
+import { listDemos, loadDemoById } from '@/lib/demos/load';
+import { getTelegramInboundSettings } from '@/lib/inbound/telegram-settings';
 import type {
   BlockerItem,
   CampaignDetail,
@@ -13,9 +15,12 @@ import type {
   ConversationHit,
   CountMetric,
   DailyReport,
+  DemoSummary,
   LeadSearchHit,
   OperatorDataSource,
   ReviewItem,
+  TelegramInboundStatus,
+  TemplateSummary,
 } from './registry';
 
 const BLOCKER_LABELS: Record<string, string> = {
@@ -392,6 +397,78 @@ export function createSupabaseOperatorData(
         status: detail.replyStatus.state,
       };
     },
+
+    async getTelegramInboundStatus() {
+      const settings = await getTelegramInboundSettings(admin, workspaceId);
+      const mode = (env.TELEGRAM_PROVIDER_MODE ?? 'mock').toLowerCase();
+      const summary = settings.enabled
+        ? `Telegram è in ascolto (mode ${mode}). Intercetta richieste inbound già configurate; non cerca lead e non crea campagne.`
+        : `Telegram non è in ascolto. Puoi avviarlo da Impostazioni. Non esiste una ricerca Telegram che popola campagne.`;
+      return {
+        enabled: settings.enabled,
+        replyEnabled: settings.replyEnabled,
+        mode,
+        summary,
+      } satisfies TelegramInboundStatus;
+    },
+
+    async listTemplates() {
+      const { data: catalog } = await admin
+        .from('website_templates')
+        .select('id, key, name, status')
+        .eq('workspace_id', workspaceId)
+        .order('name')
+        .limit(20);
+      const { data: demos } = await admin
+        .from('demo_sites')
+        .select('template_id')
+        .eq('workspace_id', workspaceId);
+      return (catalog ?? []).map(
+        (row): TemplateSummary => ({
+          id: row.id,
+          name: row.name ?? row.key,
+          key: row.key,
+          status: row.status,
+          demoCount: (demos ?? []).filter((d) => d.template_id === row.id).length,
+        }),
+      );
+    },
+
+    async listDemos() {
+      const items = await listDemos(admin, workspaceId);
+      return items.slice(0, 20).map(
+        (row): DemoSummary => ({
+          id: row.id,
+          slug: row.slug,
+          publicPath: row.publicPath,
+          leadName: row.leadName,
+          templateName: row.templateName,
+        }),
+      );
+    },
+
+    async inspectDemo(demoId) {
+      const demo = await loadDemoById(admin, workspaceId, demoId);
+      if (!demo) return null;
+      const content = demo.data && 'content' in demo.data ? demo.data.content : null;
+      return {
+        id: demo.id,
+        slug: demo.slug,
+        publicPath: demo.publicPath,
+        leadName: demo.lead.name,
+        leadId: demo.lead.id,
+        templateName: demo.template.name,
+        headline: content && 'headline' in content ? (content.headline as string | null) : null,
+        subheadline:
+          content && 'subheadline' in content ? ((content as { subheadline?: string | null }).subheadline ?? null) : null,
+        cta: content && 'cta' in content ? (content.cta as string | null) : null,
+      };
+    },
+
+    async inspectTemplate(templateId) {
+      const templates = await this.listTemplates();
+      return templates.find((t) => t.id === templateId) ?? null;
+    },
   };
 }
 
@@ -403,6 +480,9 @@ export function createMemoryOperatorData(seed?: {
   daily?: DailyReport;
   conversations?: ConversationHit[];
   dashboard?: Record<string, number>;
+  templates?: TemplateSummary[];
+  demos?: DemoSummary[];
+  telegram?: TelegramInboundStatus;
 }): OperatorDataSource {
   const leads = seed?.leads ?? [];
   const campaigns = seed?.campaigns ?? [];
@@ -471,6 +551,29 @@ export function createMemoryOperatorData(seed?: {
     },
     async getConversation(threadId) {
       return seed?.conversations?.find((c) => c.threadId === threadId) ?? null;
+    },
+    async getTelegramInboundStatus() {
+      return (
+        seed?.telegram ?? {
+          enabled: false,
+          replyEnabled: true,
+          mode: 'mock',
+          summary:
+            'Telegram non è in ascolto. Intercetta richieste inbound già configurate; non cerca lead e non crea campagne.',
+        }
+      );
+    },
+    async listTemplates() {
+      return seed?.templates ?? [];
+    },
+    async listDemos() {
+      return seed?.demos ?? [];
+    },
+    async inspectDemo(demoId) {
+      return seed?.demos?.find((d) => d.id === demoId) ?? null;
+    },
+    async inspectTemplate(templateId) {
+      return seed?.templates?.find((t) => t.id === templateId) ?? null;
     },
   };
 }

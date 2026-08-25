@@ -18,6 +18,8 @@ import type {
   OutboundWriterInput,
   WebsiteAnalysisInput,
 } from './commercial/mock-impl';
+import type { OperatorComposeInput, OperatorAnswerInput } from './operator/orchestrator-input';
+import type { OperatorFinalReply, OperatorPlan } from './operator/orchestrator-schema';
 
 export type AiProviderMode = 'mock' | 'openai';
 
@@ -154,7 +156,14 @@ export interface AICommercialProvider {
     ctx: AICommercialCallContext,
   ): Promise<AICommercialResult<SalesReplyDraft>>;
   summarizeThread(input: unknown, ctx: AICommercialCallContext): Promise<never>;
-  answerOperator(input: unknown, ctx: AICommercialCallContext): Promise<never>;
+  answerOperator(
+    input: OperatorAnswerInput,
+    ctx: AICommercialCallContext,
+  ): Promise<AICommercialResult<OperatorPlan>>;
+  composeOperatorAnswer(
+    input: OperatorComposeInput,
+    ctx: AICommercialCallContext,
+  ): Promise<AICommercialResult<OperatorFinalReply>>;
 }
 
 export type AiRunInsertInput = {

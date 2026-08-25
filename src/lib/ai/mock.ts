@@ -12,7 +12,8 @@ import {
   type OutboundWriterInput,
   type WebsiteAnalysisInput,
 } from './commercial/mock-impl';
-import type { InboundClassification, OutboundDraft } from './commercial/schemas';
+import { applySafetyPolicy, planOperatorTurnMock } from './operator/semantic-plan';
+import { composeOrchestratorReply } from './operator/compose-orchestrator';
 import type {
   AICommercialCallContext,
   AICommercialProvider,
@@ -21,6 +22,7 @@ import type {
   CommercialIntent,
   IntentClassification,
 } from './types';
+import type { InboundClassification, OutboundDraft } from './commercial/schemas';
 
 function notReady(method: string, phase: string): Promise<never> {
   return Promise.reject(new AiPhaseNotImplementedError(method, phase));
@@ -129,8 +131,26 @@ export class MockAICommercialProvider implements AICommercialProvider {
   summarizeThread(): Promise<never> {
     return notReady('summarizeThread', 'AI-1');
   }
-  answerOperator(): Promise<never> {
-    return notReady('answerOperator', 'AI-1');
+  async answerOperator(
+    input: import('./operator/orchestrator-input').OperatorAnswerInput,
+    ctx: AICommercialCallContext,
+  ) {
+    const output = applySafetyPolicy(
+      planOperatorTurnMock({
+        question: input.question,
+        history: input.history,
+        refs: input.refs,
+        envelope: input.envelope,
+      }),
+      input.question,
+    );
+    return this.wrap(output, ctx);
+  }
+  async composeOperatorAnswer(
+    input: import('./operator/orchestrator-input').OperatorComposeInput,
+    ctx: AICommercialCallContext,
+  ) {
+    return this.wrap(composeOrchestratorReply(input), ctx);
   }
 
   private wrap<T>(output: T, ctx: AICommercialCallContext): AICommercialResult<T> {

@@ -87,6 +87,15 @@ export function composeOperatorReply(
     }
   }
 
+  const personalize = writes.find(
+    (w) => w.tool === 'personalize_demo' || w.tool === 'apply_demo_personalization',
+  );
+  if (personalize) {
+    parts.push(personalize.summary);
+    const path = typeof personalize.data.publicPath === 'string' ? personalize.data.publicPath : null;
+    if (path) actions.push({ type: 'open_demo', path, label: 'Apri demo' });
+  }
+
   const mutation = writes.find((w) => w.tool === 'campaign_mutation');
   if (mutation) {
     parts.push(mutation.summary);
@@ -246,6 +255,11 @@ export function composeOperatorReply(
         : 'Non ci sono conversazioni in Messaggi.',
     );
     if (conversations.length) actions.push({ type: 'open_inbox', label: 'Apri messaggi' });
+  }
+
+  const demoInspect = byName.get('inspect_demo') as { publicPath?: string; leadName?: string } | undefined;
+  if (demoInspect && typeof demoInspect.publicPath === 'string') {
+    actions.push({ type: 'open_demo', path: demoInspect.publicPath, label: 'Apri demo' });
   }
 
   const uniqueActions = actions.filter((action, index) => {

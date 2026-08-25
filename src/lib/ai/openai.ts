@@ -17,8 +17,15 @@ import {
   outboundDraftSchema,
   salesReplyDraftSchema,
   websiteAnalysisSchema,
+  type InboundClassification,
+  type OutboundDraft,
 } from './commercial/schemas';
-import type { InboundClassification, OutboundDraft } from './commercial/schemas';
+import {
+  OPERATOR_FINAL_REPLY_JSON_SCHEMA,
+  OPERATOR_PLAN_JSON_SCHEMA,
+  operatorFinalReplySchema,
+  operatorPlanSchema,
+} from './operator/orchestrator-schema';
 import {
   mockAnalyzeBusiness,
   mockAnalyzeWebsite,
@@ -324,8 +331,66 @@ export class OpenAICommercialProvider implements AICommercialProvider {
   summarizeThread(): Promise<never> {
     return notReady('summarizeThread', 'AI-1');
   }
-  answerOperator(): Promise<never> {
-    return notReady('answerOperator', 'AI-1');
+
+  async answerOperator(
+    input: import('./operator/orchestrator-input').OperatorAnswerInput,
+    ctx: AICommercialCallContext,
+  ) {
+    return this.completeJson({
+      model: ctx.model,
+      schemaName: 'operator_plan',
+      jsonSchema: OPERATOR_PLAN_JSON_SCHEMA,
+      zodSchema: operatorPlanSchema,
+      system: [
+        'Sei Attila, orchestratore commerciale del Sales OS.',
+        'Pianifica tool dalla registry fornita. Non inventare tool.',
+        'safetyClass: READ, PREPARE, EXTERNAL, DESTRUCTIVE, POLICY, HELP, UNKNOWN.',
+        'Non elevare permessi. Invii = EXTERNAL con conferma. Delete = DESTRUCTIVE.',
+        'Telegram ricerca/scan = inbound listen, MAI campagna vuota (telegramIsInboundScan=true, prepareKind=none).',
+        'HELP solo per capability. "da dove partiresti" è READ situazione, non HELP.',
+        'prepareKind: none | campaign | pause | personalize | apply | analyze.',
+        'Comprendi italiano naturale, typo e referenti (questa, il terzo).',
+      ].join(' '),
+      user: JSON.stringify({
+        question: input.question,
+        history: (input.history ?? []).slice(-8),
+        refs: input.refs,
+        envelope: input.envelope,
+        assistMode: input.assistMode,
+        allowedTools: input.allowedTools,
+        capabilities: input.capabilities,
+      }),
+    });
+  }
+
+  async composeOperatorAnswer(
+    input: import('./operator/orchestrator-input').OperatorComposeInput,
+    ctx: AICommercialCallContext,
+  ) {
+    const succeeded = input.traces.filter((t) => t.ok).map((t) => t.name);
+    return this.completeJson({
+      model: ctx.model,
+      schemaName: 'operator_final_reply',
+      jsonSchema: OPERATOR_FINAL_REPLY_JSON_SCHEMA,
+      zodSchema: operatorFinalReplySchema,
+      system: [
+        'Componi una risposta italiana breve e naturale per l’operatore.',
+        'Cita solo tool riusciti. Non dichiarare successi senza result ok.',
+        'Non menzionare ID lunghi. Non promettere invii. Non inventare numeri.',
+        'citedTools deve essere un sottoinsieme dei tool riusciti.',
+      ].join(' '),
+      user: JSON.stringify({
+        question: input.question,
+        plan: input.plan,
+        succeededTools: succeeded,
+        traces: input.traces.map((t) => ({
+          name: t.name,
+          ok: t.ok,
+          result: t.ok ? t.result : { error: true },
+        })),
+        writes: input.writeSummaries,
+      }),
+    });
   }
 
   private asResult<T>(output: T, ctx: AICommercialCallContext): AICommercialResult<T> {

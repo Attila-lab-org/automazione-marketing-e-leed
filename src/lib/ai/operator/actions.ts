@@ -22,6 +22,11 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
     label: z.literal('Apri Review'),
   }),
   z.object({
+    type: z.literal('open_demo'),
+    path: z.string().min(1).max(200),
+    label: z.literal('Apri demo'),
+  }),
+  z.object({
     type: z.literal('open_inbox'),
     threadId: z.string().uuid().optional(),
     label: z.literal('Apri messaggi'),
@@ -141,6 +146,8 @@ export function hrefForAction(action: OperatorAction): string {
       return `/leads?lead=${action.leadId}`;
     case 'open_review':
       return '/review-queue';
+    case 'open_demo':
+      return action.path.startsWith('/') ? action.path : `/${action.path}`;
     case 'open_inbox':
       return '/inbox';
     case 'show_blockers':

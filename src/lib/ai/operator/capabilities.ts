@@ -30,6 +30,11 @@ const READ_CAPABILITY_LABELS: Partial<Record<OperatorToolName, string>> = {
   list_review_items: 'leggere la Review',
   list_conversations: 'leggere e gestire conversazioni commerciali',
   get_conversation: 'leggere e gestire conversazioni commerciali',
+  get_telegram_inbound_status: 'spiegare il monitoraggio Telegram inbound',
+  list_templates: 'ispezionare template e demo',
+  list_demos: 'ispezionare template e demo',
+  inspect_demo: 'ispezionare template e demo',
+  inspect_template: 'ispezionare template e demo',
 };
 
 const WRITE_NOW_LABELS: Partial<Record<string, string>> = {
@@ -37,6 +42,8 @@ const WRITE_NOW_LABELS: Partial<Record<string, string>> = {
   prepare_campaign: 'generare demo e messaggi',
   pause_campaign: 'gestire campagne attraverso azioni autorizzate',
   resume_campaign: 'gestire campagne attraverso azioni autorizzate',
+  personalize_demo: 'personalizzare testi demo (headline, CTA, tono)',
+  apply_demo_personalization: 'applicare personalizzazioni demo già proposte',
 };
 
 const CONFIRM_LABELS: Record<(typeof OPERATOR_CONFIRM_TOOLS)[number], string> = {

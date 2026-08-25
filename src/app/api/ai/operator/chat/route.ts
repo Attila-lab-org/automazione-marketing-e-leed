@@ -8,8 +8,10 @@ import {
   appendOperatorMessage,
   createOperatorSession,
   getOperatorSession,
+  listOperatorMessages,
   saveOperatorSessionRefs,
 } from '@/lib/ai/operator/sessions';
+import { applyDemoPersonalization, personalizeDemoForOperator } from '@/lib/ai/operator/demo-tools';
 import { runOperatorTurn } from '@/lib/ai/operator/turn';
 import { classifyOperatorIntent } from '@/lib/ai/operator/intent';
 import { emptyEntityRefs } from '@/lib/ai/operator/context';
@@ -64,6 +66,11 @@ export const POST = withAdmin(async (request: Request) => {
     role: 'user',
     content: message,
   });
+  const prior = await listOperatorMessages(admin, workspace.id, sessionId);
+  const history = prior.slice(-8).map((row) => ({
+    role: row.role,
+    content: row.content.slice(0, 2000),
+  }));
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -83,15 +90,19 @@ export const POST = withAdmin(async (request: Request) => {
           question: message,
           envelope,
           refs: sessionRefs,
+          history,
           data: createSupabaseOperatorData(admin, workspace.id),
           persist: createSupabaseAiRunStore(admin),
           writes: {
-            prepare: ({ leads, campaignId }) =>
+            prepare: ({ leads, campaignId, verb }) =>
               executePreparePlan({
                 admin,
                 workspaceId: workspace.id,
                 question: message,
-                intent: classifyOperatorIntent(message),
+                intent: {
+                  ...classifyOperatorIntent(message),
+                  writeVerb: verb ?? classifyOperatorIntent(message).writeVerb,
+                },
                 leads,
                 campaignId,
               }),
@@ -107,6 +118,32 @@ export const POST = withAdmin(async (request: Request) => {
                 campaignId,
                 campaign,
               }),
+            personalizeDemo: ({ leadId, demoId }) =>
+              personalizeDemoForOperator({
+                admin,
+                workspaceId: workspace.id,
+                leadId,
+                demoId,
+                instruction: message,
+              }),
+            applyDemo: async ({ demoId, proposal }) => {
+              if (!proposal) {
+                return [
+                  {
+                    tool: 'apply_demo_personalization',
+                    ok: false,
+                    summary: 'Non c’è una proposta testi da applicare. Chiedimi prima di migliorare i testi.',
+                    data: { demoId },
+                  },
+                ];
+              }
+              return applyDemoPersonalization({
+                admin,
+                workspaceId: workspace.id,
+                demoId,
+                proposal,
+              });
+            },
           },
         })) {
           if (event.type === 'tool_done') {

@@ -1,24 +1,31 @@
+import type { DemoPersonalization } from '@/lib/ai/commercial/schemas';
 import { estimateCostUsd, estimateTokensFromText } from '@/lib/ai/costs';
 import { getAiCommercialConfig } from '@/lib/ai/config';
+import { getAICommercialProvider } from '@/lib/ai/run';
 import { resolveModel } from '@/lib/ai/router';
 import type { PersistAiRun } from '@/lib/ai/persist';
 import type { AiRunPublic } from '@/lib/ai/types';
 import { assertNoSecrets } from '@/lib/ai/readiness';
 import type { OperatorAction } from './actions';
 import { composeOperatorReply } from './compose';
-import type { OperatorEnvelope } from './envelope';
-import { classifyOperatorIntent } from './intent';
+import { composeOrchestratorReply } from './compose-orchestrator';
+import { registeredNowWriteCapabilities, registeredReadCapabilities, type OperatorAssistMode } from './capabilities';
 import {
   emptyEntityRefs,
   mergeEntityRefs,
+  resolveOrdinalSelection,
   resolveOperatorEnvelope,
   type OperatorEntityRefs,
 } from './context';
-import { type OperatorAssistMode } from './capabilities';
+import type { OperatorEnvelope } from './envelope';
+import { classifyOperatorIntent } from './intent';
+import type { OperatorHistoryItem, OperatorPlan } from './orchestrator-schema';
+import { OPERATOR_ORCHESTRATOR_PROMPT_VERSION } from './orchestrator-schema';
+import { applySafetyPolicy } from './semantic-plan';
 import {
   executeOperatorTool,
-  operatorTaskType,
-  suggestOperatorTools,
+  OPERATOR_TOOL_NAMES,
+  plannedFromOrchestratorCall,
   TOOL_LABELS,
   type CampaignDetail,
   type LeadSearchHit,
@@ -46,6 +53,7 @@ export type OperatorWriteHooks = {
   prepare?: (input: {
     leads: LeadSearchHit[];
     campaignId: string | null;
+    verb: string | null;
   }) => Promise<WriteResult[]>;
   sendPending?: (campaignId: string) => Promise<WriteResult>;
   proposePolicy?: (question: string) => Promise<WriteResult>;
@@ -53,6 +61,11 @@ export type OperatorWriteHooks = {
     verb: 'cancel' | 'hard_delete';
     campaignId: string | null;
     campaign: CampaignDetail | null;
+  }) => Promise<WriteResult[]>;
+  personalizeDemo?: (input: { leadId: string | null; demoId: string | null }) => Promise<WriteResult[]>;
+  applyDemo?: (input: {
+    demoId: string;
+    proposal: DemoPersonalization | null;
   }) => Promise<WriteResult[]>;
 };
 
@@ -67,34 +80,115 @@ export type OperatorTurnInput = {
   writes?: OperatorWriteHooks;
   refs?: OperatorEntityRefs;
   assistMode?: OperatorAssistMode;
+  history?: OperatorHistoryItem[];
 };
 
-const MAX_TOOL_CALLS = 8;
+function mapIntentToSafety(
+  kind: ReturnType<typeof classifyOperatorIntent>['kind'],
+): OperatorPlan['safetyClass'] {
+  if (kind === 'PREPARE' || kind === 'EXTERNAL' || kind === 'DESTRUCTIVE' || kind === 'POLICY' || kind === 'HELP') {
+    return kind;
+  }
+  if (kind === 'READ') return 'READ';
+  return 'UNKNOWN';
+}
+
+function clampElevation(
+  model: OperatorPlan['safetyClass'],
+  fallback: OperatorPlan['safetyClass'],
+): OperatorPlan['safetyClass'] {
+  if (fallback === 'EXTERNAL' || fallback === 'DESTRUCTIVE') return fallback;
+  if (
+    (model === 'EXTERNAL' || model === 'DESTRUCTIVE') &&
+    (fallback === 'READ' || fallback === 'PREPARE' || fallback === 'HELP' || fallback === 'POLICY')
+  ) {
+    return fallback;
+  }
+  if (model === 'UNKNOWN') return fallback === 'UNKNOWN' ? 'UNKNOWN' : fallback;
+  return model;
+}
 
 export async function* runOperatorTurn(
   input: OperatorTurnInput,
 ): AsyncGenerator<OperatorStreamEvent> {
   yield { type: 'session', sessionId: input.sessionId };
   const env = input.env ?? process.env;
-  const intent = classifyOperatorIntent(input.question);
-  const prevRefs = input.refs ?? emptyEntityRefs();
-  const envelope = resolveOperatorEnvelope(input.question, input.envelope, prevRefs, intent);
-  const planned =
-    intent.kind === 'HELP' || intent.kind === 'UNKNOWN'
-      ? []
-      : suggestOperatorTools(input.question, envelope, intent).slice(0, MAX_TOOL_CALLS);
-  const traces: Array<{ name: OperatorToolName; result: unknown }> = [];
-  const writes: WriteResult[] = [];
+  const config = getAiCommercialConfig(env);
+  const assistMode = input.assistMode ?? 'ASSISTITO';
+  const fallbackIntent = classifyOperatorIntent(input.question);
+  let prevRefs = input.refs ?? emptyEntityRefs();
+  const envelope = resolveOperatorEnvelope(input.question, input.envelope, prevRefs, fallbackIntent);
 
-  for (const call of planned) {
+  const traces: Array<{ name: OperatorToolName; result: unknown; ok: boolean }> = [];
+  const writes: WriteResult[] = [];
+  let aiUnavailable = false;
+  let plan: OperatorPlan;
+  let usage = {
+    inputTokens: estimateTokensFromText(input.question),
+    cachedInputTokens: 0,
+    outputTokens: 0,
+  };
+  let modelName = resolveModel('answer_operator', env).model;
+  let requestId: string | null = null;
+
+  try {
+    const provider = getAICommercialProvider(env);
+    const route = resolveModel('answer_operator', env);
+    modelName = route.model;
+    const planned = await provider.answerOperator(
+      {
+        question: input.question,
+        history: (input.history ?? []).slice(-8),
+        refs: prevRefs,
+        envelope,
+        assistMode,
+        allowedTools: [...OPERATOR_TOOL_NAMES],
+        capabilities: [...registeredNowWriteCapabilities(), ...registeredReadCapabilities()],
+      },
+      { model: route.model },
+    );
+    usage = {
+      inputTokens: usage.inputTokens + planned.usage.inputTokens,
+      cachedInputTokens: planned.usage.cachedInputTokens,
+      outputTokens: planned.usage.outputTokens,
+    };
+    requestId = planned.requestId;
+    plan = applySafetyPolicy(planned.output, input.question);
+  } catch {
+    if (config.mode === 'openai') {
+      aiUnavailable = true;
+      plan = {
+        safetyClass: 'UNKNOWN',
+        goal: 'fallback',
+        toolCalls: [],
+        ordinal: null,
+        clarification: 'Modalità AI temporaneamente non disponibile. Posso solo leggere dati espliciti se me lo chiedi in modo diretto.',
+        telegramIsInboundScan: false,
+        prepareKind: 'none',
+      };
+    } else {
+      throw new Error('Orchestratore mock non disponibile');
+    }
+  }
+
+  plan.safetyClass = clampElevation(plan.safetyClass, mapIntentToSafety(fallbackIntent.kind));
+  prevRefs = resolveOrdinalSelection(plan.ordinal, prevRefs);
+
+  const maxCalls = Math.min(config.maxToolCalls, 8);
+  const plannedCalls = aiUnavailable
+    ? []
+    : plan.toolCalls.slice(0, maxCalls).map(plannedFromOrchestratorCall);
+
+  for (const call of plannedCalls) {
     const labels = TOOL_LABELS[call.name];
     yield { type: 'tool_start', name: call.name, label: labels.start };
     const executed = await executeOperatorTool(call.name, call.args, input.data, envelope);
     if (!executed.ok) {
+      traces.push({ name: call.name, result: { error: executed.error }, ok: false });
       yield { type: 'tool_done', name: call.name, ok: false, label: executed.error };
       continue;
     }
-    traces.push({ name: executed.name, result: executed.result });
+    traces.push({ name: executed.name, result: executed.result, ok: true });
     const count = Array.isArray(executed.result) ? executed.result.length : undefined;
     yield {
       type: 'tool_done',
@@ -105,24 +199,42 @@ export async function* runOperatorTurn(
     };
   }
 
-  const detail = traces.find((t) => t.name === 'get_lead_detail')?.result as LeadSearchHit | null | undefined;
-  const searched = (traces.find((t) => t.name === 'search_leads')?.result ?? []) as LeadSearchHit[];
+  const detail = traces.find((t) => t.name === 'get_lead_detail' && t.ok)?.result as LeadSearchHit | null | undefined;
+  const searched = (traces.find((t) => t.name === 'search_leads' && t.ok)?.result ?? []) as LeadSearchHit[];
   const leadHits = (detail ? [detail, ...searched] : searched).filter((row) => row && row.id);
-  const campaignId = envelope.entityType === 'campaign' ? envelope.entityId ?? null : null;
-  const campaignDetail = traces.find((t) => t.name === 'get_campaign_detail')?.result as
+  if (plan.ordinal && prevRefs.lastLeadIds[plan.ordinal - 1]) {
+    const picked = leadHits.find((l) => l.id === prevRefs.lastLeadIds[plan.ordinal! - 1]);
+    if (picked && !detail) leadHits.unshift(picked);
+  }
+  const campaignId =
+    (envelope.entityType === 'campaign' ? envelope.entityId : null) ?? prevRefs.lastCampaignId;
+  const campaignDetail = traces.find((t) => t.name === 'get_campaign_detail' && t.ok)?.result as
     | CampaignDetail
     | null
     | undefined;
 
-  if (intent.kind === 'PREPARE' && input.writes?.prepare) {
-    const prepareLabel =
-      intent.writeVerb === 'pause'
-        ? 'Sto fermando la campagna…'
-        : intent.writeVerb === 'resume'
-          ? 'Sto riprendendo la campagna…'
-          : 'Sto preparando la campagna…';
-    yield { type: 'tool_start', name: 'prepare_campaign', label: prepareLabel };
-    const prepared = await input.writes.prepare({ leads: leadHits, campaignId });
+  const allowCampaignPrepare =
+    plan.safetyClass === 'PREPARE' &&
+    plan.prepareKind === 'campaign' &&
+    !plan.telegramIsInboundScan &&
+    leadHits.length > 0;
+
+  const prepareVerb =
+    plan.prepareKind === 'pause'
+      ? 'pause'
+      : plan.prepareKind === 'analyze'
+        ? 'analyze'
+        : plan.prepareKind === 'campaign'
+          ? fallbackIntent.writeVerb ?? 'prepare'
+          : fallbackIntent.writeVerb;
+
+  if (allowCampaignPrepare && input.writes?.prepare) {
+    yield { type: 'tool_start', name: 'prepare_campaign', label: 'Sto preparando la campagna…' };
+    const prepared = await input.writes.prepare({
+      leads: leadHits,
+      campaignId,
+      verb: prepareVerb,
+    });
     writes.push(...prepared);
     yield {
       type: 'tool_done',
@@ -130,13 +242,78 @@ export async function* runOperatorTurn(
       ok: prepared.every((w) => w.ok),
       label: prepared.map((w) => w.summary).join(' '),
     };
+  } else if (plan.prepareKind === 'pause' && input.writes?.prepare) {
+    yield { type: 'tool_start', name: 'pause_campaign', label: 'Sto mettendo in pausa…' };
+    const paused = await input.writes.prepare({ leads: [], campaignId, verb: 'pause' });
+    writes.push(...paused);
+    yield {
+      type: 'tool_done',
+      name: 'pause_campaign',
+      ok: paused.every((w) => w.ok),
+      label: paused.map((w) => w.summary).join(' '),
+    };
+  } else if (plan.prepareKind === 'analyze' && input.writes?.prepare && leadHits.length > 0) {
+    yield { type: 'tool_start', name: 'analyze_business', label: 'Sto analizzando l’attività…' };
+    const analyzed = await input.writes.prepare({ leads: leadHits, campaignId, verb: 'analyze' });
+    writes.push(...analyzed);
+    yield {
+      type: 'tool_done',
+      name: 'analyze_business',
+      ok: analyzed.every((w) => w.ok),
+      label: analyzed.map((w) => w.summary).join(' '),
+    };
+  } else if (plan.safetyClass === 'PREPARE' && plan.telegramIsInboundScan) {
+    writes.push({
+      tool: 'create_campaign',
+      ok: false,
+      summary: 'Telegram non crea campagne vuote. Ascolta solo i messaggi inbound configurati.',
+      data: { blocked: 'telegram_inbound_not_campaign' },
+    });
+  } else if (plan.safetyClass === 'PREPARE' && plan.prepareKind === 'campaign' && leadHits.length === 0) {
+    writes.push({
+      tool: 'create_campaign',
+      ok: false,
+      summary: 'Non ho trovato lead per questa campagna. Non creo una campagna vuota.',
+      data: { blocked: 'empty_campaign' },
+    });
   }
 
-  if (intent.kind === 'DESTRUCTIVE') {
+  const demoId =
+    (traces.find((t) => t.name === 'inspect_demo' && t.ok)?.result as { id?: string } | undefined)?.id ??
+    prevRefs.lastDemoId;
+  const leadId = prevRefs.lastLeadId ?? leadHits[0]?.id ?? null;
+  let proposal = prevRefs.lastDemoProposal;
+  if (plan.prepareKind === 'personalize' && input.writes?.personalizeDemo) {
+    yield { type: 'tool_start', name: 'personalize_demo', label: 'Sto proponendo i testi…' };
+    const proposed = await input.writes.personalizeDemo({ leadId, demoId });
+    writes.push(...proposed);
+    const nextProposal = proposed.find((w) => w.ok)?.data.proposal;
+    if (nextProposal && typeof nextProposal === 'object') {
+      proposal = nextProposal as DemoPersonalization;
+    }
+    yield {
+      type: 'tool_done',
+      name: 'personalize_demo',
+      ok: proposed.every((w) => w.ok),
+      label: proposed.map((w) => w.summary).join(' '),
+    };
+  } else if (plan.prepareKind === 'apply' && demoId && input.writes?.applyDemo) {
+    yield { type: 'tool_start', name: 'apply_demo_personalization', label: 'Sto applicando i testi…' };
+    const applied = await input.writes.applyDemo({ demoId, proposal });
+    writes.push(...applied);
+    yield {
+      type: 'tool_done',
+      name: 'apply_demo_personalization',
+      ok: applied.every((w) => w.ok),
+      label: applied.map((w) => w.summary).join(' '),
+    };
+  }
+
+  if (plan.safetyClass === 'DESTRUCTIVE') {
     yield { type: 'tool_start', name: 'campaign_mutation', label: 'Sto verificando la campagna…' };
     const mutated = input.writes?.campaignMutation
       ? await input.writes.campaignMutation({
-          verb: intent.writeVerb === 'hard_delete' ? 'hard_delete' : 'cancel',
+          verb: fallbackIntent.writeVerb === 'hard_delete' ? 'hard_delete' : 'cancel',
           campaignId,
           campaign: campaignDetail && campaignDetail.id ? campaignDetail : null,
         })
@@ -144,8 +321,7 @@ export async function* runOperatorTurn(
           {
             tool: 'campaign_mutation',
             ok: false,
-            summary:
-              'Questa azione richiede conferma e non cancella nulla da sola. Quale campagna vuoi fermare?',
+            summary: 'Questa azione richiede conferma e non cancella nulla da sola.',
             data: { needsConfirmation: true, campaignId },
           },
         ];
@@ -158,11 +334,9 @@ export async function* runOperatorTurn(
     };
   }
 
-  if (intent.kind === 'EXTERNAL') {
-    const detail = traces.find((t) => t.name === 'get_campaign_detail')?.result as
-      | { id?: string }
-      | undefined;
-    const targetId = campaignId ?? detail?.id;
+  if (plan.safetyClass === 'EXTERNAL') {
+    const targetId =
+      campaignId ?? (traces.find((t) => t.name === 'get_campaign_detail')?.result as { id?: string } | undefined)?.id;
     if (targetId && input.writes?.sendPending) {
       yield { type: 'tool_start', name: 'send_campaign', label: 'Sto preparando la conferma di invio…' };
       const pending = await input.writes.sendPending(targetId);
@@ -178,57 +352,115 @@ export async function* runOperatorTurn(
     }
   }
 
-  if (intent.kind === 'POLICY' && input.writes?.proposePolicy) {
-    yield { type: 'tool_start', name: 'propose_autonomy', label: 'Sto preparando la policy…' };
+  if (plan.safetyClass === 'POLICY' && input.writes?.proposePolicy) {
     const proposed = await input.writes.proposePolicy(input.question);
     writes.push(proposed);
-    yield { type: 'tool_done', name: 'propose_autonomy', ok: proposed.ok, label: proposed.summary };
   }
 
-  const composed = composeOperatorReply(
+  const composeTraces = traces.filter((t) => t.ok).map((t) => ({ name: t.name, result: t.result }));
+  let replyText: string;
+  let actions: OperatorAction[] = [];
+  try {
+    if (aiUnavailable) {
+      replyText = plan.clarification ?? 'Modalità AI temporaneamente non disponibile.';
+    } else {
+      const provider = getAICommercialProvider(env);
+      const composeRoute = resolveModel('answer_operator_simple', env);
+      const composedAi = await provider.composeOperatorAnswer(
+        {
+          question: input.question,
+          plan,
+          traces: traces.map((t) => ({ name: t.name, ok: t.ok, result: t.result })),
+          writeSummaries: writes.map((w) => w.summary),
+          assistMode,
+        },
+        { model: composeRoute.model },
+      );
+      usage = {
+        inputTokens: usage.inputTokens + composedAi.usage.inputTokens,
+        cachedInputTokens: usage.cachedInputTokens + composedAi.usage.cachedInputTokens,
+        outputTokens: usage.outputTokens + composedAi.usage.outputTokens,
+      };
+      const allowedCite = new Set<string>(traces.filter((t) => t.ok).map((t) => t.name));
+      const citedOk = composedAi.output.citedTools.every((name) => allowedCite.has(name) || writes.some((w) => w.ok && w.tool === name));
+      replyText = citedOk
+        ? composedAi.output.reply
+        : composeOrchestratorReply({
+            question: input.question,
+            plan,
+            traces: traces.map((t) => ({ name: t.name, ok: t.ok, result: t.result })),
+            writeSummaries: writes.map((w) => w.summary),
+            assistMode,
+          }).reply;
+    }
+  } catch {
+    replyText = composeOrchestratorReply({
+      question: input.question,
+      plan,
+      traces: traces.map((t) => ({ name: t.name, ok: t.ok, result: t.result })),
+      writeSummaries: writes.map((w) => w.summary),
+      assistMode,
+    }).reply;
+  }
+
+  const mappedIntent = {
+    ...fallbackIntent,
+    kind: plan.safetyClass === 'UNKNOWN' ? fallbackIntent.kind : plan.safetyClass,
+  };
+  const deterministic = composeOperatorReply(
     input.question,
     envelope,
-    traces,
+    composeTraces,
     writes,
-    intent,
-    input.assistMode ?? 'ASSISTITO',
+    mappedIntent,
+    assistMode,
   );
-  assertNoSecrets(composed);
-  const nextRefs = mergeEntityRefs(prevRefs, traces, writes);
+  actions = deterministic.actions;
+  if (writes.length && !replyText.includes(writes[0]?.summary.slice(0, 24) ?? '___never___')) {
+    if (writes[0]?.summary) replyText = `${writes[0].summary} ${replyText}`.trim();
+  }
+  if (
+    writes.some((w) => w.tool === 'create_campaign' || w.tool === 'prepare_campaign') &&
+    !/0 messaggi inviati/i.test(replyText)
+  ) {
+    replyText = `${replyText} 0 messaggi inviati.`.trim();
+  }
+  if (!replyText.trim()) replyText = deterministic.reply;
+  assertNoSecrets(replyText);
+  const nextRefs = mergeEntityRefs(prevRefs, composeTraces, writes);
 
-  const taskType = operatorTaskType(input.question);
-  const route = resolveModel(taskType, env);
-  const usage = {
-    inputTokens: estimateTokensFromText(input.question),
-    cachedInputTokens: 0,
-    outputTokens: estimateTokensFromText(composed.reply),
-  };
-  const estimated = estimateCostUsd(usage, route.tier, env);
-  const cap = getAiCommercialConfig(env).budgetsUsd.operatorRequest;
+  const cap = config.budgetsUsd.operatorRequest;
+  const estimated = estimateCostUsd(usage, resolveModel('answer_operator', env).tier, env);
+  const overBudget = estimated > cap;
+  if (overBudget) {
+    replyText = `${replyText} Ho raggiunto il tetto di costo di questa richiesta.`;
+  }
+
   const run = await input.persist({
     workspaceId: input.workspaceId,
-    provider: getAiCommercialConfig(env).mode,
-    model: route.model,
-    taskType,
+    provider: config.mode,
+    model: modelName,
+    taskType: 'answer_operator',
     usage,
-    estimatedCostUsd: estimated,
+    estimatedCostUsd: Math.min(estimated, cap),
     latencyMs: 0,
-    status: 'ok',
+    status: aiUnavailable ? 'error' : 'ok',
+    requestId,
     meta: {
-      source: 'operator_copilot',
+      source: 'operator_orchestrator',
+      promptVersion: OPERATOR_ORCHESTRATOR_PROMPT_VERSION,
       tools: traces.map((t) => t.name),
       writes: writes.map((w) => w.tool),
-      intent: intent.kind,
-      routeReason: route.reason,
+      safetyClass: plan.safetyClass,
       budgetCapUsd: cap,
     },
   });
 
-  yield { type: 'delta', text: composed.reply };
+  yield { type: 'delta', text: replyText };
   yield {
     type: 'done',
-    reply: composed.reply,
-    actions: composed.actions,
+    reply: replyText,
+    actions,
     run,
     persisted: Boolean(run),
     refs: nextRefs,
