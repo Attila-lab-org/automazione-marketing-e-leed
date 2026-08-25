@@ -1,6 +1,7 @@
 import type { OperatorAction, OperatorReply } from './actions';
 import type { DailyReport, LeadSearchHit, OperatorToolName } from './registry';
 import type { OperatorEnvelope } from './envelope';
+import type { WriteResult } from './writes';
 
 function metricText(metric: DailyReport['metrics'][keyof DailyReport['metrics']]): string | null {
   if (!metric.available) return null;
@@ -11,11 +12,64 @@ export function composeOperatorReply(
   question: string,
   envelope: OperatorEnvelope,
   traces: Array<{ name: OperatorToolName; result: unknown }>,
+  writes: WriteResult[] = [],
 ): OperatorReply {
   const byName = new Map(traces.map((t) => [t.name, t.result]));
   const actions: OperatorAction[] = [];
   const parts: string[] = [];
   const q = question.toLowerCase();
+
+  const create = writes.find((w) => w.tool === 'create_campaign');
+  const prepare = writes.find((w) => w.tool === 'prepare_campaign');
+  const analyze = writes.find((w) => w.tool === 'analyze_business');
+  const send = writes.find((w) => w.tool === 'send_campaign');
+  const policy = writes.find((w) => w.tool === 'propose_autonomy' || w.tool === 'enable_autonomy');
+
+  if (analyze?.ok) {
+    const opp = analyze.data.opportunity as { aiOpportunityScore?: number; reasons?: string[] } | undefined;
+    const analysis = analyze.data.analysis as { recommendedOffer?: string; confidence?: number } | undefined;
+    parts.push(analyze.summary);
+    if (opp?.reasons?.length) parts.push(`Motivi: ${opp.reasons.join('; ')}.`);
+    if (analysis?.recommendedOffer) parts.push(`Azione: ${analysis.recommendedOffer}.`);
+    const leadId = typeof analyze.data.leadId === 'string' ? analyze.data.leadId : null;
+    if (leadId) actions.push({ type: 'open_lead', leadId, label: 'Apri attività' });
+  }
+
+  if (create || prepare) {
+    const selected = Number(prepare?.data.selected ?? create?.data.leadCount ?? 0);
+    const skipped = Number(create?.data.skipped ?? 0);
+    const campaignId = String(prepare?.data.campaignId ?? create?.data.campaignId ?? '');
+    parts.push(
+      `Campagna ${create?.ok ? 'creata' : 'non creata'}. ${selected} lead selezionati. ${
+        typeof prepare?.data.enqueued === 'number' ? `${prepare.data.enqueued} in preparazione.` : ''
+      } ${skipped} bloccati in partenza. 0 messaggi inviati.`,
+    );
+    if (campaignId) {
+      actions.push({ type: 'open_campaign', campaignId, label: 'Apri campagna' });
+      actions.push({ type: 'open_review', label: 'Apri Review' });
+      actions.push({ type: 'show_blockers', campaignId, label: 'Mostra blocker' });
+    }
+  }
+
+  if (send) {
+    parts.push(send.summary);
+    const pendingId = typeof send.data.pendingActionId === 'string' ? send.data.pendingActionId : null;
+    const campaignId = typeof send.data.campaignId === 'string' ? send.data.campaignId : null;
+    if (campaignId) actions.push({ type: 'open_campaign', campaignId, label: 'Apri campagna' });
+    if (pendingId && send.ok) {
+      actions.push({ type: 'confirm_action', pendingActionId: pendingId, label: 'Conferma invio' });
+      actions.push({ type: 'cancel_action', pendingActionId: pendingId, label: 'Annulla' });
+    }
+  }
+
+  if (policy) {
+    parts.push(policy.summary);
+    const pendingId = typeof policy.data.pendingActionId === 'string' ? policy.data.pendingActionId : null;
+    if (pendingId) {
+      actions.push({ type: 'confirm_action', pendingActionId: pendingId, label: 'Abilita policy' });
+      actions.push({ type: 'cancel_action', pendingActionId: pendingId, label: 'Annulla' });
+    }
+  }
 
   const daily = byName.get('get_daily_report') as DailyReport | undefined;
   if (daily) {

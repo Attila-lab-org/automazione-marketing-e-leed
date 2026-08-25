@@ -65,6 +65,9 @@ export function createSupabaseOperatorData(
       if (input.city?.trim()) {
         query = query.ilike('city', `%${input.city.trim().replace(/[%_]/g, '')}%`);
       }
+      if (input.category?.trim()) {
+        query = query.ilike('category', `%${input.category.trim().replace(/[%_]/g, '')}%`);
+      }
       if (input.query?.trim()) {
         query = query.ilike('name', `%${input.query.trim().replace(/[%_]/g, '')}%`);
       }
@@ -409,8 +412,12 @@ export function createMemoryOperatorData(seed?: {
     },
     async searchLeads(input) {
       const city = input.city?.toLowerCase();
+      const category = input.category?.toLowerCase();
       return leads
         .filter((lead) => (city ? (lead.city ?? '').toLowerCase().includes(city) : true))
+        .filter((lead) =>
+          category ? (lead.category ?? '').toLowerCase().includes(category) : true,
+        )
         .sort((a, b) => (b.discoveryScore ?? -1) - (a.discoveryScore ?? -1))
         .slice(0, input.limit ?? 8);
     },

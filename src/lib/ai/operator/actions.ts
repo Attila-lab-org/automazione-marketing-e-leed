@@ -26,6 +26,21 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
     threadId: z.string().uuid().optional(),
     label: z.literal('Apri messaggi'),
   }),
+  z.object({
+    type: z.literal('show_blockers'),
+    campaignId: z.string().uuid().optional(),
+    label: z.literal('Mostra blocker'),
+  }),
+  z.object({
+    type: z.literal('confirm_action'),
+    pendingActionId: z.string().uuid(),
+    label: z.union([z.literal('Conferma invio'), z.literal('Abilita policy')]),
+  }),
+  z.object({
+    type: z.literal('cancel_action'),
+    pendingActionId: z.string().uuid(),
+    label: z.literal('Annulla'),
+  }),
 ]);
 
 export type OperatorAction = z.infer<typeof operatorActionSchema>;
@@ -119,6 +134,11 @@ export function hrefForAction(action: OperatorAction): string {
       return '/review-queue';
     case 'open_inbox':
       return '/inbox';
+    case 'show_blockers':
+      return action.campaignId ? `/campaigns/${action.campaignId}` : '/campaigns';
+    case 'confirm_action':
+    case 'cancel_action':
+      return '#';
   }
 }
 

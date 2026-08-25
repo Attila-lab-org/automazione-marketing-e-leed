@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { hrefForAction, type OperatorAction } from "@/lib/ai/operator/actions";
 import { envelopeFromPath } from "@/lib/ai/operator/envelope";
 
@@ -17,8 +17,8 @@ type ToolStatus = { id: string; label: string; done: boolean; ok: boolean };
 
 const SUGGESTIONS = [
   "Come è andata ieri?",
-  "Quali sono i migliori lead di Milano?",
-  "Perché questa campagna è bloccata?",
+  "Quali sono i 20 migliori ristoranti di Milano?",
+  "Preparami una campagna TEST con i 20 migliori ristoranti di Milano.",
 ];
 
 function parseSseChunk(buffer: string): { events: unknown[]; rest: string } {
@@ -120,6 +120,8 @@ export default function AttilaAiDrawer() {
   const [busy, setBusy] = useState(false);
   const [tools, setTools] = useState<ToolStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [modeLabel, setModeLabel] = useState("ASSISTITO");
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   const [seq, setSeq] = useState(0);
 
@@ -127,6 +129,27 @@ export default function AttilaAiDrawer() {
     () => envelopeFromPath(pathname, searchParams.toString()),
     [pathname, searchParams],
   );
+
+  useEffect(() => {
+    void fetch("/api/ai/status")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.readiness?.detail?.includes("OpenAI")) setModeLabel("ASSISTITO");
+      })
+      .catch(() => undefined);
+    void fetch("/api/settings/playbook")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.playbook?.autonomy?.defaultMode === "AUTO_ALLOWED") {
+          setModeLabel("AUTO CONTROLLATO");
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, tools, busy]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -219,8 +242,17 @@ export default function AttilaAiDrawer() {
             <header className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
               <div>
                 <h2 className="text-sm font-semibold text-stone-900">Attila AI</h2>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-amber-800">
+                  {modeLabel}
+                </p>
                 <p className="text-xs text-stone-500">
-                  Solo lettura. Non invia messaggi e non modifica i dati.
+                  {pathname.startsWith("/campaigns")
+                    ? "Contesto: campagna"
+                    : pathname.startsWith("/leads")
+                      ? "Contesto: attività"
+                      : pathname.startsWith("/inbox")
+                        ? "Contesto: messaggi"
+                        : "Comanda il Sales OS. Gli invii restano confermati."}
                 </p>
               </div>
               <button
@@ -232,7 +264,7 @@ export default function AttilaAiDrawer() {
               </button>
             </header>
 
-            <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+            <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
               {messages.length === 0 ? (
                 <div className="space-y-2">
                   <p className="text-sm text-stone-600">
@@ -263,16 +295,46 @@ export default function AttilaAiDrawer() {
                   {message.content}
                   {message.actions && message.actions.length > 0 ? (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {message.actions.map((action) => (
-                        <Link
-                          key={`${action.type}-${hrefForAction(action)}`}
-                          href={hrefForAction(action)}
-                          onClick={() => setOpen(false)}
-                          className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                        >
-                          {action.label}
-                        </Link>
-                      ))}
+                      {message.actions.map((action) =>
+                        action.type === "confirm_action" || action.type === "cancel_action" ? (
+                          <button
+                            key={`${action.type}-${action.pendingActionId}`}
+                            type="button"
+                            className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                            onClick={() => {
+                              void fetch("/api/ai/operator/confirm", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  pendingActionId: action.pendingActionId,
+                                  accept: action.type === "confirm_action",
+                                }),
+                              }).then(async (response) => {
+                                const data = (await response.json()) as { summary?: string; error?: string };
+                                setMessages((current) => [
+                                  ...current,
+                                  {
+                                    id: `sys-${Date.now()}`,
+                                    role: "assistant",
+                                    content: data.summary ?? data.error ?? "Azione aggiornata",
+                                  },
+                                ]);
+                              });
+                            }}
+                          >
+                            {action.label}
+                          </button>
+                        ) : (
+                          <Link
+                            key={`${action.type}-${hrefForAction(action)}`}
+                            href={hrefForAction(action)}
+                            onClick={() => setOpen(false)}
+                            className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                          >
+                            {action.label}
+                          </Link>
+                        ),
+                      )}
                     </div>
                   ) : null}
                 </div>

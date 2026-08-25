@@ -10,6 +10,9 @@ import {
   getOperatorSession,
 } from '@/lib/ai/operator/sessions';
 import { runOperatorTurn } from '@/lib/ai/operator/turn';
+import { classifyOperatorIntent } from '@/lib/ai/operator/intent';
+import { createSendPending, executePreparePlan } from '@/lib/ai/operator/writes';
+import { proposeAutonomyPolicy } from '@/lib/sales/autonomy';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 
@@ -76,6 +79,21 @@ export const POST = withAdmin(async (request: Request) => {
           envelope,
           data: createSupabaseOperatorData(admin, workspace.id),
           persist: createSupabaseAiRunStore(admin),
+          writes: {
+            prepare: ({ leads, campaignId }) =>
+              executePreparePlan({
+                admin,
+                workspaceId: workspace.id,
+                question: message,
+                intent: classifyOperatorIntent(message),
+                leads,
+                campaignId,
+              }),
+            sendPending: (campaignId) =>
+              createSendPending({ admin, workspaceId: workspace.id, campaignId }),
+            proposePolicy: (question) =>
+              proposeAutonomyPolicy({ admin, workspaceId: workspace.id, question }),
+          },
         })) {
           if (event.type === 'tool_done') {
             toolTrace = [...toolTrace, { name: event.name, ok: event.ok }];

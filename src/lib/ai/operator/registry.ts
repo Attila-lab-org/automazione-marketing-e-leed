@@ -31,6 +31,8 @@ export const WRITE_TOOL_NAMES = [
   'fetch_url',
 ] as const;
 
+export const DENIED_TOOL_NAMES = ['sql_query', 'fetch_url', 'send_email', 'send_telegram', 'delete_lead'] as const;
+
 export type CountMetric =
   | { available: true; value: number }
   | { available: false; reason: string };
@@ -98,7 +100,7 @@ export type ConversationHit = {
 
 export type OperatorDataSource = {
   getDashboardSummary(): Promise<Record<string, number>>;
-  searchLeads(input: { city?: string; query?: string; limit?: number }): Promise<LeadSearchHit[]>;
+  searchLeads(input: { city?: string; query?: string; category?: string; limit?: number }): Promise<LeadSearchHit[]>;
   getLeadDetail(leadId: string): Promise<LeadSearchHit | null>;
   listCampaigns(): Promise<CampaignSummary[]>;
   getCampaignDetail(campaignId: string): Promise<CampaignDetail | null>;
@@ -120,6 +122,7 @@ const searchLeadsInput = z
   .object({
     city: z.string().max(80).optional(),
     query: z.string().max(120).optional(),
+    category: z.string().max(80).optional(),
     limit: z.number().int().min(1).max(20).optional(),
   })
   .strict();
@@ -163,8 +166,8 @@ export function isOperatorToolName(name: string): name is OperatorToolName {
   return (OPERATOR_TOOL_NAMES as readonly string[]).includes(name);
 }
 
-export function isWriteToolName(name: string): boolean {
-  return (WRITE_TOOL_NAMES as readonly string[]).includes(name);
+export function isDeniedToolName(name: string): boolean {
+  return (DENIED_TOOL_NAMES as readonly string[]).includes(name);
 }
 
 export function parseToolArgs(
@@ -184,7 +187,7 @@ export async function executeOperatorTool(
   data: OperatorDataSource,
   envelope: OperatorEnvelope,
 ): Promise<{ ok: false; denied: true; error: string } | { ok: true; name: OperatorToolName; result: unknown }> {
-  if (isWriteToolName(name) || !isOperatorToolName(name)) {
+  if (isDeniedToolName(name) || !isOperatorToolName(name)) {
     return { ok: false, denied: true, error: 'tool non registrato' };
   }
   const parsed = parseToolArgs(name, rawArgs);
@@ -206,6 +209,7 @@ export async function executeOperatorTool(
         result: await data.searchLeads({
           city: typeof args.city === 'string' ? args.city : envelope.filters?.city,
           query: typeof args.query === 'string' ? args.query : envelope.filters?.query,
+          category: typeof args.category === 'string' ? args.category : undefined,
           limit: typeof args.limit === 'number' ? args.limit : 8,
         }),
       };
@@ -241,17 +245,44 @@ export function suggestOperatorTools(question: string, envelope: OperatorEnvelop
   const calls: PlannedToolCall[] = [];
   const has = (name: OperatorToolName) => calls.some((c) => c.name === name);
 
-  if (/ieri|oggi|andata|report|numeri/.test(q)) {
+  if (/prepara|crea una campagna|fai partire|invia la campagna|avvia la campagna|gestisci automaticamente|analizz/.test(q)) {
+    if (/analizz/.test(q) && envelope.entityType === 'lead' && envelope.entityId) {
+      calls.push({ name: 'get_lead_detail', args: { leadId: envelope.entityId } });
+      return calls;
+    }
+    // WRITE/POLICY intents are handled by the turn router, not reinterpreted as READ.
+    if (/lead|ristorant|milano|roma|napoli|torino|firenze|bologna|miglior/.test(q)) {
+      const cityMatch = question.match(/\b(milano|roma|napoli|torino|firenze|bologna|bergamo|brescia|genova|padova|verona)\b/i);
+      const limitMatch = q.match(/\b(\d{1,2})\b/);
+      calls.push({
+        name: 'search_leads',
+        args: {
+          city: cityMatch?.[1] ?? envelope.filters?.city,
+          category: /ristorant|restaurant/.test(q) ? 'restaurant' : undefined,
+          limit: limitMatch ? Math.min(20, Number(limitMatch[1])) : 20,
+        },
+      });
+    }
+    if (/campagna/.test(q) && envelope.entityType === 'campaign' && envelope.entityId) {
+      calls.push({ name: 'get_campaign_detail', args: { campaignId: envelope.entityId } });
+      calls.push({ name: 'get_campaign_stats', args: { campaignId: envelope.entityId } });
+    }
+    return calls;
+  }
+
+  if (/ieri|oggi|andata|report|numeri|briefing|brief/.test(q)) {
     calls.push({ name: 'get_daily_report', args: { daysAgo: /oggi/.test(q) && !/ieri/.test(q) ? 0 : 1 } });
   }
-  if (/lead|attivit|miglior|milano|roma|firenze|napoli|torino|bologna|città|citta/.test(q)) {
+  if (/lead|attivit|miglior|milano|roma|firenze|napoli|torino|bologna|città|citta|ristorant/.test(q)) {
     const cityMatch = question.match(/\b(milano|roma|napoli|torino|firenze|bologna|bergamo|brescia|genova|padova|verona)\b/i);
+    const limitMatch = q.match(/\b(\d{1,2})\b/);
     calls.push({
       name: 'search_leads',
       args: {
         city: cityMatch?.[1] ?? envelope.filters?.city,
         query: envelope.filters?.query,
-        limit: 8,
+        category: /ristorant|restaurant/.test(q) ? 'restaurant' : undefined,
+        limit: limitMatch ? Math.min(20, Number(limitMatch[1])) : 8,
       },
     });
   }
