@@ -15,3 +15,18 @@ export function consumeAiTestRateLimit(now = Date.now()): boolean {
 export function resetAiTestRateLimit(): void {
   hits.length = 0;
 }
+
+const operatorHits: number[] = [];
+
+export function consumeOperatorChatRateLimit(now = Date.now()): boolean {
+  while (operatorHits.length > 0 && now - (operatorHits[0] ?? 0) > WINDOW_MS) {
+    operatorHits.shift();
+  }
+  if (operatorHits.length >= 20) return false;
+  operatorHits.push(now);
+  return true;
+}
+
+export function resetOperatorChatRateLimit(): void {
+  operatorHits.length = 0;
+}

@@ -12,6 +12,7 @@ const TASK_TIER: Record<AiTaskType, ModelTier> = {
   draft_reply: 'terra',
   summarize_thread: 'terra',
   answer_operator: 'terra',
+  answer_operator_simple: 'luna',
 };
 
 export type RouteDecision = {

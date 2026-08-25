@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import DangerZoneModal from "./danger-zone-modal";
+import AttilaAiDrawer from "./attila-ai-drawer";
 
 /* ── Navigazione principale (§6.1) ─────────────────────────────────────── */
 
@@ -324,6 +325,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
               aria-label="Ricerca generale non ancora disponibile"
               className="w-full cursor-not-allowed rounded-lg border border-stone-200 bg-stone-50 py-1.5 pl-9 pr-3 text-sm text-stone-400 placeholder:text-stone-400"
             />
+          </div>
+
+          <div className="ml-auto md:ml-0">
+            <Suspense fallback={null}>
+              <AttilaAiDrawer />
+            </Suspense>
           </div>
 
           {/* Badge Resend runtime (single source of truth) */}

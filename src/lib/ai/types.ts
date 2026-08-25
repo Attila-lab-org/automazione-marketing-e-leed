@@ -19,7 +19,8 @@ export type AiTaskType =
   | 'classify_inbound'
   | 'draft_reply'
   | 'summarize_thread'
-  | 'answer_operator';
+  | 'answer_operator'
+  | 'answer_operator_simple';
 
 export type ModelTier = 'luna' | 'terra' | 'sol';
 

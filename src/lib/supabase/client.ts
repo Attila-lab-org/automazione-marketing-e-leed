@@ -1,5 +1,5 @@
 /**
- * Supabase client factory — typed against Database (migrations 0001..0022).
+ * Supabase client factory — typed against Database (migrations 0001..0023).
  */
 
 import { createBrowserClient as createSsrBrowserClient } from '@supabase/ssr';

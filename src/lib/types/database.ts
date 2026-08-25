@@ -1235,6 +1235,52 @@ export interface AiRunInsert {
 }
 
 // ---------------------------------------------------------------------------
+// 0023 — operator copilot sessions (never mixed with prospect threads)
+// ---------------------------------------------------------------------------
+
+export interface AiOperatorSessionRow {
+  id: string;
+  workspace_id: string;
+  title: string;
+  context: Json;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiOperatorSessionInsert {
+  id?: string;
+  workspace_id: string;
+  title?: string;
+  context?: Json;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AiOperatorMessageRow {
+  id: string;
+  workspace_id: string;
+  session_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  actions: Json;
+  tool_trace: Json;
+  ai_run_id: string | null;
+  created_at: string;
+}
+
+export interface AiOperatorMessageInsert {
+  id?: string;
+  workspace_id: string;
+  session_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  actions?: Json;
+  tool_trace?: Json;
+  ai_run_id?: string | null;
+  created_at?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Mappa tabelle → Row (helper per i Domain Services / repository)
 // ---------------------------------------------------------------------------
 
@@ -1273,6 +1319,8 @@ export interface Tables {
   workspace_feature_flags: WorkspaceFeatureFlagRow;
   cost_events: CostEventRow;
   ai_runs: AiRunRow;
+  ai_operator_sessions: AiOperatorSessionRow;
+  ai_operator_messages: AiOperatorMessageRow;
 }
 
 export type TableName = keyof Tables;

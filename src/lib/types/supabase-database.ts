@@ -1,5 +1,5 @@
 /**
- * Supabase Database contract — aligned to migrations 0001..0022.
+ * Supabase Database contract — aligned to migrations 0001..0023.
  * Used as createClient<Database>() so invalid column selects fail at compile time.
  *
  * Note: mapped `AsRecord` converts interfaces → closed object types so they
@@ -11,6 +11,10 @@ import type {
   ActivityLogRow,
   AiRunInsert,
   AiRunRow,
+  AiOperatorMessageInsert,
+  AiOperatorMessageRow,
+  AiOperatorSessionInsert,
+  AiOperatorSessionRow,
   AutomationJobEventInsert,
   AutomationJobEventRow,
   AutomationJobInsert,
@@ -136,6 +140,8 @@ export type Database = {
       workspace_feature_flags: Tbl<WorkspaceFeatureFlagRow, WorkspaceFeatureFlagInsert>;
       cost_events: Tbl<CostEventRow, CostEventInsert>;
       ai_runs: Tbl<AiRunRow, AiRunInsert>;
+      ai_operator_sessions: Tbl<AiOperatorSessionRow, AiOperatorSessionInsert>;
+      ai_operator_messages: Tbl<AiOperatorMessageRow, AiOperatorMessageInsert>;
     };
     Views: {
       [_ in never]: never;

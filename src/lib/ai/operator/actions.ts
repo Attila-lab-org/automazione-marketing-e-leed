@@ -1,0 +1,133 @@
+import { z } from 'zod';
+
+export const operatorActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('open_campaign'),
+    campaignId: z.string().uuid(),
+    label: z.literal('Apri campagna'),
+  }),
+  z.object({
+    type: z.literal('show_leads'),
+    leadIds: z.array(z.string().uuid()).max(20).optional(),
+    city: z.string().max(80).optional(),
+    label: z.literal('Mostra lead'),
+  }),
+  z.object({
+    type: z.literal('open_lead'),
+    leadId: z.string().uuid(),
+    label: z.literal('Apri attività'),
+  }),
+  z.object({
+    type: z.literal('open_review'),
+    label: z.literal('Apri Review'),
+  }),
+  z.object({
+    type: z.literal('open_inbox'),
+    threadId: z.string().uuid().optional(),
+    label: z.literal('Apri messaggi'),
+  }),
+]);
+
+export type OperatorAction = z.infer<typeof operatorActionSchema>;
+
+export const operatorReplySchema = z.object({
+  reply: z.string().min(1).max(4000),
+  actions: z.array(operatorActionSchema).max(5),
+});
+
+export type OperatorReply = z.infer<typeof operatorReplySchema>;
+
+export const OPERATOR_REPLY_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    reply: { type: 'string' },
+    actions: {
+      type: 'array',
+      items: {
+        anyOf: [
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              type: { type: 'string', enum: ['open_campaign'] },
+              campaignId: { type: 'string' },
+              label: { type: 'string', enum: ['Apri campagna'] },
+            },
+            required: ['type', 'campaignId', 'label'],
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              type: { type: 'string', enum: ['show_leads'] },
+              leadIds: { type: 'array', items: { type: 'string' } },
+              city: { type: 'string' },
+              label: { type: 'string', enum: ['Mostra lead'] },
+            },
+            required: ['type', 'label'],
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              type: { type: 'string', enum: ['open_lead'] },
+              leadId: { type: 'string' },
+              label: { type: 'string', enum: ['Apri attività'] },
+            },
+            required: ['type', 'leadId', 'label'],
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              type: { type: 'string', enum: ['open_review'] },
+              label: { type: 'string', enum: ['Apri Review'] },
+            },
+            required: ['type', 'label'],
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              type: { type: 'string', enum: ['open_inbox'] },
+              threadId: { type: 'string' },
+              label: { type: 'string', enum: ['Apri messaggi'] },
+            },
+            required: ['type', 'label'],
+          },
+        ],
+      },
+    },
+  },
+  required: ['reply', 'actions'],
+} as const;
+
+export function hrefForAction(action: OperatorAction): string {
+  switch (action.type) {
+    case 'open_campaign':
+      return `/campaigns/${action.campaignId}`;
+    case 'show_leads': {
+      const params = new URLSearchParams();
+      if (action.city) params.set('city', action.city);
+      const qs = params.toString();
+      return qs ? `/leads?${qs}` : '/leads';
+    }
+    case 'open_lead':
+      return `/leads?lead=${action.leadId}`;
+    case 'open_review':
+      return '/review-queue';
+    case 'open_inbox':
+      return '/inbox';
+  }
+}
+
+export function parseOperatorActions(raw: unknown): OperatorAction[] {
+  if (!Array.isArray(raw)) return [];
+  const out: OperatorAction[] = [];
+  for (const item of raw) {
+    const parsed = operatorActionSchema.safeParse(item);
+    if (parsed.success) out.push(parsed.data);
+  }
+  return out;
+}
