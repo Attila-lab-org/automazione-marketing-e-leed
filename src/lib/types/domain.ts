@@ -89,6 +89,7 @@ export const JOB_TYPES = [
   'FOLLOWUP_STEP',
   'WEBHOOK_PROCESSING',
   'CALENDAR_REMINDER',
+  'SALES_PROACTIVE_STEP',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

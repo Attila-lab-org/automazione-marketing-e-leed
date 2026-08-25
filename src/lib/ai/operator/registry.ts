@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { OperatorEnvelope } from './envelope';
 import { classifyOperatorIntent, type OperatorIntent } from './intent';
+import type { DailyCommercialBriefing } from '@/lib/sales/daily-briefing';
 
 export const OPERATOR_TOOL_NAMES = [
   'get_dashboard_summary',
@@ -12,6 +13,8 @@ export const OPERATOR_TOOL_NAMES = [
   'get_blockers',
   'list_review_items',
   'get_daily_report',
+  'get_daily_briefing',
+  'get_commercial_insights',
   'list_conversations',
   'get_conversation',
   'get_telegram_inbound_status',
@@ -60,6 +63,13 @@ export type DailyReport = {
     replies: CountMetric;
   };
   failedSamples: Array<{ id: string; name: string; reason: string }>;
+};
+
+export type CommercialInsights = {
+  windowDays: number;
+  generatedAt: string;
+  metrics: Record<string, number>;
+  recommendations: string[];
 };
 
 export type LeadSearchHit = {
@@ -179,6 +189,8 @@ export type OperatorDataSource = {
   getBlockers(campaignId?: string | null): Promise<BlockerItem[]>;
   listReviewItems(): Promise<ReviewItem[]>;
   getDailyReport(daysAgo?: number): Promise<DailyReport>;
+  getDailyBriefing(): Promise<DailyCommercialBriefing>;
+  getCommercialInsights(windowDays?: number): Promise<CommercialInsights>;
   listConversations(): Promise<ConversationHit[]>;
   getConversation(threadId: string): Promise<ConversationHit | null>;
   getTelegramInboundStatus(): Promise<TelegramInboundStatus>;
@@ -234,6 +246,7 @@ const campaignIdInput = z.object({ campaignId: z.string().uuid().optional() }).s
 const leadIdInput = z.object({ leadId: z.string().uuid().optional() }).strict();
 const threadIdInput = z.object({ threadId: z.string().uuid().optional() }).strict();
 const dailyInput = z.object({ daysAgo: z.number().int().min(0).max(14).optional() }).strict();
+const insightsInput = z.object({ windowDays: z.number().int().min(7).max(90).optional() }).strict();
 const demoIdInput = z.object({ demoId: z.string().uuid().optional() }).strict();
 const templateIdInput = z.object({ templateId: z.string().uuid().optional() }).strict();
 const calendarEventsInput = z
@@ -267,6 +280,8 @@ export const TOOL_INPUT_SCHEMAS: Record<OperatorToolName, z.ZodType> = {
   get_blockers: campaignIdInput,
   list_review_items: optionalId,
   get_daily_report: dailyInput,
+  get_daily_briefing: optionalId,
+  get_commercial_insights: insightsInput,
   list_conversations: optionalId,
   get_conversation: threadIdInput,
   get_telegram_inbound_status: optionalId,
@@ -292,6 +307,14 @@ export const TOOL_LABELS: Record<OperatorToolName, { start: string; done: string
   get_blockers: { start: 'Sto verificando i blocker…', done: 'Blocker verificati' },
   list_review_items: { start: 'Sto leggendo la Review…', done: 'Review caricata' },
   get_daily_report: { start: 'Sto leggendo i numeri del periodo…', done: 'Report giornaliero caricato' },
+  get_daily_briefing: {
+    start: 'Sto confrontando agenda, email e Telegram…',
+    done: 'Briefing commerciale pronto',
+  },
+  get_commercial_insights: {
+    start: 'Sto imparando dagli eventi commerciali…',
+    done: 'Consigli commerciali aggiornati',
+  },
   list_conversations: { start: 'Sto leggendo i messaggi…', done: 'Conversazioni caricate' },
   get_conversation: { start: 'Sto leggendo la conversazione…', done: 'Conversazione caricata' },
   get_telegram_inbound_status: { start: 'Sto leggendo lo stato Telegram…', done: 'Stato Telegram caricato' },
@@ -377,6 +400,16 @@ export async function executeOperatorTool(
         ok: true,
         name,
         result: await data.getDailyReport(typeof args.daysAgo === 'number' ? args.daysAgo : 1),
+      };
+    case 'get_daily_briefing':
+      return { ok: true, name, result: await data.getDailyBriefing() };
+    case 'get_commercial_insights':
+      return {
+        ok: true,
+        name,
+        result: await data.getCommercialInsights(
+          typeof args.windowDays === 'number' ? args.windowDays : 30,
+        ),
       };
     case 'list_conversations':
       return { ok: true, name, result: await data.listConversations() };
@@ -544,6 +577,12 @@ export function suggestOperatorTools(
   }
   if (/riepilogo|dashboard|quanto/.test(q) && !has('get_daily_report')) {
     calls.push({ name: 'get_dashboard_summary', args: {} });
+  }
+  if (/consigl|impar|miglior|conversion|strateg|proattiv/.test(q)) {
+    calls.push({ name: 'get_daily_briefing', args: {} });
+    if (/impar|miglior|conversion|strateg/.test(q)) {
+      calls.push({ name: 'get_commercial_insights', args: { windowDays: 30 } });
+    }
   }
   return calls;
 }

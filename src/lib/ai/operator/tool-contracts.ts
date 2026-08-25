@@ -34,6 +34,16 @@ export const TOOL_CONTRACTS: Record<string, ToolContract> = {
   get_blockers: { name: 'get_blockers', tier: 'READ', label: 'blocker' },
   list_review_items: { name: 'list_review_items', tier: 'READ', label: 'review' },
   get_daily_report: { name: 'get_daily_report', tier: 'READ', label: 'report giornaliero' },
+  get_daily_briefing: {
+    name: 'get_daily_briefing',
+    tier: 'READ',
+    label: 'briefing commerciale di oggi',
+  },
+  get_commercial_insights: {
+    name: 'get_commercial_insights',
+    tier: 'READ',
+    label: 'apprendimento e consigli commerciali',
+  },
   list_conversations: { name: 'list_conversations', tier: 'READ', label: 'conversazioni' },
   get_conversation: { name: 'get_conversation', tier: 'READ', label: 'dettaglio conversazione' },
   get_telegram_inbound_status: {
@@ -57,6 +67,12 @@ export const TOOL_CONTRACTS: Record<string, ToolContract> = {
     name: 'apply_demo_personalization',
     tier: 'INTERNAL',
     label: 'applica testi demo',
+  },
+  update_commercial_playbook: {
+    name: 'update_commercial_playbook',
+    tier: 'INTERNAL',
+    label: 'aggiorna regole commerciali',
+    auditExecute: 'execute_playbook_update',
   },
   take_over_thread: { name: 'take_over_thread', tier: 'INTERNAL', label: 'prendi in carico' },
   return_to_ai: { name: 'return_to_ai', tier: 'INTERNAL', label: 'ridai ad Attila' },

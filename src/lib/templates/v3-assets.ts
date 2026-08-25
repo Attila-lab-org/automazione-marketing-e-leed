@@ -6,7 +6,7 @@
 export const V3_ASSET_BASE = '/restaurant-premium-v3/assets';
 
 function v3Svg(label: string, start: string, end: string, width = 1200, height = 800): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" data-pack="restaurant-premium-v3"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${start}"/><stop offset="1" stop-color="${end}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><circle cx="82%" cy="18%" r="22%" fill="#fff" opacity=".08"/><text x="6%" y="90%" fill="#fff" opacity=".38" font-family="Georgia,serif" font-size="34">${label}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" data-pack="restaurant-premium-v3" data-scene="${label}"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${start}"/><stop offset=".58" stop-color="${end}"/><stop offset="1" stop-color="#17120f"/></linearGradient><radialGradient id="light" cx="72%" cy="24%" r="55%"><stop stop-color="#fff4dc" stop-opacity=".38"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient><filter id="blur"><feGaussianBlur stdDeviation="24"/></filter></defs><rect width="100%" height="100%" fill="url(#g)"/><rect width="100%" height="100%" fill="url(#light)"/><ellipse cx="30%" cy="76%" rx="34%" ry="18%" fill="#120d0a" opacity=".5" filter="url(#blur)"/><circle cx="82%" cy="18%" r="18%" fill="#fff8e9" opacity=".1"/><path d="M0 ${height * 0.72} C ${width * 0.25} ${height * 0.58}, ${width * 0.52} ${height * 0.94}, ${width} ${height * 0.66} V ${height} H0Z" fill="#0d0907" opacity=".32"/></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
@@ -32,11 +32,11 @@ export const RESTAURANT_PREMIUM_V3_ASSETS = {
 } as const;
 
 export const RESTAURANT_PREMIUM_V3_CONCEPT_COPY = {
-  headline: 'Un’esperienza che inizia prima ancora di sedersi a tavola.',
+  headline: 'Scopri il locale. Trova ciò che serve. Prenota.',
   subheadline:
-    'Una presenza digitale raffinata, pensata per raccontare atmosfera, accoglienza e il desiderio di riservare un tavolo.',
+    'Una presenza digitale premium che unisce identità, informazioni essenziali e un percorso diretto verso la prenotazione.',
   description:
-    'Ogni dettaglio della pagina è pensato per evocare ospitalità contemporanea: luce, ritmo, silenzio e un invito chiaro a vivere il locale.',
+    'Una pagina veloce da capire e piacevole da esplorare: racconta il carattere del locale e accompagna l’ospite verso una scelta concreta.',
   about:
     'Concept dimostrativo di vetrina digitale. I dati anagrafici del locale restano quelli reali; immagini e testi di atmosfera appartengono al template.',
   experience: [
@@ -53,9 +53,9 @@ export const RESTAURANT_PREMIUM_V3_CONCEPT_COPY = {
       body: 'Un invito chiaro, ripetuto nei punti giusti, per trasformare l’interesse in una prenotazione.',
     },
   ],
-  storyHeadline: 'Il gusto incontra una presenza all’altezza.',
+  storyHeadline: 'La qualità del locale merita una presenza all’altezza.',
   storyBody:
-    'Una vetrina online non sostituisce il locale: lo prepara. Qui la narrativa è silenziosa, fotografica, orientata a far desiderare di entrare.',
+    'Il sito non sostituisce l’esperienza: la anticipa. Immagini, informazioni e inviti all’azione lavorano insieme per trasformare una visita in interesse.',
   digitalValueHeadline: 'Dal primo sguardo alla prenotazione',
   digitalValueBody:
     'Una pagina pensata per mobile e desktop, con gerarchia chiara e un percorso naturale verso il contatto.',

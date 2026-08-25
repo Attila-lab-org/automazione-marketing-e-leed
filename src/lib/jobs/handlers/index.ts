@@ -83,9 +83,24 @@ export async function handleJob(
       return handleFollowupStep(admin, job, env);
     case 'CALENDAR_REMINDER':
       return handleCalendarReminder(admin, job);
+    case 'SALES_PROACTIVE_STEP':
+      return handleSalesProactiveStep(admin, job);
     default:
       return { skipped: true, reason: `Unsupported job type ${job.jobType}` };
   }
+}
+
+async function handleSalesProactiveStep(
+  admin: SupabaseClient,
+  job: { workspaceId: string; entityId: string; inputSnapshot: Record<string, unknown> },
+) {
+  const { runProactiveSalesStep } = await import('@/lib/sales/proactive');
+  const threadId = String(job.inputSnapshot.threadId ?? job.entityId);
+  return runProactiveSalesStep({
+    admin: admin as AppSupabaseClient,
+    workspaceId: job.workspaceId,
+    threadId,
+  });
 }
 
 async function handleCalendarReminder(
@@ -186,14 +201,14 @@ async function handleLeadEnrichment(
     .in('business_status', ['NEW', 'QUALIFIED', 'CAMPAIGN_READY']);
 
   const queue = new SupabaseJobQueue(admin);
-  await queue.enqueue({
+  const analysisJob = await queue.enqueue({
     workspaceId: job.workspaceId,
     jobType: 'WEBSITE_ANALYSIS',
     entityType: 'lead',
     entityId: leadId,
     idempotencyKey: `WEBSITE_ANALYSIS:lead:${leadId}:v1`,
     inputSnapshot: { leadId, campaignLeadId: job.entityId },
-    priority: 80,
+    priority: 50,
   });
   await queue.enqueue({
     workspaceId: job.workspaceId,
@@ -203,6 +218,7 @@ async function handleLeadEnrichment(
     idempotencyKey: `DEMO_GENERATION:campaign_lead:${job.entityId}`,
     inputSnapshot: { leadId },
     priority: 60,
+    dependsOnJobId: analysisJob.job.id,
   });
 
   return {

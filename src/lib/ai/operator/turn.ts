@@ -21,7 +21,7 @@ import type { OperatorEnvelope } from './envelope';
 import { classifyOperatorIntent } from './intent';
 import type { OperatorHistoryItem, OperatorPlan } from './orchestrator-schema';
 import { OPERATOR_ORCHESTRATOR_PROMPT_VERSION } from './orchestrator-schema';
-import { applySafetyPolicy, isTelegramReplyRequest } from './semantic-plan';
+import { applySafetyPolicy, isTelegramReplyRequest, planOperatorTurnMock } from './semantic-plan';
 import { detectOperatorOpsAction } from './ops-writes';
 import {
   executeOperatorTool,
@@ -183,6 +183,20 @@ export async function* runOperatorTurn(
   }
 
   plan.safetyClass = clampElevation(plan.safetyClass, mapIntentToSafety(fallbackIntent.kind));
+  const naturalDemoBatch =
+    fallbackIntent.kind === 'PREPARE' &&
+    /demo|anteprim|propost[ae] (?:visiv|sito)|siti? dimostrativ/i.test(input.question);
+  if (!aiUnavailable && naturalDemoBatch) {
+    plan = applySafetyPolicy(
+      planOperatorTurnMock({
+        question: input.question,
+        history: input.history,
+        refs: prevRefs,
+        envelope,
+      }),
+      input.question,
+    );
+  }
   prevRefs = resolveOrdinalSelection(plan.ordinal, prevRefs);
 
   const maxCalls = Math.min(config.maxToolCalls, 8);
@@ -477,12 +491,22 @@ export async function* runOperatorTurn(
     assistMode,
   );
   actions = deterministic.actions;
+  const demoBatchRequested =
+    /demo|anteprim|propost[ae] visiv|siti? dimostrativ/i.test(input.question) &&
+    writes.some((write) => write.tool === 'prepare_campaign');
+  if (demoBatchRequested && deterministic.reply) {
+    replyText = deterministic.reply;
+  }
   // Preferisci il testo grounded quando la reply AI non riporta i numeri/dati tool
   const groundedCalendar = traces.some((t) => t.ok && t.name === 'get_calendar_summary');
   if (groundedCalendar && deterministic.reply && !/\b\d+\s+appuntament/i.test(replyText)) {
     replyText = deterministic.reply;
   }
-  if (writes.length && !replyText.includes(writes[0]?.summary.slice(0, 24) ?? '___never___')) {
+  if (
+    !demoBatchRequested &&
+    writes.length &&
+    !replyText.includes(writes[0]?.summary.slice(0, 24) ?? '___never___')
+  ) {
     if (writes[0]?.summary) replyText = `${writes[0].summary} ${replyText}`.trim();
   }
   if (

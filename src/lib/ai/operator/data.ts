@@ -9,11 +9,14 @@ import { europeRomeDayRange, formatEuropeRome } from './time';
 import { listDemos, loadDemoById } from '@/lib/demos/load';
 import { getTelegramInboundSettings } from '@/lib/inbound/telegram-settings';
 import { listAvailableSlots, listCalendarEvents } from '@/lib/calendar';
+import { getCommercialLearningSnapshot } from '@/lib/sales/learning';
+import { getDailyCommercialBriefing } from '@/lib/sales/daily-briefing';
 import type {
   BlockerItem,
   CalendarEventHit,
   CalendarSlotHit,
   CalendarSummary,
+  CommercialInsights,
   CampaignDetail,
   CampaignSummary,
   ConversationHit,
@@ -377,6 +380,14 @@ export function createSupabaseOperatorData(
       return report;
     },
 
+    async getDailyBriefing() {
+      return getDailyCommercialBriefing(admin, workspaceId);
+    },
+
+    async getCommercialInsights(windowDays = 30): Promise<CommercialInsights> {
+      return getCommercialLearningSnapshot(admin, workspaceId, windowDays);
+    },
+
     async listConversations() {
       const threads = await listInboxThreads(admin, workspaceId, 15);
       return threads.map(
@@ -677,6 +688,61 @@ export function createMemoryOperatorData(seed?: {
         };
       }
       return seed.daily;
+    },
+    async getDailyBriefing() {
+      return {
+        generatedAt: '2026-08-25T08:00:00.000Z',
+        today: {
+          appointments: 1,
+          nextAppointment: 'Call Osteria Test, mar 25 ago, 15:00',
+          hotThreads: 2,
+          followUpsDue: 1,
+        },
+        channels: {
+          EMAIL: {
+            outboundThreads: 10,
+            repliedThreads: 3,
+            replyRate: 0.3,
+            appointmentsBooked: 2,
+          },
+          TELEGRAM: {
+            outboundThreads: 4,
+            repliedThreads: 1,
+            replyRate: 0.25,
+            appointmentsBooked: 0,
+          },
+        },
+        recommendation: {
+          channel: 'EMAIL' as const,
+          market: 'Italia',
+          city: 'Milano',
+          readyLeads: 12,
+          reason: 'Email sta rendendo meglio sui dati disponibili.',
+        },
+        actions: [
+          'Prepara la call: Osteria Test alle 15:00.',
+          'Gestisci prima 2 conversazioni calde.',
+          'Avvia una campagna email su Milano.',
+        ],
+        summary:
+          'Ciao Attilio, oggi hai 1 appuntamento. Per oggi ti consiglio email: sta rendendo meglio. Per le nuove email partirei da Milano.',
+      };
+    },
+    async getCommercialInsights(windowDays = 30) {
+      return {
+        windowDays,
+        generatedAt: '2026-08-25T10:00:00.000Z',
+        metrics: {
+          inboundClassified: 0,
+          pricingRequests: 0,
+          discountRequests: 0,
+          appointmentsBooked: 0,
+          humanHandoffs: 0,
+          proactiveFollowUps: 0,
+          ownerCtaClicks: 0,
+        },
+        recommendations: ['Verifica i canali inbound: nel periodo non risultano conversazioni classificate.'],
+      };
     },
     async listConversations() {
       return seed?.conversations ?? [];

@@ -82,8 +82,44 @@ function extractCity(q: string): string | null {
 
 function extractLimit(q: string, fallback: number): number {
   const match = q.match(/\b(\d{1,2})\b/);
-  if (!match) return fallback;
-  return Math.min(20, Math.max(1, Number(match[1])));
+  if (match) return Math.min(20, Math.max(1, Number(match[1])));
+  const words: Array<[string, number]> = [
+    ['venti', 20],
+    ['diciannove', 19],
+    ['diciotto', 18],
+    ['diciassette', 17],
+    ['sedici', 16],
+    ['quindici', 15],
+    ['quattordici', 14],
+    ['tredici', 13],
+    ['dodici', 12],
+    ['undici', 11],
+    ['dieci', 10],
+    ['nove', 9],
+    ['otto', 8],
+    ['sette', 7],
+    ['sei', 6],
+    ['cinque', 5],
+    ['quattro', 4],
+    ['tre', 3],
+    ['due', 2],
+    ['uno', 1],
+    ['una', 1],
+  ];
+  return words.find(([word]) => new RegExp(`\\b${word}\\b`).test(q))?.[1] ?? fallback;
+}
+
+function extractCategory(q: string): string | null {
+  const categories: Array<[RegExp, string]> = [
+    [/\bristorant|\btrattori|\bpizzeri/, 'restaurant'],
+    [/\bhotel|\balbergh|\bb b\b|\bbed and breakfast/, 'hotel'],
+    [/\bdentist|\bstudi odontoiatric/, 'dentist'],
+    [/\bparrucchier|\bsalon|\bbarber/, 'hair salon'],
+    [/\bpalestr|\bfitness|\bgym\b/, 'gym'],
+    [/\bcentri? estetic|\bestetist|\bbeauty/, 'beauty'],
+    [/\bbar\b|\bcaffetteri/, 'bar'],
+  ];
+  return categories.find(([pattern]) => pattern.test(q))?.[1] ?? null;
 }
 
 function extractOrdinal(q: string): number | null {
@@ -123,6 +159,7 @@ export type SemanticPlanInput = {
 export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
   const q = norm(input.question);
   const city = extractCity(q) ?? (input.envelope.filters?.city ? norm(input.envelope.filters.city) : null);
+  const category = extractCategory(q);
   const ordinal = extractOrdinal(q);
   const campaignId =
     input.envelope.entityType === 'campaign' ? input.envelope.entityId ?? null : input.refs.lastCampaignId;
@@ -185,12 +222,34 @@ export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
       class: 'READ',
       score: scoreCues(q, ['da dove', 'partirest', 'partiamo', 'priorit', 'possiamo partire', 'inizio']),
       tools: [
+        call('get_daily_briefing'),
         call('get_dashboard_summary'),
         call('get_blockers', { campaignId }),
-        call('get_daily_report'),
         call('list_campaigns'),
       ],
       goal: 'Analizzare lo stato attuale e proporre da dove partire',
+      prepareKind: 'none',
+    },
+    {
+      id: 'insights',
+      class: 'READ',
+      score: scoreCues(q, [
+        'consigliami',
+        'cosa mi consigli',
+        'oggi cosa',
+        'cosa migliorare',
+        'come migliorare',
+        'imparato',
+        'conversion',
+        'strategia',
+        'proattiv',
+        'cosa sta funzionando',
+      ]),
+      tools: [
+        call('get_daily_briefing'),
+        call('get_commercial_insights'),
+      ],
+      goal: 'Imparare dagli eventi e proporre la prossima azione commerciale',
       prepareKind: 'none',
     },
     {
@@ -199,13 +258,37 @@ export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
       score: (() => {
         const trial = scoreCues(q, ['test', 'prova', 'campagna']);
         const make = scoreCues(q, ['crea', 'prepara', 'fammi', 'genera', 'lancia', 'preparami', 'facciamo']);
+        const demoOutcome = scoreCues(q, [
+          'demo',
+          'anteprim',
+          'proposta visiva',
+          'proposte visive',
+          'sito dimostrativo',
+          'siti dimostrativi',
+        ]);
+        const naturalNeed = scoreCues(q, [
+          'mi serv',
+          'vorrei',
+          'ho bisogno',
+          'puoi fare',
+          'realizza',
+          'produci',
+          'costruisci',
+        ]);
+        if (
+          demoOutcome > 0 &&
+          (make > 0 || naturalNeed > 0) &&
+          !/vedere|mostra|elenca|quante|controlla|apri/.test(q)
+        ) {
+          return 20 + demoOutcome + make + naturalNeed;
+        }
         if (trial > 0 && make > 0) return 12 + trial + make;
         return scoreCues(q, ['prepara campagna', 'crea campagna', 'campagna test', 'campagna di prova']);
       })(),
       tools: [
         call('search_leads', {
           city,
-          category: q.includes('ristor') ? 'restaurant' : null,
+          category,
           limit: extractLimit(q, 8),
         }),
       ],

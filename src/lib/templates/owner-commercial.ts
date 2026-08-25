@@ -21,6 +21,14 @@ export function getOwnerOfferPrice(env: NodeJS.ProcessEnv = process.env): string
 
 export function isOwnerBridgeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const v = (env.OWNER_SHOW_BRIDGE ?? '').trim().toLowerCase();
+  if (!v) {
+    return Boolean(
+      env.OWNER_WHATSAPP?.trim() ||
+        env.OWNER_CONTACT_URL?.trim() ||
+        env.NEXT_PUBLIC_OWNER_CONTACT_URL?.trim(),
+    );
+  }
+  if (v === '0' || v === 'false' || v === 'no' || v === 'off') return false;
   return v === '1' || v === 'true' || v === 'yes' || v === 'on';
 }
 

@@ -21,6 +21,8 @@ import {
   unregisterTelegramWebhook,
 } from '@/lib/providers/telegram/webhook';
 import { stopLeadSequences } from '@/lib/sales/stop';
+import { getCurrentPlaybook, saveCurrentPlaybook } from '@/lib/sales/playbook-store';
+import type { CommercialPlaybook, ResponseMode } from '@/lib/sales/playbook';
 
 export type OperatorOpsAction =
   | 'reply_telegram'
@@ -32,6 +34,7 @@ export type OperatorOpsAction =
   | 'reschedule_appointment'
   | 'start_telegram'
   | 'stop_telegram'
+  | 'update_playbook'
   | 'none';
 
 function norm(text: string): string {
@@ -46,6 +49,16 @@ function norm(text: string): string {
 
 export function detectOperatorOpsAction(question: string): OperatorOpsAction {
   const q = norm(question);
+  if (
+    /(modalita|modo) (autonom|equilibrat|assistit)/.test(q) ||
+    /prezzo (minimo|standard|massimo)/.test(q) ||
+    /sconto massimo/.test(q) ||
+    /(imposta|cambia|usa).{0,12}tono/.test(q) ||
+    /durata.{0,12}(chiamata|call)/.test(q) ||
+    /non comunicare.{0,8}prezz/.test(q)
+  ) {
+    return 'update_playbook';
+  }
   if (
     q.includes('telegram') &&
     (q.includes('rispond') || q.includes('reply') || q.includes('manda risposta'))
@@ -116,6 +129,7 @@ const OPS_TOOL_BY_ACTION: Record<Exclude<OperatorOpsAction, 'none'>, string> = {
   reschedule_appointment: 'reschedule_appointment',
   start_telegram: 'set_telegram_runtime',
   stop_telegram: 'set_telegram_runtime',
+  update_playbook: 'update_commercial_playbook',
 };
 
 export type ThreadTarget = { threadId: string; leadId: string; channel: string; ambiguous?: boolean };
@@ -345,6 +359,82 @@ async function buildOpsPreview(args: {
   return { tool: OPS_TOOL_BY_ACTION[args.action], ok: false, summary: 'Preview non disponibile.', data: {} };
 }
 
+export function applyPlaybookCommand(
+  current: CommercialPlaybook,
+  question: string,
+): { playbook: CommercialPlaybook; changes: string[] } {
+  const q = norm(question);
+  const changes: string[] = [];
+  let next = structuredClone(current);
+
+  const setModes = (defaultMode: ResponseMode, firstReplyMode: ResponseMode, simpleFaqMode: ResponseMode) => {
+    next.autonomy = { defaultMode, firstReplyMode, simpleFaqMode };
+  };
+  if (/(modalita|modo) autonom/.test(q)) {
+    setModes('AUTO_ALLOWED', 'AUTO_ALLOWED', 'AUTO_ALLOWED');
+    changes.push('modalità autonoma');
+  } else if (/(modalita|modo) equilibrat/.test(q)) {
+    setModes('AUTO_ALLOWED', 'APPROVAL_REQUIRED', 'AUTO_ALLOWED');
+    changes.push('modalità equilibrata');
+  } else if (/(modalita|modo) assistit/.test(q)) {
+    setModes('APPROVAL_REQUIRED', 'APPROVAL_REQUIRED', 'APPROVAL_REQUIRED');
+    changes.push('modalità assistita');
+  }
+
+  const amount = (pattern: RegExp): number | null => {
+    const match = q.match(pattern);
+    return match ? Number(match[1]) : null;
+  };
+  const minimum = amount(/prezzo minimo\s+(\d{2,6})/);
+  const standard = amount(/prezzo (?:standard|massimo)\s+(\d{2,6})/);
+  const discount = amount(/sconto massimo\s+(\d{1,3})/);
+  if (minimum != null) {
+    next.pricing = {
+      ...next.pricing,
+      min: minimum,
+      mode: 'range',
+      aiMayCommunicate: true,
+    };
+    next.humanEscalation.price = false;
+    changes.push(`prezzo minimo ${minimum} €`);
+  }
+  if (standard != null) {
+    next.pricing = {
+      ...next.pricing,
+      max: standard,
+      mode: next.pricing.min === standard ? 'fixed' : 'range',
+      aiMayCommunicate: true,
+    };
+    next.humanEscalation.price = false;
+    changes.push(`prezzo standard ${standard} €`);
+  }
+  if (discount != null && discount >= 0 && discount <= 100) {
+    next.discount = { ...next.discount, allowed: true, maxAutomatic: discount };
+    next.humanEscalation.discount = false;
+    changes.push(`sconto massimo ${discount}%`);
+  }
+  if (/non comunicare.{0,8}prezz/.test(q)) {
+    next.pricing = { ...next.pricing, mode: 'hidden', aiMayCommunicate: false };
+    next.discount = { ...next.discount, allowed: false };
+    changes.push('prezzi nascosti');
+  }
+
+  const duration = amount(/durata.{0,12}(?:chiamata|call)(?:\s+di)?\s+(\d{1,3})/);
+  if (duration != null && duration >= 5 && duration <= 180) {
+    next.call = { ...next.call, durationMinutes: duration };
+    changes.push(`chiamate da ${duration} minuti`);
+  }
+
+  const toneMatch = question.match(/(?:imposta|cambia|usa)(?:\s+un)?\s+tono\s+(.+)$/i);
+  if (toneMatch?.[1]?.trim()) {
+    const tone = toneMatch[1].trim().slice(0, 160);
+    next.brand = { ...next.brand, tone };
+    changes.push(`tono “${tone}”`);
+  }
+
+  return { playbook: next, changes };
+}
+
 export async function executeOpsActionNow(args: {
   admin: AppSupabaseClient;
   workspaceId: string;
@@ -358,6 +448,47 @@ export async function executeOpsActionNow(args: {
   const action = args.action as Exclude<OperatorOpsAction, 'none'> | 'start' | 'stop';
   const refs = args.refs ?? {};
   const params = args.params ?? {};
+
+  if (action === 'update_playbook') {
+    const current = await getCurrentPlaybook(args.admin, args.workspaceId);
+    const updated = applyPlaybookCommand(current, args.question ?? '');
+    if (!updated.changes.length) {
+      return {
+        tool: 'update_commercial_playbook',
+        ok: false,
+        summary:
+          'Non ho trovato un’impostazione valida. Esempio: “modalità autonoma, prezzo minimo 700, prezzo standard 1000, sconto massimo 15”.',
+        data: {},
+      };
+    }
+    if (
+      updated.playbook.pricing.aiMayCommunicate &&
+      updated.playbook.pricing.min != null &&
+      updated.playbook.pricing.max != null &&
+      updated.playbook.pricing.min > updated.playbook.pricing.max
+    ) {
+      return {
+        tool: 'update_commercial_playbook',
+        ok: false,
+        summary: 'Non applicato: il prezzo minimo non può superare il prezzo standard.',
+        data: {},
+      };
+    }
+    const saved = await saveCurrentPlaybook(args.admin, args.workspaceId, updated.playbook);
+    await recordAiAudit(args.admin, {
+      workspaceId: args.workspaceId,
+      actor: 'AI',
+      tool: 'update_commercial_playbook',
+      action: 'execute',
+      result: { version: saved.version, changes: updated.changes },
+    });
+    return {
+      tool: 'update_commercial_playbook',
+      ok: true,
+      summary: `Impostazioni aggiornate: ${updated.changes.join(', ')}.`,
+      data: { version: saved.version, changes: updated.changes, href: '/settings/playbook' },
+    };
+  }
 
   const runtimeAction =
     action === 'start_telegram' || params.runtimeAction === 'start'

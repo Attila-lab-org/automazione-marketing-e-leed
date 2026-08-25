@@ -414,7 +414,11 @@ export function mockClassifyInbound(text: string): InboundClassification {
       bookingConfidence: 0.75,
     });
   }
-  if (/sconto|350\s*euro|me lo fai a/.test(t)) {
+  if (
+    /sconto|me lo fai a|possiamo (?:chiudere|fare) a|(?:chiudiamo|facciamo) a|\d{2,6}\s*(?:€|euro|eur)/.test(
+      t,
+    )
+  ) {
     return base({
       intent: 'discount_request',
       language: 'it',
@@ -577,6 +581,39 @@ export function mockDraftReply(input: SalesReplyDraftInput): SalesReplyDraft {
     };
   }
   if (input.classification.discountAsk) {
+    const negotiation = input.negotiation;
+    if (negotiation?.allowed && negotiation.action === 'ACCEPT' && negotiation.responsePrice != null) {
+      return {
+        text: `Possiamo confermare ${negotiation.responsePrice} €. È una cifra autorizzata per questo progetto. Se per lei va bene, fissiamo una breve chiamata per confermare perimetro e tempi.`,
+        claimsUsed: [
+          {
+            claim: 'Prezzo negoziato autorizzato',
+            source: 'playbook',
+            evidence: `${negotiation.responsePrice} EUR`,
+          },
+        ],
+        recommendedState: 'PRICING',
+        nextStep: 'book_scope_call',
+        confidence: 0.94,
+        humanRequiredReason: null,
+      };
+    }
+    if (negotiation?.allowed && negotiation.action === 'COUNTER' && negotiation.responsePrice != null) {
+      return {
+        text: `Capisco la richiesta. Posso venirle incontro fino a ${negotiation.responsePrice} €, mantenendo il perimetro concordato. Se è una base sostenibile, fissiamo una breve chiamata e definiamo i dettagli.`,
+        claimsUsed: [
+          {
+            claim: 'Controproposta entro il limite autorizzato',
+            source: 'playbook',
+            evidence: `${negotiation.responsePrice} EUR`,
+          },
+        ],
+        recommendedState: 'PRICING',
+        nextStep: 'confirm_counteroffer',
+        confidence: 0.92,
+        humanRequiredReason: null,
+      };
+    }
     return {
       text: 'Grazie per il messaggio. Per una proposta su misura la passo al titolare, che le risponderà a breve.',
       claimsUsed: [],

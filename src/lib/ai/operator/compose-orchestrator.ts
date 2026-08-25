@@ -1,12 +1,14 @@
 import { buildOperatorCapabilityReply } from './capabilities';
 import type { OperatorComposeInput } from './orchestrator-input';
 import type { OperatorFinalReply } from './orchestrator-schema';
+import type { DailyCommercialBriefing } from '@/lib/sales/daily-briefing';
 import type {
   BlockerItem,
   CalendarEventHit,
   CalendarSlotHit,
   CalendarSummary,
   CampaignSummary,
+  CommercialInsights,
   DailyReport,
   DemoSummary,
   LeadSearchHit,
@@ -30,6 +32,23 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
 
   const parts: string[] = [];
   if (input.writeSummaries.length) parts.push(input.writeSummaries.join(' '));
+
+  const briefing = succeeded<DailyCommercialBriefing>(input, 'get_daily_briefing');
+  if (briefing) {
+    parts.push(briefing.summary);
+    if (briefing.actions.length) {
+      parts.push(`Priorità: ${briefing.actions.slice(0, 3).join(' ')}`);
+    }
+  }
+
+  const insights = succeeded<CommercialInsights>(input, 'get_commercial_insights');
+  if (insights) {
+    parts.push(
+      `Dagli ultimi ${insights.windowDays} giorni: ${insights.recommendations
+        .slice(0, 3)
+        .join(' ')}`,
+    );
+  }
 
   const calendar = succeeded<CalendarSummary>(input, 'get_calendar_summary');
   if (calendar) {

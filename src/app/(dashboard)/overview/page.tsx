@@ -2,6 +2,7 @@ import PageHeader from "@/components/page-header";
 import ProvidersRuntimeList from "@/components/providers-runtime-list";
 import DashboardStats from "@/components/dashboard-stats";
 import OperatorAlerts from "@/components/operator-alerts";
+import CommercialInsightsCard from "@/components/commercial-insights-card";
 
 export default function OverviewPage() {
   return (
@@ -14,6 +15,8 @@ export default function OverviewPage() {
       <section aria-label="KPI principali">
         <DashboardStats />
       </section>
+
+      <CommercialInsightsCard />
 
       <OperatorAlerts />
 

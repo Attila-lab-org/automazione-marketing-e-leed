@@ -89,6 +89,8 @@ export default function RestaurantPremiumV3({
     data.content.description?.trim() ||
     data.content.about?.trim() ||
     RESTAURANT_PREMIUM_V3_CONCEPT_COPY.description;
+  const conceptNote =
+    data.content.about?.trim() || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.about;
   const cta = data.content.cta?.trim() || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.cta;
   const ctaShort = RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ctaShort;
   const ctaHref = resolveRestaurantCtaHref({
@@ -146,7 +148,11 @@ export default function RestaurantPremiumV3({
         phone={data.contact.phone}
       />
       <RestaurantV3Trust rating={data.signals.rating} reviewCount={data.signals.review_count} />
-      <RestaurantV3Intro description={description} imageSrc={gallery[0]} />
+      <RestaurantV3Intro
+        description={description}
+        conceptNote={conceptNote}
+        imageSrc={gallery[0]}
+      />
       <RestaurantV3Experience />
       {!compact && showOwnerBridge ? (
         <RestaurantV3OwnerBridge

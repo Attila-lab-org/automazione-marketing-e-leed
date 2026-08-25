@@ -32,11 +32,53 @@ const CITIES = [
   'verona',
 ];
 
+const NUMBER_WORDS: Array<[RegExp, number]> = [
+  [/\b(?:venti)\b/, 20],
+  [/\b(?:diciannove)\b/, 19],
+  [/\b(?:diciotto)\b/, 18],
+  [/\b(?:diciassette)\b/, 17],
+  [/\b(?:sedici)\b/, 16],
+  [/\b(?:quindici)\b/, 15],
+  [/\b(?:quattordici)\b/, 14],
+  [/\b(?:tredici)\b/, 13],
+  [/\b(?:dodici)\b/, 12],
+  [/\b(?:undici)\b/, 11],
+  [/\b(?:dieci)\b/, 10],
+  [/\b(?:nove)\b/, 9],
+  [/\b(?:otto)\b/, 8],
+  [/\b(?:sette)\b/, 7],
+  [/\b(?:sei)\b/, 6],
+  [/\b(?:cinque)\b/, 5],
+  [/\b(?:quattro)\b/, 4],
+  [/\b(?:tre)\b/, 3],
+  [/\b(?:due)\b/, 2],
+  [/\b(?:uno|una)\b/, 1],
+];
+
+function requestedLimit(q: string): { value: number; explicit: boolean } {
+  const digit = q.match(/\b(\d{1,2})\b/);
+  if (digit) return { value: Math.min(20, Math.max(1, Number(digit[1]))), explicit: true };
+  const word = NUMBER_WORDS.find(([pattern]) => pattern.test(q));
+  return word ? { value: word[1], explicit: true } : { value: 8, explicit: false };
+}
+
+function inferredCategory(q: string): string | null {
+  const categories: Array<[RegExp, string]> = [
+    [/\bristorant|\btrattori|\bpizzeri/, 'restaurant'],
+    [/\bhotel|\balbergh|\bb&b\b|\bbed and breakfast/, 'hotel'],
+    [/\bdentist|\bstudi odontoiatric/, 'dentist'],
+    [/\bparrucchier|\bsalon|\bbarber/, 'hair salon'],
+    [/\bpalestr|\bfitness|\bgym\b/, 'gym'],
+    [/\bcentri? estetic|\bestetist|\bbeauty/, 'beauty'],
+    [/\bbar\b|\bcaffetteri/, 'bar'],
+  ];
+  return categories.find(([pattern]) => pattern.test(q))?.[1] ?? null;
+}
+
 function baseFields(question: string, q: string): Omit<OperatorIntent, 'kind' | 'writeVerb'> {
   const cityMatch = question.match(new RegExp(`\\b(${CITIES.join('|')})\\b`, 'i'));
-  const limitMatch = q.match(/\b(\d{1,2})\b/);
-  const limit = limitMatch ? Math.min(20, Math.max(1, Number(limitMatch[1]))) : 8;
-  const category = /ristorant|restaurant|pizzer/.test(q) ? 'restaurant' : null;
+  const requested = requestedLimit(q);
+  const category = inferredCategory(q);
   const deliveryMode: OperatorIntent['deliveryMode'] = /\btest\b/.test(q)
     ? 'TEST'
     : /\bproduzione\b/.test(q)
@@ -46,10 +88,10 @@ function baseFields(question: string, q: string): Omit<OperatorIntent, 'kind' | 
   return {
     city: cityMatch?.[1] ?? null,
     category,
-    limit,
+    limit: requested.value,
     deliveryMode,
     campaignHint,
-    leadLimitRequested: Boolean(limitMatch),
+    leadLimitRequested: requested.explicit,
   };
 }
 
@@ -98,7 +140,15 @@ function isReadQuestion(q: string): boolean {
 
 export function classifyOperatorIntent(question: string): OperatorIntent {
   const q = question.toLowerCase();
+  const demoOutcome = /\bdemo\b|anteprim|propost[ae] (?:visiv|sito)|siti? dimostrativ/.test(q);
+  const demoAction =
+    /prepar|crea|genera|realizz|produc|costruisc|fammi|mi serv|vorrei|ho bisogno|puoi (?:fare|creare|preparare|generare)/.test(
+      q,
+    );
+  const demoBatchRequest =
+    demoOutcome && demoAction && !/vedere|mostra|elenca|quante|controlla|apri/.test(q);
 
+  if (demoBatchRequest) return intent('PREPARE', question, q, 'prepare');
   if (isHelpQuestion(q)) return intent('HELP', question, q, null);
 
   if (

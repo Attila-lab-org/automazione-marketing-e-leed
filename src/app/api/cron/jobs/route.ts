@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { runJobBatch } from '@/lib/jobs/handlers';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
+import { runCommercialLearningCycle } from '@/lib/sales/learning';
 
 export const runtime = 'nodejs';
 
@@ -33,7 +34,11 @@ async function run(request: Request) {
     body.limit ?? 20,
     process.env,
   );
-  return NextResponse.json({ results, processed: results.length });
+  const learning = await runCommercialLearningCycle(admin, workspace.id).catch((error) => ({
+    created: false,
+    error: error instanceof Error ? error.message : 'learning_cycle_failed',
+  }));
+  return NextResponse.json({ results, processed: results.length, learning });
 }
 
 export const GET = run;

@@ -55,10 +55,17 @@ export function composeOperatorReply(
     const selected = Number(prepare?.data.selected ?? create?.data.leadCount ?? 0);
     const skipped = Number(create?.data.skipped ?? 0);
     const campaignId = String(prepare?.data.campaignId ?? create?.data.campaignId ?? '');
+    const isDemoBatch = /demo|anteprim|propost[ae] visiv|siti? dimostrativ/.test(q);
     parts.push(
-      `Campagna ${create?.ok ? 'creata' : 'non creata'}. ${selected} lead selezionati. ${
-        typeof prepare?.data.enqueued === 'number' ? `${prepare.data.enqueued} in preparazione.` : ''
-      } ${skipped} bloccati in partenza. 0 messaggi inviati.`,
+      isDemoBatch
+        ? `${selected} attività selezionate. ${
+            typeof prepare?.data.enqueued === 'number'
+              ? `Preparazione di ${prepare.data.enqueued} demo avviata: analisi, personalizzazione e copy.`
+              : 'Non ho potuto avviare la preparazione delle demo.'
+          } ${skipped} attività bloccate. 0 messaggi inviati.`
+        : `Campagna ${create?.ok ? 'creata' : 'non creata'}. ${selected} lead selezionati. ${
+            typeof prepare?.data.enqueued === 'number' ? `${prepare.data.enqueued} in preparazione.` : ''
+          } ${skipped} bloccati in partenza. 0 messaggi inviati.`,
     );
     if (campaignId) {
       actions.push({ type: 'open_campaign', campaignId, label: 'Apri campagna' });
@@ -106,6 +113,7 @@ export function composeOperatorReply(
       'cancel_appointment',
       'reschedule_appointment',
       'set_telegram_runtime',
+      'update_commercial_playbook',
     ].includes(w.tool),
   );
   if (opsWrite) {
@@ -135,6 +143,9 @@ export function composeOperatorReply(
     }
     if (opsWrite.tool === 'create_calendar_slot' || opsWrite.tool === 'reschedule_appointment') {
       actions.push({ type: 'open_calendar', label: 'Apri calendario' });
+    }
+    if (opsWrite.tool === 'update_commercial_playbook') {
+      actions.push({ type: 'open_settings', section: 'playbook', label: 'Apri impostazioni' });
     }
   }
 

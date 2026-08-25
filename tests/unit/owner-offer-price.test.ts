@@ -50,10 +50,15 @@ describe('OWNER_OFFER_PRICE', () => {
     expect(decodeURIComponent(url!)).toContain('350€');
   });
 
-  it('OwnerBridge default OFF', () => {
+  it('OwnerBridge segue i canali commerciali ma può essere disattivato', () => {
     delete process.env.OWNER_SHOW_BRIDGE;
+    delete process.env.OWNER_WHATSAPP;
+    delete process.env.OWNER_CONTACT_URL;
+    delete process.env.NEXT_PUBLIC_OWNER_CONTACT_URL;
     expect(isOwnerBridgeEnabled()).toBe(false);
-    process.env.OWNER_SHOW_BRIDGE = '1';
+    process.env.OWNER_WHATSAPP = '3462689082';
     expect(isOwnerBridgeEnabled()).toBe(true);
+    process.env.OWNER_SHOW_BRIDGE = 'off';
+    expect(isOwnerBridgeEnabled()).toBe(false);
   });
 });

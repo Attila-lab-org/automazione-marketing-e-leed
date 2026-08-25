@@ -25,6 +25,7 @@ import {
   slotsForAiPrompt,
 } from '@/lib/calendar';
 import { formatSlotForHuman } from '@/lib/calendar/slots';
+import { resolveNegotiationGuidance } from './negotiation';
 
 export type SalesMemory = {
   business_summary: string | null;
@@ -169,7 +170,15 @@ export function resolveResponseMode(args: {
   if (c.unsubscribe || c.notInterested) {
     return { mode: 'HUMAN_ONLY', reason: 'stop_deterministic' };
   }
-  if (c.discountAsk || (c.pricing && args.playbook.humanEscalation.price && !args.playbook.pricing.aiMayCommunicate)) {
+  const negotiation = resolveNegotiationGuidance({
+    playbook: args.playbook,
+    classification: c,
+    inboundText: '',
+  });
+  if (
+    (c.discountAsk && !negotiation.allowed) ||
+    (c.pricing && args.playbook.humanEscalation.price && !args.playbook.pricing.aiMayCommunicate)
+  ) {
     return { mode: 'HUMAN_ONLY', reason: 'pricing' };
   }
   if (c.legal || c.angry || c.confidence < 0.45) {
@@ -262,6 +271,11 @@ export async function processSalesInbound(args: {
     autonomy,
     firstReply,
     channel: args.channel,
+  });
+  const negotiation = resolveNegotiationGuidance({
+    playbook,
+    classification,
+    inboundText: args.text,
   });
   let state = resolveInboundCommercialState({
     from: thread?.commercial_state,
@@ -407,6 +421,7 @@ export async function processSalesInbound(args: {
           playbookName: playbook.brand.signature,
           pricingAllowed: playbook.pricing.aiMayCommunicate,
           priceRange,
+          negotiation,
           bookingUrl: playbook.call.bookingUrl,
           allowedFeatures: playbook.offer.allowedFeatures,
           inboundText: args.text,
@@ -423,6 +438,13 @@ export async function processSalesInbound(args: {
         classification,
         playbookName: playbook.brand.signature,
         pricingAllowed: playbook.pricing.aiMayCommunicate,
+        priceRange:
+          playbook.pricing.aiMayCommunicate &&
+          playbook.pricing.min != null &&
+          playbook.pricing.max != null
+            ? `${playbook.pricing.min}–${playbook.pricing.max} €`
+            : null,
+        negotiation,
         allowedFeatures: playbook.offer.allowedFeatures,
         bookingUrl: playbook.call.bookingUrl,
         inboundText: args.text,
@@ -440,7 +462,7 @@ export async function processSalesInbound(args: {
         [classification.summary, memory?.main_need ?? '', ...classification.servicesRequested].filter(Boolean),
         {
           pricingAllowed: playbook.pricing.aiMayCommunicate,
-          discountAllowed: playbook.discount.allowed,
+          discountAllowed: negotiation.allowed && playbook.discount.allowed,
         },
       )
     : null;

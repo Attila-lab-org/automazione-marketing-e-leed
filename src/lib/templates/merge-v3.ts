@@ -132,6 +132,40 @@ export function prefillFromLeadV3(
   };
 }
 
+export function personalizeDemoFromWebsiteAnalysisV3(
+  current: DemoInstanceDataV3,
+  analysis: unknown,
+): DemoInstanceDataV3 {
+  const row = asRecord(analysis);
+  const confidence = typeof row.confidence === 'number' ? row.confidence : 0;
+  if (confidence < 0.6 || row.human_review_required === true) return current;
+
+  const firstNote = (value: unknown): string | null => {
+    if (!Array.isArray(value)) return null;
+    for (const item of value) {
+      const text = asRecord(item).text;
+      if (typeof text === 'string' && text.trim()) return text.trim().replace(/[.;]+$/, '');
+    }
+    return null;
+  };
+  const strength = firstNote(row.strengths);
+  const issue = firstNote(row.issues);
+  if (!strength && !issue) return current;
+
+  const name = current.branding.business_name || 'il locale';
+  const city = current.contact.city ? ` a ${current.contact.city}` : '';
+  const facts = [strength, issue].filter((value): value is string => Boolean(value));
+  return {
+    ...current,
+    content: {
+      ...current.content,
+      headline: `${name}, prima ancora di entrare.`,
+      subheadline: `Una presenza digitale premium costruita per ${name}${city}, con un percorso più chiaro verso contatto e prenotazione.`,
+      description: `Questa proposta parte da segnali reali dell’attività: ${facts.join('; ')}.`,
+    },
+  };
+}
+
 export function mergeDemoInstanceDataV3(args: {
   templateDefaults: unknown;
   lead: LeadPrefillInputV3;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { NegotiationGuidance } from '@/lib/sales/negotiation';
 
 export const QUALITY_VALUES = ['unknown', 'low', 'medium', 'high'] as const;
 export const BOOKING_VALUES = ['unknown', 'none_observed', 'present'] as const;
@@ -163,6 +164,7 @@ export type SalesReplyDraftInput = {
   playbookName: string;
   pricingAllowed: boolean;
   priceRange?: string | null;
+  negotiation?: NegotiationGuidance | null;
   bookingUrl?: string | null;
   allowedFeatures: string[];
   inboundText?: string;

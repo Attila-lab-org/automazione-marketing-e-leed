@@ -466,6 +466,16 @@
   max-width: 36rem;
 }
 
+.introCopy .conceptNote {
+  margin-top: 1.5rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--restaurant-border);
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--restaurant-surface) 72%, transparent);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
 .introFigure {
   position: relative;
   border-radius: var(--radius-soft);

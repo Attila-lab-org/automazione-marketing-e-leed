@@ -1,5 +1,6 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { normalizeEmailAddress } from '@/lib/campaigns/test-delivery';
+import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
 
 async function cancelPendingLeadJobs(
   admin: AppSupabaseClient,
@@ -109,4 +110,15 @@ export async function scheduleFollowUpLater(
     .eq('workspace_id', workspaceId)
     .eq('lead_id', leadId);
   await stopLeadFollowups(admin, workspaceId, leadId);
+  const queue = new SupabaseJobQueue(admin);
+  await queue.enqueue({
+    workspaceId,
+    jobType: 'SALES_PROACTIVE_STEP',
+    entityType: 'message_thread',
+    entityId: threadId,
+    idempotencyKey: `SALES_PROACTIVE_STEP:message_thread:${threadId}:${at.toISOString()}`,
+    inputSnapshot: { threadId, leadId, dueAt: at.toISOString() },
+    priority: 40,
+    notBefore: at,
+  });
 }

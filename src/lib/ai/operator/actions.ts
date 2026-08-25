@@ -38,6 +38,11 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
     label: z.literal('Apri calendario'),
   }),
   z.object({
+    type: z.literal('open_settings'),
+    section: z.literal('playbook'),
+    label: z.literal('Apri impostazioni'),
+  }),
+  z.object({
     type: z.literal('show_blockers'),
     campaignId: z.string().uuid().optional(),
     label: z.literal('Mostra blocker'),
@@ -165,6 +170,8 @@ export function hrefForAction(action: OperatorAction): string {
       const qs = params.toString();
       return qs ? `/calendar?${qs}` : '/calendar';
     }
+    case 'open_settings':
+      return '/settings/playbook';
     case 'show_blockers':
       return action.campaignId ? `/campaigns/${action.campaignId}` : '/campaigns';
     case 'confirm_action':

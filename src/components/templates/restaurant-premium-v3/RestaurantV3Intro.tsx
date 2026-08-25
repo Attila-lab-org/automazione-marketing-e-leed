@@ -3,17 +3,19 @@ import { RESTAURANT_PREMIUM_V3_ASSETS, RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from
 
 type Props = {
   description: string | null;
+  conceptNote?: string | null;
   imageSrc?: string | null;
 };
 
-export function RestaurantV3Intro({ description, imageSrc }: Props) {
+export function RestaurantV3Intro({ description, conceptNote, imageSrc }: Props) {
   return (
     <section className={`${styles.section} ${styles.sectionNarrow}`} data-reveal>
       <div className={styles.intro}>
         <div className={styles.introCopy}>
-          <p className={styles.eyebrow}>Il locale</p>
-          <h2>Un luogo da vivere e raccontare.</h2>
+          <p className={styles.eyebrow}>Identità, informazioni, prenotazione</p>
+          <h2>Dal primo sguardo al tavolo.</h2>
           <p>{description || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.description}</p>
+          {conceptNote ? <p className={styles.conceptNote}>{conceptNote}</p> : null}
         </div>
         <figure className={styles.introFigure}>
           {/* eslint-disable-next-line @next/next/no-img-element */}

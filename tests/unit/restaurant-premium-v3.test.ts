@@ -8,7 +8,11 @@ import {
   RESTAURANT_PREMIUM_V3_DEFAULTS,
   RESTAURANT_PREMIUM_V3_RENDERER_KEY,
 } from '../../src/lib/templates/restaurant-premium-v3';
-import { prefillFromLeadV3, normalizeDemoDataV3 } from '../../src/lib/templates/merge-v3';
+import {
+  normalizeDemoDataV3,
+  personalizeDemoFromWebsiteAnalysisV3,
+  prefillFromLeadV3,
+} from '../../src/lib/templates/merge-v3';
 import { RESTAURANT_PREMIUM_V3_ASSETS, RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '../../src/lib/templates/v3-assets';
 import { RESTAURANT_PREMIUM_V2_DEFAULTS } from '../../src/lib/templates/restaurant-premium-v2';
 import {
@@ -78,6 +82,27 @@ describe('Restaurant Premium V3', () => {
     ]);
     expect(data.branding.primary_color).toBe('#111111');
     expect(data.branding.accent_color).toBe('#cc5500');
+  });
+
+  it('personalizza il copy da analisi grounded senza usare analisi incerte', () => {
+    const base = prefillFromLeadV3(
+      { name: 'Trattoria Duomo', city: 'Milano' },
+      RESTAURANT_PREMIUM_V3_DEFAULTS,
+    );
+    const personalized = personalizeDemoFromWebsiteAnalysisV3(base, {
+      confidence: 0.82,
+      human_review_required: false,
+      strengths: [{ text: 'Molte recensioni pubbliche', evidence: '1.082 recensioni' }],
+      issues: [{ text: 'CTA di prenotazione poco evidente', evidence: 'nessuna CTA osservata' }],
+    });
+    expect(personalized.content.headline).toContain('Trattoria Duomo');
+    expect(personalized.content.description).toMatch(/recensioni.*CTA/i);
+    expect(
+      personalizeDemoFromWebsiteAnalysisV3(base, {
+        confidence: 0.3,
+        strengths: [{ text: 'dato incerto' }],
+      }),
+    ).toEqual(base);
   });
 
   it('missing opening hours stays null — no invented hours', () => {

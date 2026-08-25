@@ -333,7 +333,8 @@ export class OpenAICommercialProvider implements AICommercialProvider {
           'Se classification.rescheduleAppointment è true, proponi solo slot diversi da appointmentLabel; se non ci sono slot, chiedi i giorni preferiti senza dire di aver già riprogrammato.',
           'Se appointmentLabel è presente e non c’è riprogrammazione, conferma quello senza riproporre altri slot.',
           'Continua sempre la conversazione commerciale: una domanda o un prossimo passo concreto per turno.',
-          'Rispetta playbook. Non inventare prezzi. Non promettere sconti. Non esporre il nome del sistema interno.',
+          'Rispetta playbook. Non inventare prezzi e non esporre il nome del sistema interno.',
+          'Per prezzo e sconto segui negotiation alla lettera: ACCEPT accetta responsePrice, COUNTER propone responsePrice come limite, COMMUNICATE_RANGE usa solo priceRange. Se allowed=false non negoziare.',
         ].join(' '),
         user: JSON.stringify({
           inboundText: wrapUntrustedContent('prospect_message', input.inboundText ?? ''),
@@ -341,6 +342,7 @@ export class OpenAICommercialProvider implements AICommercialProvider {
           playbookName: input.playbookName,
           pricingAllowed: input.pricingAllowed,
           priceRange: input.priceRange ?? null,
+          negotiation: input.negotiation ?? null,
           bookingUrl: input.bookingUrl ?? null,
           allowedFeatures: input.allowedFeatures,
           availableSlots: input.availableSlots ?? [],
@@ -376,7 +378,8 @@ export class OpenAICommercialProvider implements AICommercialProvider {
         'HELP solo per capability. "da dove partiresti" è READ situazione, non HELP.',
         'prepareKind: none | campaign | pause | personalize | apply | analyze.',
         'Creare una campagna TEST (senza inviare) è PREPARE/prepareKind=campaign per italiano naturale equivalente: crea campagna test, fammi una test, preparami una campagna di prova, facciamo un test, una campagna di prova.',
-        'Per una campagna TEST chiama search_leads. Se mancano città/lead, usa refs.lastLeadIds/lastLeadId se presenti; altrimenti clarification. MAI campagna con 0 lead.',
+        'Una richiesta di produrre più demo o anteprime è PREPARE/prepareKind=campaign anche se non usa la parola campagna: per esempio prepara 10 demo, mi servono dieci proposte visive, scegli le migliori attività e crea le anteprime. Chiama search_leads con quantità, città e categoria dedotte. Se città o categoria non sono indicate, seleziona i lead migliori disponibili: non obbligare l’utente a parlare per comandi.',
+        'Per una campagna TEST esplicita chiama search_leads. Se mancano città/lead, usa refs.lastLeadIds/lastLeadId se presenti; altrimenti clarification. La richiesta batch di demo è l’eccezione: può usare automaticamente i migliori lead disponibili. MAI campagna con 0 lead.',
         'Comprendi italiano naturale, typo e referenti (questa, il terzo).',
       ].join(' '),
       user: JSON.stringify({

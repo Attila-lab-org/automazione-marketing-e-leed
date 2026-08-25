@@ -6,7 +6,11 @@ import { listPublishedTemplates } from '@/lib/demos/ensure-template';
 import { pickCompatibleTemplateKey } from '@/lib/templates/match';
 import { prefillFromLead, normalizeDemoData } from '@/lib/templates/merge';
 import { prefillFromLeadV2, normalizeDemoDataV2 } from '@/lib/templates/merge-v2';
-import { prefillFromLeadV3, normalizeDemoDataV3 } from '@/lib/templates/merge-v3';
+import {
+  normalizeDemoDataV3,
+  personalizeDemoFromWebsiteAnalysisV3,
+  prefillFromLeadV3,
+} from '@/lib/templates/merge-v3';
 import { RESTAURANT_PREMIUM_RENDERER_KEY } from '@/lib/templates/restaurant-premium';
 import { RESTAURANT_PREMIUM_V2_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v2';
 import { RESTAURANT_PREMIUM_V3_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v3';
@@ -161,7 +165,20 @@ export async function createDemoFromLead(
     reviewCount: typedLead.review_count,
   };
 
-  const data = prefillForLayout(template.layoutKey, leadInput, template.defaultContent);
+  let data = prefillForLayout(template.layoutKey, leadInput, template.defaultContent);
+  if (template.layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) {
+    const { data: analysis } = await admin
+      .from('website_analyses')
+      .select('confidence, human_review_required, strengths, issues')
+      .eq('workspace_id', workspaceId)
+      .eq('lead_id', typedLead.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (analysis) {
+      data = personalizeDemoFromWebsiteAnalysisV3(normalizeDemoDataV3(data), analysis);
+    }
+  }
 
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < 4; attempt += 1) {

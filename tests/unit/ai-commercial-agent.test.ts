@@ -17,6 +17,10 @@ import { resolveInboundCommercialState, validateSalesTransition } from '../../sr
 import { resolveResponseMode } from '../../src/lib/sales/pipeline';
 import { DEFAULT_PLAYBOOK } from '../../src/lib/sales/playbook';
 import { buildAutonomyProposal } from '../../src/lib/sales/autonomy';
+import { extractEuroAmount, resolveNegotiationGuidance } from '../../src/lib/sales/negotiation';
+import { decideProactiveStep } from '../../src/lib/sales/proactive';
+import { buildCommercialLearningSnapshot } from '../../src/lib/sales/learning';
+import { buildGroundedEmailInsight } from '../../src/lib/messaging/visual-email';
 import { normalizeResendInboundPayload } from '../../src/lib/inbound/email';
 import { collectOperatorTurn } from '../../src/lib/ai/operator/turn';
 import { createMemoryOperatorData } from '../../src/lib/ai/operator/data';
@@ -121,6 +125,18 @@ describe('outbound critic', () => {
   });
 });
 
+describe('personalizzazione copy outbound', () => {
+  it('usa solo segnali presenti nell’analisi del sito', () => {
+    const text = buildGroundedEmailInsight({
+      strengths: [{ text: 'Forte reputazione pubblica' }],
+      issues: [{ text: 'Prenotazione poco visibile' }],
+    });
+    expect(text).toMatch(/Forte reputazione pubblica/);
+    expect(text).toMatch(/Prenotazione poco visibile/);
+    expect(buildGroundedEmailInsight({})).toBe('');
+  });
+});
+
 describe('sales conversation', () => {
   it('unsubscribe e not interested sono deterministici', () => {
     expect(mockClassifyInbound('Cancellami e non scrivermi più').unsubscribe).toBe(true);
@@ -141,6 +157,54 @@ describe('sales conversation', () => {
     expect(resolved.mode).toBe('HUMAN_ONLY');
     expect(validateSalesTransition('ENGAGED', 'HUMAN_REQUIRED').ok).toBe(true);
     expect(validateSalesTransition('ENGAGED', 'DELETED').ok).toBe(false);
+  });
+
+  it('negozia autonomamente senza scendere sotto il limite autorizzato', () => {
+    const playbook = {
+      ...DEFAULT_PLAYBOOK,
+      pricing: { ...DEFAULT_PLAYBOOK.pricing, mode: 'range' as const, aiMayCommunicate: true, min: 700, max: 1000 },
+      discount: { ...DEFAULT_PLAYBOOK.discount, allowed: true, maxAutomatic: 20 },
+      humanEscalation: { ...DEFAULT_PLAYBOOK.humanEscalation, price: false, discount: false },
+    };
+    const classification = mockClassifyInbound('Me lo fai a 600 euro?');
+    const guidance = resolveNegotiationGuidance({
+      playbook,
+      classification,
+      inboundText: 'Me lo fai a 600 euro?',
+    });
+    expect(extractEuroAmount('Me lo fai a 600 euro?')).toBe(600);
+    expect(guidance.action).toBe('COUNTER');
+    expect(guidance.responsePrice).toBe(800);
+    expect(
+      resolveResponseMode({ classification, playbook, autonomy: null, firstReply: false, channel: 'EMAIL' })
+        .mode,
+    ).toBe('AUTO_ALLOWED');
+    expect(
+      mockDraftReply({
+        classification,
+        playbookName: 'Attila',
+        pricingAllowed: true,
+        priceRange: '700–1000 €',
+        negotiation: guidance,
+        allowedFeatures: playbook.offer.allowedFeatures,
+      }).text,
+    ).toMatch(/800 €/);
+  });
+
+  it('accetta un’offerta sopra il floor autorizzato', () => {
+    const playbook = {
+      ...DEFAULT_PLAYBOOK,
+      pricing: { ...DEFAULT_PLAYBOOK.pricing, mode: 'range' as const, aiMayCommunicate: true, min: 700, max: 1000 },
+      discount: { ...DEFAULT_PLAYBOOK.discount, allowed: true, maxAutomatic: 30 },
+    };
+    const classification = mockClassifyInbound('Possiamo chiudere a 750 euro?');
+    const guidance = resolveNegotiationGuidance({
+      playbook,
+      classification,
+      inboundText: 'Possiamo chiudere a 750 euro?',
+    });
+    expect(guidance.action).toBe('ACCEPT');
+    expect(guidance.responsePrice).toBe(750);
   });
 
   it('inbound da NEW può andare in ENGAGED/QUALIFYING senza HUMAN_REQUIRED', () => {
@@ -226,6 +290,76 @@ describe('autonomy proposal', () => {
     );
     expect(proposal.auto.length).toBeGreaterThan(0);
     expect(proposal.human).toContain('prezzo');
+  });
+});
+
+describe('proactive commercial scheduler', () => {
+  it('attiva un ricontatto scaduto', () => {
+    expect(
+      decideProactiveStep(
+        { commercial_state: 'FOLLOW_UP_LATER', next_step_at: '2026-08-25T09:00:00.000Z' },
+        new Date('2026-08-25T10:00:00.000Z'),
+      ),
+    ).toMatchObject({ due: true, reason: 'DUE' });
+  });
+
+  it('non riapre thread già avanzati o non ancora scaduti', () => {
+    expect(
+      decideProactiveStep(
+        { commercial_state: 'CALL_BOOKED', next_step_at: '2026-08-25T09:00:00.000Z' },
+        new Date('2026-08-25T10:00:00.000Z'),
+      ).due,
+    ).toBe(false);
+    expect(
+      decideProactiveStep(
+        { commercial_state: 'FOLLOW_UP_LATER', next_step_at: '2026-08-25T11:00:00.000Z' },
+        new Date('2026-08-25T10:00:00.000Z'),
+      ).due,
+    ).toBe(false);
+  });
+});
+
+describe('commercial event learning', () => {
+  it('trasforma eventi reali in un consiglio operativo', () => {
+    const snapshot = buildCommercialLearningSnapshot({
+      windowDays: 30,
+      ownerCtaClicks: 2,
+      now: new Date('2026-08-25T10:00:00.000Z'),
+      events: [
+        {
+          event_type: 'INBOUND_CLASSIFIED',
+          payload: { intent: 'quote_request', mode: 'AUTO_ALLOWED' },
+        },
+        {
+          event_type: 'INBOUND_CLASSIFIED',
+          payload: { intent: 'discount_request', mode: 'AUTO_ALLOWED' },
+        },
+        {
+          event_type: 'PROACTIVE_FOLLOW_UP_DUE',
+          payload: {},
+        },
+      ],
+    });
+    expect(snapshot.metrics.pricingRequests).toBe(1);
+    expect(snapshot.metrics.discountRequests).toBe(1);
+    expect(snapshot.metrics.ownerCtaClicks).toBe(2);
+    expect(snapshot.recommendations.join(' ')).toMatch(/ricontatta|ricontatti/i);
+  });
+
+  it('la chat può chiedere cosa è stato imparato', async () => {
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: 'Cosa hai imparato e cosa mi consigli per migliorare le conversioni?',
+      envelope: envelopeFromPath('/overview'),
+      data: createMemoryOperatorData(),
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+    });
+    expect(result.events.some((event) => event.type === 'tool_done' && event.name === 'get_commercial_insights')).toBe(
+      true,
+    );
+    expect(result.reply).toMatch(/ultimi 30 giorni/i);
   });
 });
 

@@ -190,6 +190,44 @@ describe('operator conversational orchestrator', () => {
     }
   });
 
+  it('prepara 10 demo viene capito come obiettivo e avvia il batch sui migliori lead', async () => {
+    let selectedLeadIds: string[] = [];
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's-demo-batch',
+      question: 'mi servirebbero dieci demo per le attività migliori',
+      envelope: envelopeFromPath('/overview'),
+      data,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+      writes: {
+        prepare: async ({ leads }) => {
+          selectedLeadIds = leads.map((lead) => lead.id);
+          return [
+            {
+              tool: 'create_campaign',
+              ok: true,
+              summary: `Preparazione interna creata con ${leads.length} attività.`,
+              data: { campaignId: CAMPAIGN_ID, leadCount: leads.length, skipped: 0 },
+            },
+            {
+              tool: 'prepare_campaign',
+              ok: true,
+              summary: `Preparazione avviata per ${leads.length} attività.`,
+              data: { campaignId: CAMPAIGN_ID, selected: leads.length, enqueued: leads.length },
+            },
+          ];
+        },
+      },
+    });
+    expect(selectedLeadIds).toEqual([LEAD_1, LEAD_3, LEAD_2]);
+    expect(result.events.some((event) => event.type === 'tool_start' && event.name === 'prepare_campaign')).toBe(
+      true,
+    );
+    expect(result.reply).toMatch(/3 demo/i);
+    expect(result.reply).toMatch(/0 messaggi inviati/i);
+  });
+
   it('senza lead chiede il target e non crea campagna vuota', async () => {
     let prepared = false;
     const empty = createMemoryOperatorData({ leads: [] });

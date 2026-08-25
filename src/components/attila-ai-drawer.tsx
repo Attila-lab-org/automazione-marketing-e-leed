@@ -16,9 +16,9 @@ type ChatMessage = {
 type ToolStatus = { id: string; label: string; done: boolean; ok: boolean };
 
 const SUGGESTIONS = [
-  "Cosa puoi fare?",
+  "Cosa mi consigli oggi?",
+  "Imposta modalità autonoma",
   "Quanti appuntamenti ho?",
-  "Rispondi a telegram",
   "Aggiungi disponibilità domani alle 15:00",
 ];
 
@@ -123,7 +123,9 @@ export default function AttilaAiDrawer() {
   const [error, setError] = useState<string | null>(null);
   const [modeLabel, setModeLabel] = useState("ASSISTITO");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [dailyBriefing, setDailyBriefing] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const briefingLoadedRef = useRef(false);
 
   const [seq, setSeq] = useState(0);
 
@@ -185,6 +187,24 @@ export default function AttilaAiDrawer() {
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, tools, busy]);
+
+  useEffect(() => {
+    if (!open || messages.length > 0 || briefingLoadedRef.current) return;
+    briefingLoadedRef.current = true;
+    void fetch("/api/ai/insights")
+      .then((response) => response.json())
+      .then((data) => {
+        const briefing = data?.briefing;
+        if (!briefing?.summary) return;
+        const actions = Array.isArray(briefing.actions)
+          ? briefing.actions.slice(0, 3)
+          : [];
+        setDailyBriefing(
+          `${briefing.summary}${actions.length ? `\n\nOggi partirei così:\n${actions.map((item: string, index: number) => `${index + 1}. ${item}`).join("\n")}` : ""}`,
+        );
+      })
+      .catch(() => undefined);
+  }, [open, messages.length]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -306,6 +326,11 @@ export default function AttilaAiDrawer() {
             <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
               {messages.length === 0 ? (
                 <div className="space-y-2">
+                  {dailyBriefing ? (
+                    <div className="mr-4 whitespace-pre-wrap rounded-lg bg-stone-50 px-3 py-2 text-sm text-stone-800">
+                      {dailyBriefing}
+                    </div>
+                  ) : null}
                   <p className="text-sm text-stone-600">
                     Posso gestire appuntamenti, Telegram, campagne e lead da qui. Gli invii e le azioni irreversibili restano da confermare.
                   </p>

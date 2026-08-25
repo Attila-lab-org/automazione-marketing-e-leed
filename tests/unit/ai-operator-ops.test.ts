@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TOOL_CONTRACTS, contractsByTier, getToolContract, isConfirmTier } from '../../src/lib/ai/operator/tool-contracts';
-import { detectOperatorOpsAction } from '../../src/lib/ai/operator/ops-writes';
+import { applyPlaybookCommand, detectOperatorOpsAction } from '../../src/lib/ai/operator/ops-writes';
 import { parseEuropeRomeDateTime, formatEuropeRome } from '../../src/lib/ai/operator/time';
 import { planOperatorTurnMock } from '../../src/lib/ai/operator/semantic-plan';
 import { envelopeFromPath } from '../../src/lib/ai/operator/envelope';
@@ -10,6 +10,9 @@ import { createMemoryOperatorData } from '../../src/lib/ai/operator/data';
 import { collectOperatorTurn } from '../../src/lib/ai/operator/turn';
 import type { PersistAiRun } from '../../src/lib/ai/persist';
 import type { AiRunPublic } from '../../src/lib/ai/types';
+import { DEFAULT_PLAYBOOK } from '../../src/lib/sales/playbook';
+import { buildDailyCommercialBriefing } from '../../src/lib/sales/daily-briefing';
+import { classifyOperatorIntent } from '../../src/lib/ai/operator/intent';
 
 describe('tool contracts', () => {
   it('marks external and irreversible ops as confirm tiers', () => {
@@ -31,6 +34,27 @@ describe('ops detection', () => {
     expect(detectOperatorOpsAction('aggiungi disponibilità domani alle 15:00')).toBe('create_slot');
     expect(detectOperatorOpsAction('annulla appuntamento')).toBe('cancel_appointment');
     expect(detectOperatorOpsAction('ferma automazione')).toBe('stop_automation');
+    expect(
+      detectOperatorOpsAction(
+        'modalità autonoma, prezzo minimo 700, prezzo standard 1000, sconto massimo 15',
+      ),
+    ).toBe('update_playbook');
+  });
+
+  it('traduce un comando semplice in regole commerciali editabili', () => {
+    const result = applyPlaybookCommand(
+      DEFAULT_PLAYBOOK,
+      'modalità autonoma, prezzo minimo 700, prezzo standard 1000, sconto massimo 15',
+    );
+    expect(result.playbook.autonomy.firstReplyMode).toBe('AUTO_ALLOWED');
+    expect(result.playbook.pricing).toMatchObject({
+      min: 700,
+      max: 1000,
+      aiMayCommunicate: true,
+      mode: 'range',
+    });
+    expect(result.playbook.discount).toMatchObject({ allowed: true, maxAutomatic: 15 });
+    expect(result.changes).toHaveLength(4);
   });
 });
 
@@ -98,6 +122,89 @@ describe('calendar planning and grounding', () => {
     expect(reply.reply).toContain('2 appuntamenti fissati');
     expect(reply.reply).not.toContain('182');
     expect(reply.actions.some((a) => a.type === 'open_calendar')).toBe(true);
+  });
+});
+
+describe('daily commercial briefing', () => {
+  it('confronta i canali e consiglia quello con risultati migliori', () => {
+    const briefing = buildDailyCommercialBriefing({
+      now: new Date('2026-08-25T08:00:00.000Z'),
+      messages: [
+        { thread_id: 'e1', provider: 'resend', direction: 'OUTBOUND' },
+        { thread_id: 'e1', provider: 'resend', direction: 'INBOUND' },
+        { thread_id: 'e2', provider: 'resend', direction: 'OUTBOUND' },
+        { thread_id: 'e2', provider: 'resend', direction: 'INBOUND' },
+        { thread_id: 'e3', provider: 'resend', direction: 'OUTBOUND' },
+        { thread_id: 't1', provider: 'telegram', direction: 'OUTBOUND' },
+        { thread_id: 't2', provider: 'telegram', direction: 'OUTBOUND' },
+        { thread_id: 't3', provider: 'telegram', direction: 'OUTBOUND' },
+      ],
+      bookedThreadIds: ['e1'],
+      threadChannels: { e1: 'EMAIL' },
+      appointments: [
+        { starts_at: '2026-08-25T13:00:00.000Z', title: 'Call Trattoria Duomo' },
+      ],
+      hotThreads: 2,
+      followUpsDue: 1,
+      readyLeads: [
+        { country: 'Italia', city: 'Milano' },
+        { country: 'Italia', city: 'Milano' },
+        { country: 'Francia', city: 'Parigi' },
+      ],
+    });
+    expect(briefing.recommendation.channel).toBe('EMAIL');
+    expect(briefing.recommendation.city).toBe('Milano');
+    expect(briefing.today.appointments).toBe(1);
+    expect(briefing.summary).toMatch(/Ciao Attilio.*email.*Milano/i);
+  });
+
+  it('“cosa mi consigli oggi” usa il briefing completo', () => {
+    const plan = planOperatorTurnMock({
+      question: 'Ciao Attila, cosa mi consigli di fare oggi?',
+      refs: emptyEntityRefs(),
+      envelope: { route: '/overview', entityType: 'none', entityId: null },
+    });
+    expect(plan.toolCalls.some((tool) => tool.name === 'get_daily_briefing')).toBe(true);
+  });
+});
+
+describe('natural language demo batches', () => {
+  it.each([
+    'prepara 10 demo',
+    'mi servirebbero dieci anteprime per le attività migliori',
+    'puoi fare 10 proposte visive per i ristoranti?',
+  ])('comprende l’obiettivo senza richiedere un comando rigido: %s', (question) => {
+    const intent = classifyOperatorIntent(question);
+    const plan = planOperatorTurnMock({
+      question,
+      refs: emptyEntityRefs(),
+      envelope: { route: '/overview', entityType: 'none', entityId: null },
+    });
+    expect(intent.kind).toBe('PREPARE');
+    expect(intent.limit).toBe(10);
+    expect(plan.safetyClass).toBe('PREPARE');
+    expect(plan.prepareKind).toBe('campaign');
+    expect(plan.toolCalls).toContainEqual(
+      expect.objectContaining({
+        name: 'search_leads',
+        limit: 10,
+      }),
+    );
+  });
+
+  it('deduce anche il settore espresso naturalmente', () => {
+    const plan = planOperatorTurnMock({
+      question: 'vorrei cinque demo per dentisti',
+      refs: emptyEntityRefs(),
+      envelope: { route: '/overview', entityType: 'none', entityId: null },
+    });
+    expect(plan.toolCalls).toContainEqual(
+      expect.objectContaining({
+        name: 'search_leads',
+        category: 'dentist',
+        limit: 5,
+      }),
+    );
   });
 });
 

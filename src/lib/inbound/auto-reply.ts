@@ -43,8 +43,16 @@ export function buildAutoReplyText(args: {
   }
 
   if (args.message.isGroup) {
-    return `${name}, ${opener}. Sono ${studio}: possiamo aiutarti senza impegno. Scrivimi in privato e ti rispondiamo noi.`;
+    return `Ciao ${name}, ${opener}. Sono ${studio}. Scrivimi in privato: ti faccio una domanda, capisco l’obiettivo e ti indico il prossimo passo concreto.`;
   }
 
-  return `${name}, ${opener}. Sono ${studio}. Se vuoi, raccontaci in due righe cosa ti serve e ti rispondiamo senza impegno.`;
+  const question =
+    args.intent.intent === 'ECOMMERCE_REQUEST'
+      ? 'La priorità è vendere subito online o validare prima catalogo e pagamenti?'
+      : args.intent.intent === 'WEBSITE_REQUEST'
+        ? 'Il risultato più importante è ricevere contatti, prenotazioni o presentare meglio l’attività?'
+        : args.intent.intent === 'DIGITAL_PRESENCE'
+          ? 'Oggi cosa ti limita di più: pochi contatti, immagine poco chiara o gestione delle richieste?'
+          : 'Qual è il risultato principale che vuoi ottenere?';
+  return `Ciao ${name}, ${opener}. Sono ${studio}. ${question}`;
 }
