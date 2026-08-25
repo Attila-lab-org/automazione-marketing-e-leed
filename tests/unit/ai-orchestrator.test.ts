@@ -541,7 +541,7 @@ describe('telegram sales thread follow-up', () => {
     expect(telegramRequiresKeywordDiscovery(true, null)).toBe(false);
   });
 
-  it('Telegram risponde in automatico al contesto, non per keyword', () => {
+  it('Telegram ed email rispondono in automatico al contesto, non per keyword', () => {
     const info = mockClassifyInbound('Ciao, mi interessa capire se potete aiutarci');
     const telegram = resolveResponseMode({
       classification: info,
@@ -560,7 +560,8 @@ describe('telegram sales thread follow-up', () => {
       firstReply: true,
       channel: 'EMAIL',
     });
-    expect(email.mode).toBe('APPROVAL_REQUIRED');
+    expect(email.mode).toBe('AUTO_ALLOWED');
+    expect(email.reason).toBe('email_conversation');
 
     const sent = selectTelegramReplyText({
       salesAgentSucceeded: true,
@@ -576,7 +577,7 @@ describe('telegram sales thread follow-up', () => {
     expect(sent.text).toBe('Bozza contestuale Attila');
   });
 
-  it('prezzo, sconto e legale restano HUMAN_ONLY anche su Telegram', () => {
+  it('prezzo, sconto e legale restano HUMAN_ONLY anche sui canali automatici', () => {
     const pricing = resolveResponseMode({
       classification: mockClassifyInbound('Quanto costa?'),
       playbook: DEFAULT_PLAYBOOK,
@@ -594,5 +595,14 @@ describe('telegram sales thread follow-up', () => {
       channel: 'TELEGRAM',
     });
     expect(discount.mode).toBe('HUMAN_ONLY');
+
+    const emailLegal = resolveResponseMode({
+      classification: mockClassifyInbound('Ho una domanda sul contratto e sulla privacy'),
+      playbook: DEFAULT_PLAYBOOK,
+      autonomy: null,
+      firstReply: false,
+      channel: 'EMAIL',
+    });
+    expect(emailLegal.mode).toBe('HUMAN_ONLY');
   });
 });

@@ -19,6 +19,7 @@ export type InboxThreadItem = {
   priority: string | null;
   sentiment: string | null;
   nextStep: string | null;
+  nextStepAt: string | null;
   humanRequiredReason: string | null;
 };
 
@@ -34,7 +35,7 @@ export async function listInboxThreads(
   const { data: threads, error } = await admin
     .from('message_threads')
     .select(
-      'id, lead_id, subject, status, unread_count, last_message_at, campaign_id, channel, commercial_state, assigned_mode, priority, sentiment, next_step, human_required_reason, leads(id, name, business_status)',
+      'id, lead_id, subject, status, unread_count, last_message_at, campaign_id, channel, commercial_state, assigned_mode, priority, sentiment, next_step, next_step_at, human_required_reason, leads(id, name, business_status)',
     )
     .eq('workspace_id', workspaceId)
     .order('last_message_at', { ascending: false, nullsFirst: false })
@@ -134,6 +135,7 @@ export async function listInboxThreads(
       priority: t.priority ?? null,
       sentiment: t.sentiment ?? null,
       nextStep: t.next_step ?? null,
+      nextStepAt: t.next_step_at ?? null,
       humanRequiredReason: t.human_required_reason ?? null,
     };
   });

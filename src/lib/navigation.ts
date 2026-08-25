@@ -13,6 +13,7 @@ export const CAMPAIGN_SUBNAV = [
 
 export const MESSAGE_SUBNAV = [
   { href: "/inbox", label: "Posta in arrivo", description: "Leggi le risposte ricevute dai potenziali clienti." },
+  { href: "/calendar", label: "Calendario", description: "Appuntamenti, scadenze e slot disponibili." },
 ] as const;
 
 export const SETTINGS_SUBNAV = [

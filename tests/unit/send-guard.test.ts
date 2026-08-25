@@ -77,6 +77,40 @@ describe('runSendGuard (§11.2 — 7 check)', () => {
     expect(check?.reasons.some((r) => r.includes('reply'))).toBe(true);
   });
 
+  it('consente la risposta conversazionale ma mantiene suppression e kill switch', () => {
+    const conversational = runSendGuard(
+      passingContext({
+        sendKind: 'CONVERSATION',
+        lead: { businessStatus: 'REPLIED', hasBlockingReply: true },
+        campaign: {
+          status: 'PAUSED',
+          rateLimitAvailable: true,
+          outreachPausedAll: false,
+          withinSendWindow: false,
+        },
+      }),
+    );
+    expect(conversational.allowed).toBe(true);
+
+    const suppressed = runSendGuard(
+      passingContext({
+        sendKind: 'CONVERSATION',
+        recipient: { email: 'lead@example.com', emailValid: true, suppressed: true },
+        lead: { businessStatus: 'REPLIED', hasBlockingReply: true },
+      }),
+    );
+    expect(suppressed.allowed).toBe(false);
+
+    const paused = runSendGuard(
+      passingContext({
+        sendKind: 'CONVERSATION',
+        lead: { businessStatus: 'REPLIED', hasBlockingReply: true },
+        campaign: { status: 'ACTIVE', rateLimitAvailable: true, outreachPausedAll: true },
+      }),
+    );
+    expect(paused.allowed).toBe(false);
+  });
+
   it('blocca campaign paused e kill switch globale (§19.2)', () => {
     const paused = runSendGuard(
       passingContext({ campaign: { status: 'PAUSED', rateLimitAvailable: true, outreachPausedAll: false } }),

@@ -14,7 +14,7 @@ export default async function CampaignDetailPage({
       <SectionSubnav items={[...CAMPAIGN_SUBNAV]} />
       <PageHeader
         title="Dettaglio campagna"
-        description="Controlla quante attività sono pronte, prepara anteprime e messaggi, poi approva gli invii."
+        description="Segui il prossimo passo consigliato: il sistema prepara, tu controlli, Send Guard protegge l’invio."
       />
       <CampaignDetailClient campaignId={id} />
     </div>

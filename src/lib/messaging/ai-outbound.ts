@@ -119,16 +119,28 @@ export async function applyAiOutboundIfAllowed(args: {
       return { used: false, critic: critic.output.verdict };
     }
 
+    const { data: visualDraft } = await args.admin
+      .from('message_drafts')
+      .select('resolved_variables')
+      .eq('campaign_lead_id', args.campaignLeadId)
+      .eq('sequence_step', 0)
+      .maybeSingle();
+
+    // Il writer AI non può sostituire il template visuale: screenshot, CTA e
+    // firma sono deterministici. Personalizza il subject e conserva il testo
+    // proposto nei metadati, disponibile per revisioni future.
     await args.admin
       .from('message_drafts')
       .update({
         subject: draft.output.subject,
-        body: draft.output.htmlBody,
         resolved_variables: {
+          ...((visualDraft?.resolved_variables as Record<string, unknown> | null) ?? {}),
           aiOutbound: true,
+          aiTextBody: draft.output.textBody,
           claimsUsed: draft.output.claimsUsed,
           critic: critic.output,
           prompt_version: 'outbound-v1',
+          visualTemplatePreserved: true,
         },
         updated_at: new Date().toISOString(),
       })

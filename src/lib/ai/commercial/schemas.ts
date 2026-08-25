@@ -117,6 +117,12 @@ export const inboundClassificationSchema = z.object({
   confidence: z.number().min(0).max(1),
   summary: z.string().min(1).max(400),
   servicesRequested: z.array(z.string().min(1).max(80)).max(8),
+  bookingRequest: z.boolean(),
+  bookingAccepted: z.boolean(),
+  preferredTimeHint: z.string().max(200).nullable(),
+  cancelAppointment: z.boolean(),
+  rescheduleAppointment: z.boolean(),
+  bookingConfidence: z.number().min(0).max(1),
 });
 
 export type InboundClassification = z.infer<typeof inboundClassificationSchema>;
@@ -145,6 +151,13 @@ export type SalesThreadMemorySnapshot = {
   sentiment: string | null;
 };
 
+export type AvailableSlotPrompt = {
+  id: string;
+  label: string;
+  startsAt: string;
+  endsAt: string;
+};
+
 export type SalesReplyDraftInput = {
   classification: InboundClassification;
   playbookName: string;
@@ -155,6 +168,8 @@ export type SalesReplyDraftInput = {
   inboundText?: string;
   recentTurns?: SalesThreadTurn[];
   memory?: SalesThreadMemorySnapshot | null;
+  availableSlots?: AvailableSlotPrompt[];
+  appointmentLabel?: string | null;
 };
 
 export const PROMPT_VERSIONS = {
@@ -372,6 +387,12 @@ export const INBOUND_CLASSIFICATION_JSON_SCHEMA = objectSchema(
     confidence: { type: 'number' },
     summary: { type: 'string' },
     servicesRequested: { type: 'array', items: { type: 'string' } },
+    bookingRequest: { type: 'boolean' },
+    bookingAccepted: { type: 'boolean' },
+    preferredTimeHint: { type: ['string', 'null'] },
+    cancelAppointment: { type: 'boolean' },
+    rescheduleAppointment: { type: 'boolean' },
+    bookingConfidence: { type: 'number' },
   },
   [
     'intent',
@@ -389,6 +410,12 @@ export const INBOUND_CLASSIFICATION_JSON_SCHEMA = objectSchema(
     'confidence',
     'summary',
     'servicesRequested',
+    'bookingRequest',
+    'bookingAccepted',
+    'preferredTimeHint',
+    'cancelAppointment',
+    'rescheduleAppointment',
+    'bookingConfidence',
   ],
 );
 

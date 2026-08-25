@@ -1,5 +1,5 @@
 /**
- * Supabase Database contract — aligned to migrations 0001..0024.
+ * Supabase Database contract — aligned to migrations 0001..0025.
  * Used as createClient<Database>() so invalid column selects fail at compile time.
  *
  * Note: mapped `AsRecord` converts interfaces → closed object types so they
@@ -23,6 +23,12 @@ import type {
   AutomationJobEventRow,
   AutomationJobInsert,
   AutomationJobRow,
+  BookCalendarSlotArgs,
+  CalendarAvailabilitySlotInsert,
+  CalendarAvailabilitySlotRow,
+  CalendarEventInsert,
+  CalendarEventRow,
+  CancelCalendarAppointmentArgs,
   CampaignInsert,
   CampaignLeadInsert,
   CampaignLeadRow,
@@ -163,6 +169,11 @@ export type Database = {
       pending_ai_actions: Tbl<PendingAiActionRow, PendingAiActionInsert>;
       ai_action_audit: Tbl<AiActionAuditRow, AiActionAuditInsert>;
       ai_autonomy_policies: Tbl<AiAutonomyPolicyRow, AiAutonomyPolicyInsert>;
+      calendar_availability_slots: Tbl<
+        CalendarAvailabilitySlotRow,
+        CalendarAvailabilitySlotInsert
+      >;
+      calendar_events: Tbl<CalendarEventRow, CalendarEventInsert>;
     };
     Views: {
       [_ in never]: never;
@@ -175,6 +186,14 @@ export type Database = {
       recover_stuck_jobs: {
         Args: AsRecord<RecoverStuckJobsArgs>;
         Returns: number;
+      };
+      book_calendar_slot: {
+        Args: AsRecord<BookCalendarSlotArgs>;
+        Returns: string;
+      };
+      cancel_calendar_appointment: {
+        Args: AsRecord<CancelCalendarAppointmentArgs>;
+        Returns: boolean;
       };
     };
     Enums: {

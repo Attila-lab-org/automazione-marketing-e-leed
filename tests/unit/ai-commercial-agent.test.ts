@@ -192,9 +192,15 @@ describe('email inbound vs delivery', () => {
     expect(delivery?.kind).toBe('delivery');
     const reply = normalizeResendInboundPayload({
       type: 'email.received',
-      data: { from: 'info@locale.it', text: 'Quanto costa?', email_id: 'y' },
+      data: {
+        from: 'info@locale.it',
+        text: 'Quanto costa?',
+        email_id: 'y',
+        headers: { 'message-id': '<reply-1@locale.it>' },
+      },
     });
     expect(reply?.kind).toBe('reply');
+    expect(reply?.messageHeaderId).toBe('<reply-1@locale.it>');
   });
 });
 

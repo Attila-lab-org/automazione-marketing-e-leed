@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { withAdmin } from '@/lib/api/with-admin';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
+import { stopLeadSequences } from '@/lib/sales/stop';
 
 export const runtime = 'nodejs';
 
@@ -39,6 +40,12 @@ export const POST = withAdmin(async (request: Request) => {
       .eq('id', body.threadId);
   }
   if (body.action === 'stop') {
+    const { data: thread } = await admin
+      .from('message_threads')
+      .select('lead_id')
+      .eq('workspace_id', workspace.id)
+      .eq('id', body.threadId)
+      .maybeSingle();
     await admin
       .from('message_threads')
       .update({
@@ -48,6 +55,9 @@ export const POST = withAdmin(async (request: Request) => {
       })
       .eq('workspace_id', workspace.id)
       .eq('id', body.threadId);
+    if (thread?.lead_id) {
+      await stopLeadSequences(admin, workspace.id, thread.lead_id);
+    }
   }
   return NextResponse.json({ ok: true });
 });

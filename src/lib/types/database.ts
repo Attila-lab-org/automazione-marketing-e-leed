@@ -125,7 +125,8 @@ export type JobType =
   | 'MESSAGE_GENERATION'
   | 'SEND_MESSAGE'
   | 'FOLLOWUP_STEP'
-  | 'WEBHOOK_PROCESSING';
+  | 'WEBHOOK_PROCESSING'
+  | 'CALENDAR_REMINDER';
 
 /** 0007 — check constraint su automation_job_events.event_type */
 export type AutomationJobEventType =
@@ -1555,6 +1556,85 @@ export interface AiAutonomyPolicyInsert {
 }
 
 // ---------------------------------------------------------------------------
+// 0025 — commercial calendar
+// ---------------------------------------------------------------------------
+
+export type CalendarSlotStatus = 'AVAILABLE' | 'BOOKED' | 'BLOCKED';
+export type CalendarEventType = 'APPOINTMENT' | 'WORK_DEADLINE' | 'REMINDER';
+export type CalendarEventStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
+export type CalendarEventSource = 'AI' | 'HUMAN' | 'SYSTEM';
+
+export interface CalendarAvailabilitySlotRow {
+  id: string;
+  workspace_id: string;
+  starts_at: string;
+  ends_at: string;
+  timezone: string;
+  status: CalendarSlotStatus;
+  booked_event_id: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CalendarAvailabilitySlotInsert {
+  id?: string;
+  workspace_id: string;
+  starts_at: string;
+  ends_at: string;
+  timezone?: string;
+  status?: CalendarSlotStatus;
+  booked_event_id?: string | null;
+  note?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CalendarEventRow {
+  id: string;
+  workspace_id: string;
+  lead_id: string | null;
+  thread_id: string | null;
+  slot_id: string | null;
+  event_type: CalendarEventType;
+  title: string;
+  description: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  due_at: string | null;
+  timezone: string;
+  status: CalendarEventStatus;
+  source: CalendarEventSource;
+  reminder_at: string | null;
+  reminder_sent_at: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CalendarEventInsert {
+  id?: string;
+  workspace_id: string;
+  lead_id?: string | null;
+  thread_id?: string | null;
+  slot_id?: string | null;
+  event_type: CalendarEventType;
+  title: string;
+  description?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  due_at?: string | null;
+  timezone?: string;
+  status?: CalendarEventStatus;
+  source?: CalendarEventSource;
+  reminder_at?: string | null;
+  reminder_sent_at?: string | null;
+  metadata?: Json;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Mappa tabelle → Row (helper per i Domain Services / repository)
 // ---------------------------------------------------------------------------
 
@@ -1603,6 +1683,8 @@ export interface Tables {
   pending_ai_actions: PendingAiActionRow;
   ai_action_audit: AiActionAuditRow;
   ai_autonomy_policies: AiAutonomyPolicyRow;
+  calendar_availability_slots: CalendarAvailabilitySlotRow;
+  calendar_events: CalendarEventRow;
 }
 
 export type TableName = keyof Tables;
@@ -1618,4 +1700,21 @@ export interface ClaimJobArgs {
 /** Firma della funzione SQL recover_stuck_jobs (0007): ritorna il numero di job recuperati. */
 export interface RecoverStuckJobsArgs {
   p_backoff_base_seconds?: number;
+}
+
+/** Firma della funzione SQL book_calendar_slot (0025). */
+export interface BookCalendarSlotArgs {
+  p_workspace_id: string;
+  p_slot_id: string;
+  p_lead_id: string;
+  p_thread_id: string | null;
+  p_title: string;
+  p_description?: string | null;
+  p_source?: CalendarEventSource;
+}
+
+/** Firma della funzione SQL cancel_calendar_appointment (0025). */
+export interface CancelCalendarAppointmentArgs {
+  p_workspace_id: string;
+  p_event_id: string;
 }

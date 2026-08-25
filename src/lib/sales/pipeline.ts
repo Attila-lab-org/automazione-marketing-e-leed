@@ -17,6 +17,13 @@ import { resolveInboundCommercialState, type SalesState } from './states';
 import { getActiveAutonomy } from './autonomy';
 import { criticSalesReply } from '@/lib/ai/commercial/grounding';
 import { alertKindFromInbound, persistSalesReplyDraft, recordOperatorAlert } from './reply-persist';
+import {
+  applyConversationBooking,
+  getActiveAppointmentForLead,
+  listAvailableSlots,
+  slotsForAiPrompt,
+} from '@/lib/calendar';
+import { formatSlotForHuman } from '@/lib/calendar/slots';
 
 export type SalesMemory = {
   business_summary: string | null;
@@ -176,8 +183,11 @@ export function resolveResponseMode(args: {
   ) {
     return { mode: 'AUTO_ALLOWED', reason: 'autonomy_auto_intent' };
   }
-  if (args.channel === 'TELEGRAM') {
-    return { mode: 'AUTO_ALLOWED', reason: 'telegram_conversation' };
+  if (args.channel === 'TELEGRAM' || args.channel === 'EMAIL') {
+    return {
+      mode: 'AUTO_ALLOWED',
+      reason: args.channel === 'TELEGRAM' ? 'telegram_conversation' : 'email_conversation',
+    };
   }
   if (args.firstReply) return { mode: args.playbook.autonomy.firstReplyMode, reason: 'first_reply' };
   return { mode: args.playbook.autonomy.defaultMode, reason: 'playbook_default' };
@@ -236,6 +246,7 @@ export async function processSalesInbound(args: {
     .select('commercial_state, assigned_mode')
     .eq('id', args.threadId)
     .maybeSingle();
+  const takeoverActive = thread?.assigned_mode === 'HUMAN';
 
   const { count: outboundCount } = await args.admin
     .from('messages')
@@ -250,7 +261,7 @@ export async function processSalesInbound(args: {
     firstReply,
     channel: args.channel,
   });
-  const state = resolveInboundCommercialState({
+  let state = resolveInboundCommercialState({
     from: thread?.commercial_state,
     recommended: classification.recommendedState,
     humanOnly: resolved.mode === 'HUMAN_ONLY',
@@ -281,7 +292,7 @@ export async function processSalesInbound(args: {
     ]),
   });
 
-  const humanRequired = resolved.mode === 'HUMAN_ONLY';
+  const humanRequired = resolved.mode === 'HUMAN_ONLY' || takeoverActive;
   const hot =
     classification.discountAsk || classification.angry || classification.intent === 'quote_request';
   await args.admin
@@ -294,9 +305,11 @@ export async function processSalesInbound(args: {
       next_step: classification.summary,
       priority: hot ? 'HOT' : 'NORMAL',
       human_required_reason: humanRequired
-        ? classification.discountAsk
-          ? 'Negotiation / pricing'
-          : resolved.reason
+        ? takeoverActive
+          ? 'Takeover umano attivo'
+          : classification.discountAsk
+            ? 'Negotiation / pricing'
+            : resolved.reason
         : null,
       status: humanRequired ? 'NEEDS_REPLY' : 'OPEN',
       updated_at: new Date().toISOString(),
@@ -313,6 +326,8 @@ export async function processSalesInbound(args: {
       state,
       mode: resolved.mode,
       reason: resolved.reason,
+      bookingRequest: classification.bookingRequest,
+      bookingAccepted: classification.bookingAccepted,
     } as unknown as Json,
   });
 
@@ -320,40 +335,100 @@ export async function processSalesInbound(args: {
     return { classification, state, mode: resolved.mode, draft: null, humanRequired: true };
   }
 
-  let draftText: string | null = null;
-  try {
-    const provider = getAICommercialProvider(env);
-    const route = resolveModel('draft_reply', env);
-    const priceRange =
-      playbook.pricing.aiMayCommunicate && playbook.pricing.min != null && playbook.pricing.max != null
-        ? `${playbook.pricing.min}–${playbook.pricing.max} €`
-        : null;
-    const drafted = await provider.draftReply(
-      {
+  const { data: leadRow } = await args.admin
+    .from('leads')
+    .select('name')
+    .eq('id', args.leadId)
+    .maybeSingle();
+
+  let bookingConfirmation: string | null = null;
+  let appointmentLabel: string | null = null;
+  if (!takeoverActive && resolved.mode !== 'HUMAN_ONLY') {
+    const booking = await applyConversationBooking({
+      admin: args.admin,
+      workspaceId: args.workspaceId,
+      leadId: args.leadId,
+      threadId: args.threadId,
+      classification,
+      leadName: leadRow?.name,
+    });
+    if (booking.action === 'BOOKED' || booking.action === 'RESCHEDULED') {
+      bookingConfirmation = booking.confirmationText;
+      appointmentLabel = booking.result.label;
+      state = 'CALL_BOOKED';
+    } else if (booking.action === 'NO_SLOT') {
+      bookingConfirmation = booking.message;
+    } else if (booking.action === 'CANCELLED') {
+      bookingConfirmation = 'Ho annullato l’appuntamento. Dimmi pure se vuoi riprogrammare.';
+      state = 'CALL_PROPOSED';
+      await args.admin
+        .from('message_threads')
+        .update({
+          commercial_state: 'CALL_PROPOSED',
+          next_step: 'Riprogrammare chiamata',
+          next_step_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', args.threadId);
+    }
+  }
+
+  const availableSlots = await listAvailableSlots(args.admin, args.workspaceId, { limit: 5 });
+  const existingAppt = await getActiveAppointmentForLead(
+    args.admin,
+    args.workspaceId,
+    args.leadId,
+  );
+  if (!appointmentLabel && existingAppt?.starts_at) {
+    appointmentLabel = formatSlotForHuman({
+      id: existingAppt.id,
+      starts_at: existingAppt.starts_at,
+      ends_at: existingAppt.ends_at ?? existingAppt.starts_at,
+      timezone: existingAppt.timezone,
+      status: 'BOOKED',
+    });
+  }
+
+  let draftText: string | null = bookingConfirmation;
+  if (!draftText) {
+    try {
+      const provider = getAICommercialProvider(env);
+      const route = resolveModel('draft_reply', env);
+      const priceRange =
+        playbook.pricing.aiMayCommunicate && playbook.pricing.min != null && playbook.pricing.max != null
+          ? `${playbook.pricing.min}–${playbook.pricing.max} €`
+          : null;
+      const drafted = await provider.draftReply(
+        {
+          classification,
+          playbookName: playbook.brand.signature,
+          pricingAllowed: playbook.pricing.aiMayCommunicate,
+          priceRange,
+          bookingUrl: playbook.call.bookingUrl,
+          allowedFeatures: playbook.offer.allowedFeatures,
+          inboundText: args.text,
+          recentTurns,
+          memory,
+          availableSlots: slotsForAiPrompt(availableSlots),
+          appointmentLabel,
+        },
+        { model: route.model },
+      );
+      draftText = drafted.output.text;
+    } catch {
+      draftText = mockDraftReply({
         classification,
         playbookName: playbook.brand.signature,
         pricingAllowed: playbook.pricing.aiMayCommunicate,
-        priceRange,
-        bookingUrl: playbook.call.bookingUrl,
         allowedFeatures: playbook.offer.allowedFeatures,
+        bookingUrl: playbook.call.bookingUrl,
         inboundText: args.text,
         recentTurns,
         memory,
-      },
-      { model: route.model },
-    );
-    draftText = drafted.output.text;
-  } catch {
-    draftText = mockDraftReply({
-      classification,
-      playbookName: playbook.brand.signature,
-      pricingAllowed: playbook.pricing.aiMayCommunicate,
-      allowedFeatures: playbook.offer.allowedFeatures,
-      bookingUrl: playbook.call.bookingUrl,
-      inboundText: args.text,
-      recentTurns,
-      memory,
-    }).text;
+        availableSlots: slotsForAiPrompt(availableSlots),
+        appointmentLabel,
+      }).text;
+    }
   }
 
   let critic = draftText
@@ -366,14 +441,15 @@ export async function processSalesInbound(args: {
         },
       )
     : null;
-  let mode = resolved.mode;
-  if (mode === 'AUTO_ALLOWED' && critic && critic.verdict !== 'PASS') {
+  let mode = takeoverActive ? ('HUMAN_ONLY' as ResponseMode) : resolved.mode;
+  if (mode === 'AUTO_ALLOWED' && critic && critic.verdict !== 'PASS' && !bookingConfirmation) {
     mode = 'APPROVAL_REQUIRED';
     critic = { ...critic, verdict: 'HUMAN_REVIEW' };
   }
-  // Inbound email has no Send Guard channel adapter; drafts stay in Messaggi.
-  if (args.channel === 'EMAIL' && mode === 'AUTO_ALLOWED') {
-    mode = 'APPROVAL_REQUIRED';
+  // Conferme di booking deterministiche restano auto su Telegram.
+  if (bookingConfirmation && args.channel === 'TELEGRAM' && !takeoverActive) {
+    mode = 'AUTO_ALLOWED';
+    critic = critic ? { ...critic, verdict: 'PASS' } : critic;
   }
 
   await persistSalesReplyDraft({

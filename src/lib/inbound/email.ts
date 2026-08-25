@@ -1,7 +1,16 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { ensureInboundThread } from '@/lib/messaging/persist';
 import { processSalesInbound } from '@/lib/sales/pipeline';
-import { scheduleFollowUpLater, stopLeadSequences, suppressLeadEmail } from '@/lib/sales/stop';
+import {
+  scheduleFollowUpLater,
+  stopLeadFollowups,
+  stopLeadSequences,
+  suppressLeadEmail,
+} from '@/lib/sales/stop';
+import {
+  findEmailConversationThread,
+  sendEmailConversationReply,
+} from '@/lib/inbound/email-reply';
 
 export type NormalizedEmailInbound = {
   kind: 'delivery' | 'reply';
@@ -12,6 +21,7 @@ export type NormalizedEmailInbound = {
   subject: string | null;
   text: string | null;
   providerMessageId: string | null;
+  messageHeaderId: string | null;
 };
 
 const DELIVERY_TYPES = new Set([
@@ -54,6 +64,7 @@ export function normalizeResendInboundPayload(payload: Record<string, unknown>):
       subject: null,
       text: null,
       providerMessageId: typeof data.email_id === 'string' ? data.email_id : null,
+      messageHeaderId: null,
     };
   }
   if (type === 'email.received' || type === 'email.replied') {
@@ -70,6 +81,18 @@ export function normalizeResendInboundPayload(payload: Record<string, unknown>):
           ? data.html.replace(/<[^>]+>/g, ' ')
           : null;
     if (!text || !from) return null;
+    const rawHeaders =
+      data.headers && typeof data.headers === 'object'
+        ? (data.headers as Record<string, unknown>)
+        : {};
+    const messageHeaderId =
+      typeof data.message_id === 'string'
+        ? data.message_id
+        : typeof rawHeaders['message-id'] === 'string'
+          ? rawHeaders['message-id']
+          : typeof rawHeaders['Message-ID'] === 'string'
+            ? rawHeaders['Message-ID']
+            : null;
     return {
       kind: 'reply',
       providerEventId: `${type}:${from}:${payload.created_at ?? Date.now()}`,
@@ -79,6 +102,7 @@ export function normalizeResendInboundPayload(payload: Record<string, unknown>):
       subject: typeof data.subject === 'string' ? data.subject : null,
       text,
       providerMessageId: typeof data.email_id === 'string' ? data.email_id : null,
+      messageHeaderId,
     };
   }
   return null;
@@ -113,12 +137,19 @@ export async function persistEmailReply(args: {
     if (dup?.id) return { ok: true, reason: 'DUPLICATE' };
   }
 
-  const threadId = await ensureInboundThread(
+  const conversation = await findEmailConversationThread(
     args.admin,
     args.workspaceId,
     lead.id,
-    args.inbound.subject ?? 'Email inbound',
   );
+  const threadId =
+    conversation?.threadId ??
+    (await ensureInboundThread(
+      args.admin,
+      args.workspaceId,
+      lead.id,
+      args.inbound.subject ?? 'Email inbound',
+    ));
   await args.admin.from('messages').insert({
     workspace_id: args.workspaceId,
     thread_id: threadId,
@@ -133,6 +164,10 @@ export async function persistEmailReply(args: {
     sequence_step: 0,
     sent_at: new Date().toISOString(),
   });
+
+  // Una risposta reale interrompe sempre i follow-up freddi. Da qui in poi
+  // prosegue la conversazione AI sul medesimo thread della campagna.
+  await stopLeadFollowups(args.admin, args.workspaceId, lead.id);
 
   const sales = await processSalesInbound({
     admin: args.admin,
@@ -153,5 +188,37 @@ export async function persistEmailReply(args: {
     at.setMonth(at.getMonth() + 1);
     await scheduleFollowUpLater(args.admin, args.workspaceId, lead.id, threadId, at);
   }
-  return { ok: true, reason: 'REPLY_PERSISTED' };
+
+  if (
+    sales.mode === 'AUTO_ALLOWED' &&
+    !sales.humanRequired &&
+    sales.draft &&
+    !sales.classification.unsubscribe &&
+    !sales.classification.notInterested &&
+    !sales.classification.followUpLater
+  ) {
+    const sent = await sendEmailConversationReply({
+      admin: args.admin,
+      workspaceId: args.workspaceId,
+      threadId,
+      leadId: lead.id,
+      campaignLeadId: conversation?.campaignLeadId ?? null,
+      recipient: from,
+      subject: args.inbound.subject ?? conversation?.previousSubject ?? null,
+      text: sales.draft,
+      inboundProviderEventId: args.inbound.providerEventId,
+      inboundMessageHeaderId: args.inbound.messageHeaderId,
+      previousProviderMessageId: conversation?.previousProviderMessageId ?? null,
+      env: args.env,
+    });
+    return { ok: sent.sent, reason: sent.reason };
+  }
+
+  return {
+    ok: true,
+    reason:
+      sales.mode === 'HUMAN_ONLY' || sales.humanRequired
+        ? 'REPLY_PERSISTED_HUMAN_REQUIRED'
+        : 'REPLY_PERSISTED_NO_AUTO_SEND',
+  };
 }

@@ -81,9 +81,20 @@ export async function handleJob(
       return handleSendMessage(admin, job, env);
     case 'FOLLOWUP_STEP':
       return handleFollowupStep(admin, job, env);
+    case 'CALENDAR_REMINDER':
+      return handleCalendarReminder(admin, job);
     default:
       return { skipped: true, reason: `Unsupported job type ${job.jobType}` };
   }
+}
+
+async function handleCalendarReminder(
+  admin: SupabaseClient,
+  job: { workspaceId: string; entityId: string; inputSnapshot: Record<string, unknown> },
+) {
+  const { fireCalendarReminder } = await import('@/lib/calendar/service');
+  const eventId = String(job.inputSnapshot.eventId ?? job.entityId);
+  return fireCalendarReminder(admin as AppSupabaseClient, job.workspaceId, eventId);
 }
 
 async function handleWebsiteAnalysis(
@@ -325,33 +336,16 @@ async function scheduleNextFollowup(
   currentStep: number,
   env: NodeJS.ProcessEnv,
 ) {
-  if ((env.AUTO_FOLLOWUPS_ENABLED ?? '').trim().toLowerCase() !== 'true') {
-    await updateCampaignLead(
-      admin,
-      campaignLeadId,
-      { status: 'SENT', next_action_at: null },
-      { automaticFollowup: false, sequenceCompleted: true, lastStep: currentStep },
-    );
-    return { done: true, automaticFollowup: false };
-  }
   const { data: campaign } = await admin
     .from('campaigns')
-    .select('followup_sequence_version_id, delivery_mode')
+    .select('delivery_mode')
     .eq('id', campaignId)
     .single();
-  if (!campaign?.followup_sequence_version_id) {
-    await updateCampaignLead(admin, campaignLeadId, { status: 'SENT' }, { sequenceCompleted: true });
-    return { done: true };
-  }
-
-  const { data: seq } = await admin
-    .from('followup_sequence_versions')
-    .select('steps')
-    .eq('id', campaign.followup_sequence_version_id)
-    .single();
-
-  const steps = Array.isArray(seq?.steps) ? (seq!.steps as Array<{ step: number; delay_days: number }>) : [];
-  const next = steps.find((s) => s.step === currentStep + 1);
+  const manualSteps = [
+    { step: 1, delay_days: 3 },
+    { step: 2, delay_days: 7 },
+  ] as const;
+  const next = manualSteps.find((step) => step.step === currentStep + 1);
   if (!next) {
     await updateCampaignLead(
       admin,
@@ -374,7 +368,7 @@ async function scheduleNextFollowup(
     .limit(1)
     .maybeSingle();
   const origin = originMsg?.sent_at ? new Date(originMsg.sent_at) : new Date();
-  const isTest = campaign.delivery_mode === 'TEST';
+  const isTest = campaign?.delivery_mode === 'TEST';
   const testMs = isTest ? testSequenceDelayMs(next.step) : null;
   const notBefore = new Date(
     origin.getTime() +
@@ -391,24 +385,21 @@ async function scheduleNextFollowup(
     {
       nextStep: next.step,
       nextActionAt: notBefore.toISOString(),
-      deliveryMode: campaign.delivery_mode ?? 'PRODUCTION',
+      deliveryMode: campaign?.delivery_mode ?? 'PRODUCTION',
       acceleratedTest: isTest,
+      automaticFollowup: false,
+      manualApprovalRequired: true,
     },
   );
 
-  const queue = new SupabaseJobQueue(admin);
-  await queue.enqueue({
-    workspaceId,
-    jobType: 'FOLLOWUP_STEP',
-    entityType: 'campaign_lead',
-    entityId: campaignLeadId,
-    idempotencyKey: `FOLLOWUP_STEP:campaign_lead:${campaignLeadId}:step:${next.step}`,
-    inputSnapshot: { sequenceStep: next.step },
-    priority: 90,
-    notBefore,
-  });
-
-  return { done: false, nextStep: next.step, notBefore: notBefore.toISOString(), acceleratedTest: isTest };
+  return {
+    done: false,
+    nextStep: next.step,
+    notBefore: notBefore.toISOString(),
+    acceleratedTest: isTest,
+    automaticFollowup: false,
+    manualApprovalRequired: true,
+  };
 }
 
 async function handleSendMessage(
@@ -537,6 +528,9 @@ async function handleSendMessage(
     html: draft!.body!,
     text: emailHtmlToText(draft!.body!),
     idempotencyKey,
+    headers: {
+      'Reply-To': env.RESEND_REPLY_TO?.trim() || fromAddress || 'onboarding@resend.dev',
+    },
   });
 
   const threadId = await ensureMessageThread(admin, job.workspaceId, cl.lead_id, cl.campaign_id);
@@ -618,53 +612,11 @@ async function handleSendMessage(
 }
 
 async function handleFollowupStep(
-  admin: SupabaseClient,
-  job: JobRef,
-  env: NodeJS.ProcessEnv,
+  _admin: SupabaseClient,
+  _job: JobRef,
+  _env: NodeJS.ProcessEnv,
 ) {
-  if ((env.AUTO_FOLLOWUPS_ENABLED ?? '').trim().toLowerCase() !== 'true') {
-    return { skipped: true, reason: 'AUTOMATIC_FOLLOWUP_DISABLED' };
-  }
-  const sequenceStep = Number(job.inputSnapshot.sequenceStep ?? 1);
-  const { data: cl } = await admin
-    .from('campaign_leads')
-    .select('id, status, campaign_id')
-    .eq('id', job.entityId)
-    .single();
-  if (!cl) throw new Error('Followup: campaign_lead missing');
-  if (['STOPPED', 'SKIPPED', 'FAILED'].includes(cl.status)) {
-    return { skipped: true, reason: cl.status };
-  }
-
-  const { data: campaign } = await admin.from('campaigns').select('status').eq('id', cl.campaign_id).single();
-  if (campaign?.status === 'PAUSED') {
-    // Temporary wait — never complete/skip a due FOLLOWUP during pause
-    throw new SendDeferredError({
-      kind: 'defer',
-      reason: 'CAMPAIGN_PAUSED',
-      notBefore: new Date(Date.now() + PAUSE_RETRY_MS),
-      detail: `Campaign PAUSED: defer FOLLOWUP_STEP fino a Resume`,
-    });
-  }
-  if (campaign && campaign.status !== 'ACTIVE') {
-    return { skipped: true, reason: `CAMPAIGN_${campaign.status}` };
-  }
-
-  await buildFollowupDraft(admin, job.workspaceId, job.entityId, sequenceStep, env);
-  await updateCampaignLead(admin, job.entityId, { status: 'APPROVED' }, { followupDraftStep: sequenceStep });
-
-  const queue = new SupabaseJobQueue(admin);
-  await queue.enqueue({
-    workspaceId: job.workspaceId,
-    jobType: 'SEND_MESSAGE',
-    entityType: 'campaign_lead',
-    entityId: job.entityId,
-    idempotencyKey: `SEND_MESSAGE:campaign_lead:${job.entityId}:step:${sequenceStep}`,
-    inputSnapshot: { sequenceStep },
-    priority: 80,
-  });
-
-  return { enqueuedSend: true, sequenceStep };
+  return { skipped: true, reason: 'MANUAL_FOLLOWUP_REQUIRED' };
 }
 
 export async function runJobBatch(

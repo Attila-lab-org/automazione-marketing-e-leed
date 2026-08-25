@@ -3,6 +3,8 @@ import { withAdmin } from '@/lib/api/with-admin';
 import { enqueueCampaignPreparation } from '@/lib/campaigns/prepare';
 import { resumeCampaign } from '@/lib/campaigns/resume';
 import { approveCampaignLeads } from '@/lib/campaigns/review-queue';
+import { buildFollowupDraft } from '@/lib/messaging/visual-email';
+import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
 import {
   isValidEmailShape,
   normalizeEmailAddress,
@@ -36,7 +38,7 @@ export const GET = withAdmin(async (_request: Request, ctx?: unknown) => {
 
   const { data: leads, error: leadsError } = await admin
     .from('campaign_leads')
-    .select('status')
+    .select('id, lead_id, status, sequence_step, next_action_at')
     .eq('workspace_id', workspace.id)
     .eq('campaign_id', id);
 
@@ -50,9 +52,49 @@ export const GET = withAdmin(async (_request: Request, ctx?: unknown) => {
     counts[s] = (counts[s] ?? 0) + 1;
   }
 
+  const leadIds = [...new Set((leads ?? []).map((row) => row.lead_id))];
+  const [{ data: leadRows }, { data: inboundRows }] = await Promise.all([
+    leadIds.length
+      ? admin
+          .from('leads')
+          .select('id, name, email')
+          .eq('workspace_id', workspace.id)
+          .in('id', leadIds)
+      : Promise.resolve({ data: [] }),
+    leadIds.length
+      ? admin
+          .from('messages')
+          .select('lead_id')
+          .eq('workspace_id', workspace.id)
+          .eq('direction', 'INBOUND')
+          .in('lead_id', leadIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const leadById = new Map((leadRows ?? []).map((row) => [row.id, row]));
+  const repliedLeadIds = new Set((inboundRows ?? []).map((row) => row.lead_id));
+  const manualFollowups = (leads ?? [])
+    .filter(
+      (row) =>
+        row.status === 'SENT' &&
+        row.sequence_step > 0 &&
+        Boolean(row.next_action_at) &&
+        !repliedLeadIds.has(row.lead_id),
+    )
+    .map((row) => ({
+      campaignLeadId: row.id,
+      leadId: row.lead_id,
+      leadName: leadById.get(row.lead_id)?.name ?? 'Attività',
+      email: leadById.get(row.lead_id)?.email ?? null,
+      sequenceStep: row.sequence_step,
+      availableAt: row.next_action_at,
+      due: new Date(row.next_action_at!).getTime() <= Date.now(),
+    }))
+    .sort((a, b) => String(a.availableAt).localeCompare(String(b.availableAt)));
+
   return NextResponse.json({
     campaign,
     counts,
+    manualFollowups,
     totals: {
       leads: leads?.length ?? 0,
       review: counts.REVIEW ?? 0,
@@ -60,6 +102,7 @@ export const GET = withAdmin(async (_request: Request, ctx?: unknown) => {
       approved: counts.APPROVED ?? 0,
       pending: counts.PENDING ?? 0,
       generating: counts.GENERATING ?? 0,
+      sending: counts.SENDING ?? 0,
       failed: counts.FAILED ?? 0,
       skipped: counts.SKIPPED ?? 0,
       sent: counts.SENT ?? 0,
@@ -74,6 +117,7 @@ export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
     campaignLeadIds?: string[];
     deliveryMode?: 'PRODUCTION' | 'TEST';
     testRecipient?: string | null;
+    campaignLeadId?: string;
   };
   if (!isSupabaseConfigured(process.env) || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json({ error: 'Supabase non configurato' }, { status: 503 });
@@ -88,6 +132,74 @@ export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
   if (body.action === 'approve') {
     const result = await approveCampaignLeads(admin, workspace.id, id, body.campaignLeadIds);
     return NextResponse.json(result);
+  }
+  if (body.action === 'send_followup') {
+    if (!body.campaignLeadId) {
+      return NextResponse.json({ error: 'campaignLeadId obbligatorio' }, { status: 400 });
+    }
+    const { data: campaignLead } = await admin
+      .from('campaign_leads')
+      .select('id, lead_id, status, sequence_step, next_action_at')
+      .eq('workspace_id', workspace.id)
+      .eq('campaign_id', id)
+      .eq('id', body.campaignLeadId)
+      .maybeSingle();
+    if (!campaignLead) {
+      return NextResponse.json({ error: 'Attività non trovata nella campagna' }, { status: 404 });
+    }
+    if (
+      campaignLead.status !== 'SENT' ||
+      campaignLead.sequence_step < 1 ||
+      !campaignLead.next_action_at
+    ) {
+      return NextResponse.json({ error: 'Follow-up non disponibile' }, { status: 409 });
+    }
+    if (new Date(campaignLead.next_action_at).getTime() > Date.now()) {
+      return NextResponse.json(
+        { error: 'Il follow-up non è ancora disponibile alla data prevista' },
+        { status: 409 },
+      );
+    }
+    const { count: replies } = await admin
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspace.id)
+      .eq('lead_id', campaignLead.lead_id)
+      .eq('direction', 'INBOUND');
+    if ((replies ?? 0) > 0) {
+      return NextResponse.json(
+        { error: 'Il cliente ha già risposto: continua dalla Posta in arrivo' },
+        { status: 409 },
+      );
+    }
+
+    await buildFollowupDraft(
+      admin,
+      workspace.id,
+      campaignLead.id,
+      campaignLead.sequence_step,
+      process.env,
+    );
+    await admin
+      .from('campaign_leads')
+      .update({ status: 'APPROVED', updated_at: new Date().toISOString() })
+      .eq('id', campaignLead.id);
+    const queue = new SupabaseJobQueue(admin);
+    const queued = await queue.enqueue({
+      workspaceId: workspace.id,
+      jobType: 'SEND_MESSAGE',
+      entityType: 'campaign_lead',
+      entityId: campaignLead.id,
+      idempotencyKey: `SEND_MESSAGE:campaign_lead:${campaignLead.id}:step:${campaignLead.sequence_step}`,
+      inputSnapshot: { sequenceStep: campaignLead.sequence_step, manualFollowup: true },
+      priority: 80,
+    });
+    return NextResponse.json({
+      ok: true,
+      queued: true,
+      deduplicated: queued.deduplicated,
+      sequenceStep: campaignLead.sequence_step,
+    });
   }
   if (body.action === 'pause') {
     const { error } = await admin

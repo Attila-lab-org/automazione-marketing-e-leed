@@ -62,7 +62,6 @@ function scoreFromFacts(input: WebsiteAnalysisInput): number {
   if (input.snapshot.bookingSignals.length === 0 && input.snapshot.retrieved) score += 6;
   return Math.max(0, Math.min(100, score));
 }
-
 export function mockAnalyzeWebsite(input: WebsiteAnalysisInput): WebsiteAnalysis {
   const snap = input.snapshot;
   const corpus = [
@@ -257,8 +256,39 @@ export function mockCritiqueOutbound(draft: OutboundDraft, facts: string[]): Out
 
 export function mockClassifyInbound(text: string): InboundClassification {
   const t = text.toLowerCase();
+  const base = (
+    partial: Omit<
+      InboundClassification,
+      | 'bookingRequest'
+      | 'bookingAccepted'
+      | 'preferredTimeHint'
+      | 'cancelAppointment'
+      | 'rescheduleAppointment'
+      | 'bookingConfidence'
+    > &
+      Partial<
+        Pick<
+          InboundClassification,
+          | 'bookingRequest'
+          | 'bookingAccepted'
+          | 'preferredTimeHint'
+          | 'cancelAppointment'
+          | 'rescheduleAppointment'
+          | 'bookingConfidence'
+        >
+      >,
+  ): InboundClassification => ({
+    bookingRequest: false,
+    bookingAccepted: false,
+    preferredTimeHint: null,
+    cancelAppointment: false,
+    rescheduleAppointment: false,
+    bookingConfidence: 0,
+    ...partial,
+  });
+
   if (/cancellami|non scrivermi|unsubscribe|stop\b|rimuovimi/.test(t)) {
-    return {
+    return base({
       intent: 'unsubscribe',
       language: 'it',
       sentiment: 'negative',
@@ -274,10 +304,10 @@ export function mockClassifyInbound(text: string): InboundClassification {
       confidence: 0.96,
       summary: 'Richiesta esplicita di non essere più contattato',
       servicesRequested: [],
-    };
+    });
   }
   if (/non mi interessa|non siamo interessati/.test(t)) {
-    return {
+    return base({
       intent: 'not_interested',
       language: 'it',
       sentiment: 'negative',
@@ -293,10 +323,99 @@ export function mockClassifyInbound(text: string): InboundClassification {
       confidence: 0.93,
       summary: 'Rifiuto commerciale esplicito',
       servicesRequested: [],
-    };
+    });
+  }
+  if (/annulla (la )?chiamata|disdici|cancella appuntamento/.test(t)) {
+    return base({
+      intent: 'other',
+      language: 'it',
+      sentiment: 'neutral',
+      recommendedState: 'CALL_PROPOSED',
+      unsubscribe: false,
+      notInterested: false,
+      pricing: false,
+      discountAsk: false,
+      legal: false,
+      angry: false,
+      followUpLater: false,
+      followUpAt: null,
+      confidence: 0.9,
+      summary: 'Richiesta di annullare l’appuntamento',
+      servicesRequested: [],
+      cancelAppointment: true,
+      bookingConfidence: 0.9,
+    });
+  }
+  if (/sposta|riprogramma|cambia orario/.test(t)) {
+    return base({
+      intent: 'call_accept',
+      language: 'it',
+      sentiment: 'neutral',
+      recommendedState: 'CALL_PROPOSED',
+      unsubscribe: false,
+      notInterested: false,
+      pricing: false,
+      discountAsk: false,
+      legal: false,
+      angry: false,
+      followUpLater: false,
+      followUpAt: null,
+      confidence: 0.88,
+      summary: 'Richiesta di riprogrammare la chiamata',
+      servicesRequested: [],
+      rescheduleAppointment: true,
+      bookingConfidence: 0.88,
+    });
+  }
+  if (
+    /va bene|ok fissiamo|prenotiamo|ci sentiamo|accetto|va benissimo|sì.*chiamata|si.*chiamata|fissiamo/.test(
+      t,
+    )
+  ) {
+    return base({
+      intent: 'call_accept',
+      language: 'it',
+      sentiment: 'positive',
+      recommendedState: 'CALL_BOOKED',
+      unsubscribe: false,
+      notInterested: false,
+      pricing: false,
+      discountAsk: false,
+      legal: false,
+      angry: false,
+      followUpLater: false,
+      followUpAt: null,
+      confidence: 0.92,
+      summary: 'Accettazione esplicita di fissare una chiamata',
+      servicesRequested: [],
+      bookingRequest: true,
+      bookingAccepted: true,
+      bookingConfidence: 0.92,
+    });
+  }
+  if (/chiamata|appuntamento|sentiamoci|videochiamata/.test(t)) {
+    return base({
+      intent: 'call_accept',
+      language: 'it',
+      sentiment: 'positive',
+      recommendedState: 'CALL_PROPOSED',
+      unsubscribe: false,
+      notInterested: false,
+      pricing: false,
+      discountAsk: false,
+      legal: false,
+      angry: false,
+      followUpLater: false,
+      followUpAt: null,
+      confidence: 0.8,
+      summary: 'Interesse a fissare una chiamata',
+      servicesRequested: [],
+      bookingRequest: true,
+      bookingConfidence: 0.75,
+    });
   }
   if (/sconto|350\s*euro|me lo fai a/.test(t)) {
-    return {
+    return base({
       intent: 'discount_request',
       language: 'it',
       sentiment: 'neutral',
@@ -312,10 +431,10 @@ export function mockClassifyInbound(text: string): InboundClassification {
       confidence: 0.9,
       summary: 'Richiesta di sconto/prezzo negoziato',
       servicesRequested: [],
-    };
+    });
   }
   if (/quanto costa|prezzo|preventivo/.test(t)) {
-    return {
+    return base({
       intent: 'quote_request',
       language: 'it',
       sentiment: 'neutral',
@@ -331,10 +450,10 @@ export function mockClassifyInbound(text: string): InboundClassification {
       confidence: 0.88,
       summary: 'Domanda di prezzo',
       servicesRequested: [],
-    };
+    });
   }
   if (/tra un mese|più avanti|tra \d+ (giorni|settimane|mesi)/.test(t)) {
-    return {
+    return base({
       intent: 'follow_up_later',
       language: 'it',
       sentiment: 'neutral',
@@ -350,10 +469,10 @@ export function mockClassifyInbound(text: string): InboundClassification {
       confidence: 0.86,
       summary: 'Richiesta di ricontatto successivo',
       servicesRequested: [],
-    };
+    });
   }
   if (/privacy|gdpr|legale|contratto/.test(t)) {
-    return {
+    return base({
       intent: 'legal_privacy',
       language: 'it',
       sentiment: 'neutral',
@@ -369,10 +488,10 @@ export function mockClassifyInbound(text: string): InboundClassification {
       confidence: 0.84,
       summary: 'Tema legale/privacy',
       servicesRequested: [],
-    };
+    });
   }
   if (/inaccettabile|truffa|arrabbi|maleducat/.test(t)) {
-    return {
+    return base({
       intent: 'angry',
       language: 'it',
       sentiment: 'negative',
@@ -388,12 +507,12 @@ export function mockClassifyInbound(text: string): InboundClassification {
       confidence: 0.8,
       summary: 'Tono ostile',
       servicesRequested: [],
-    };
+    });
   }
   const services: string[] = [];
   if (/whatsapp/.test(t)) services.push('WhatsApp');
   if (/prenotaz/.test(t)) services.push('prenotazioni');
-  return {
+  return base({
     intent: services.length ? 'custom_request' : 'info_request',
     language: 'it',
     sentiment: 'positive',
@@ -409,7 +528,7 @@ export function mockClassifyInbound(text: string): InboundClassification {
     confidence: 0.7,
     summary: services.length ? `Richiesta servizi: ${services.join(', ')}` : 'Richiesta informazioni',
     servicesRequested: services,
-  };
+  });
 }
 
 export function mockDraftReply(input: SalesReplyDraftInput): SalesReplyDraft {
@@ -420,6 +539,16 @@ export function mockDraftReply(input: SalesReplyDraftInput): SalesReplyDraft {
       recommendedState: input.classification.recommendedState,
       nextStep: 'stop',
       confidence: 1,
+      humanRequiredReason: null,
+    };
+  }
+  if (input.appointmentLabel) {
+    return {
+      text: `Confermato: ci sentiamo ${input.appointmentLabel}. Se serve spostare, dimmelo pure.`,
+      claimsUsed: [],
+      recommendedState: 'CALL_BOOKED',
+      nextStep: 'await_call',
+      confidence: 0.95,
       humanRequiredReason: null,
     };
   }
@@ -459,8 +588,34 @@ export function mockDraftReply(input: SalesReplyDraftInput): SalesReplyDraft {
       humanRequiredReason: null,
     };
   }
+  const slots = input.availableSlots ?? [];
+  if (
+    (input.classification.bookingRequest || input.classification.intent === 'call_accept') &&
+    slots.length
+  ) {
+    return {
+      text: `Perfetto. Il prossimo orario libero è ${slots[0].label}. Va bene così o preferisce un altro momento?`,
+      claimsUsed: [],
+      recommendedState: 'CALL_PROPOSED',
+      nextStep: 'confirm_slot',
+      confidence: 0.86,
+      humanRequiredReason: null,
+    };
+  }
+  if (input.classification.bookingRequest && !slots.length) {
+    return {
+      text: 'Volentieri fissiamo una chiamata. Al momento non ho slot liberi in agenda: ti propongo un orario appena se ne libera uno.',
+      claimsUsed: [],
+      recommendedState: 'CALL_PROPOSED',
+      nextStep: 'wait_for_slot',
+      confidence: 0.8,
+      humanRequiredReason: null,
+    };
+  }
   const extra = input.classification.servicesRequested.filter((s) =>
-    input.allowedFeatures.some((f) => f.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(f.toLowerCase())),
+    input.allowedFeatures.some(
+      (f) => f.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(f.toLowerCase()),
+    ),
   );
   const denied = input.classification.servicesRequested.filter((s) => !extra.includes(s));
   const lines = ['Grazie per il messaggio.'];
@@ -470,14 +625,19 @@ export function mockDraftReply(input: SalesReplyDraftInput): SalesReplyDraft {
   }
   if (extra.length) lines.push(`Posso includere: ${extra.join(', ')}.`);
   if (denied.length) lines.push(`Per ${denied.join(', ')} verifico prima se rientra nell’offerta.`);
-  if (input.bookingUrl) lines.push(`Se preferisce una chiamata breve: ${input.bookingUrl}`);
+  if (slots.length) {
+    lines.push(`Se vuole, il prossimo passo può essere una breve chiamata: ho disponibilità ${slots[0].label}.`);
+  } else {
+    lines.push('Il prossimo passo utile è capire cosa le serve davvero, così le propongo solo ciò che ha senso.');
+  }
   lines.push(`Cordiali saluti,\n${input.playbookName}`);
   return {
     text: lines.join('\n\n'),
     claimsUsed: [],
     recommendedState: input.classification.recommendedState,
-    nextStep: extra.length ? 'confirm_scope' : 'qualify',
+    nextStep: extra.length ? 'confirm_scope' : slots.length ? 'propose_call' : 'qualify',
     confidence: 0.76,
     humanRequiredReason: denied.length ? 'Richiesta custom' : null,
   };
 }
+

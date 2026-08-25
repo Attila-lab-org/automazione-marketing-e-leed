@@ -1,18 +1,11 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { normalizeEmailAddress } from '@/lib/campaigns/test-delivery';
 
-export async function stopLeadSequences(
+async function cancelPendingLeadJobs(
   admin: AppSupabaseClient,
   workspaceId: string,
   leadId: string,
 ) {
-  await admin
-    .from('campaign_leads')
-    .update({ status: 'SKIPPED', next_action_at: null, updated_at: new Date().toISOString() })
-    .eq('workspace_id', workspaceId)
-    .eq('lead_id', leadId)
-    .in('status', ['PENDING', 'GENERATING', 'READY', 'REVIEW', 'APPROVED', 'SENT']);
-
   const { data: cls } = await admin
     .from('campaign_leads')
     .select('id')
@@ -27,6 +20,35 @@ export async function stopLeadSequences(
       .in('entity_id', ids)
       .in('status', ['QUEUED', 'RETRYING']);
   }
+}
+
+/** Ferma solo i solleciti: il contatto resta SENT, non viene marcato come errore/skipped. */
+export async function stopLeadFollowups(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+  leadId: string,
+) {
+  await admin
+    .from('campaign_leads')
+    .update({ next_action_at: null, updated_at: new Date().toISOString() })
+    .eq('workspace_id', workspaceId)
+    .eq('lead_id', leadId);
+  await cancelPendingLeadJobs(admin, workspaceId, leadId);
+}
+
+export async function stopLeadSequences(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+  leadId: string,
+) {
+  await admin
+    .from('campaign_leads')
+    .update({ status: 'SKIPPED', next_action_at: null, updated_at: new Date().toISOString() })
+    .eq('workspace_id', workspaceId)
+    .eq('lead_id', leadId)
+    .in('status', ['PENDING', 'GENERATING', 'READY', 'REVIEW', 'APPROVED', 'SENT']);
+
+  await cancelPendingLeadJobs(admin, workspaceId, leadId);
 }
 
 export async function suppressLeadEmail(
@@ -83,8 +105,8 @@ export async function scheduleFollowUpLater(
     .eq('id', threadId);
   await admin
     .from('campaign_leads')
-    .update({ next_action_at: at.toISOString(), updated_at: new Date().toISOString() })
+    .update({ updated_at: new Date().toISOString() })
     .eq('workspace_id', workspaceId)
     .eq('lead_id', leadId);
-  await stopLeadSequences(admin, workspaceId, leadId);
+  await stopLeadFollowups(admin, workspaceId, leadId);
 }

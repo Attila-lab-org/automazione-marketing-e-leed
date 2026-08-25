@@ -21,6 +21,8 @@ import type {
 } from './types/domain';
 
 export interface SendGuardContext {
+  /** Cold outreach oppure risposta dentro una conversazione già avviata. */
+  sendKind?: 'OUTREACH' | 'CONVERSATION';
   recipient: {
     email: string | null;
     emailValid: boolean;
@@ -98,11 +100,13 @@ function checkRecipient(ctx: SendGuardContext): SendGuardCheck {
 
 function checkLead(ctx: SendGuardContext): SendGuardCheck {
   const reasons: string[] = [];
-  if (!SENDABLE_BUSINESS_STATUSES.includes(ctx.lead.businessStatus)) {
-    reasons.push(`business_status ${ctx.lead.businessStatus} non compatibile con il send`);
-  }
-  if (ctx.lead.hasBlockingReply) {
-    reasons.push('reply ricevuta: il flusso automatico è bloccato (§11.2, §12.2)');
+  if (ctx.sendKind !== 'CONVERSATION') {
+    if (!SENDABLE_BUSINESS_STATUSES.includes(ctx.lead.businessStatus)) {
+      reasons.push(`business_status ${ctx.lead.businessStatus} non compatibile con il send`);
+    }
+    if (ctx.lead.hasBlockingReply) {
+      reasons.push('reply ricevuta: il flusso automatico è bloccato (§11.2, §12.2)');
+    }
   }
   return { name: 'lead', passed: reasons.length === 0, reasons };
 }
@@ -112,18 +116,20 @@ function checkCampaign(ctx: SendGuardContext): SendGuardCheck {
   if (ctx.campaign.outreachPausedAll) {
     reasons.push('kill switch PAUSE ALL OUTREACH attivo (§19.2)');
   }
-  if (ctx.campaign.status !== 'ACTIVE') {
-    reasons.push(`campaign ${ctx.campaign.status}: richiesta ACTIVE`);
-  }
-  if (ctx.campaign.withinSendWindow === false) {
-    reasons.push('fuori dalla send window della campagna (§18)');
-  }
-  if (ctx.campaign.hourlyRateAvailable === false) {
-    reasons.push('hourly rate limit esaurito (§18)');
-  } else if (ctx.campaign.dailyRateAvailable === false) {
-    reasons.push('daily send limit esaurito (§18)');
-  } else if (!ctx.campaign.rateLimitAvailable) {
-    reasons.push('rate limit campaign/workspace esaurito (§18)');
+  if (ctx.sendKind !== 'CONVERSATION') {
+    if (ctx.campaign.status !== 'ACTIVE') {
+      reasons.push(`campaign ${ctx.campaign.status}: richiesta ACTIVE`);
+    }
+    if (ctx.campaign.withinSendWindow === false) {
+      reasons.push('fuori dalla send window della campagna (§18)');
+    }
+    if (ctx.campaign.hourlyRateAvailable === false) {
+      reasons.push('hourly rate limit esaurito (§18)');
+    } else if (ctx.campaign.dailyRateAvailable === false) {
+      reasons.push('daily send limit esaurito (§18)');
+    } else if (!ctx.campaign.rateLimitAvailable) {
+      reasons.push('rate limit campaign/workspace esaurito (§18)');
+    }
   }
   return { name: 'campaign', passed: reasons.length === 0, reasons };
 }

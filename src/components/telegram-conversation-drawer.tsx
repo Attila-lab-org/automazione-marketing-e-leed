@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { InboxConversationDetail } from "@/lib/inbound/conversation";
 
@@ -76,16 +76,17 @@ export default function TelegramConversationDrawer({
               {detail.aiDraft?.text ? (
                 <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                    Bozza Attila AI
+                    Stato commerciale Attila
                   </h3>
                   <p className="text-sm text-stone-800">
-                    <span className="font-semibold">AI understanding:</span> {detail.aiDraft.understanding}
+                    <span className="font-semibold">Obiettivo attuale:</span> {detail.aiDraft.understanding}
                   </p>
                   <p className="whitespace-pre-wrap text-sm text-stone-800">
-                    <span className="font-semibold">AI suggested reply:</span> {detail.aiDraft.text}
+                    <span className="font-semibold">Prossima risposta:</span> {detail.aiDraft.text}
                   </p>
                   <p className="text-xs text-stone-600">
-                    State: {detail.aiDraft.state} · Mode: {detail.aiDraft.mode}
+                    Stato: {detail.commercialState ?? detail.aiDraft.state}
+                    {detail.nextStep ? ` · Prossimo passo: ${detail.nextStep}` : ""}
                   </p>
                   <div className="flex flex-wrap gap-2 pt-1">
                     <HandoffButton threadId={detail.threadId} action="take_over" label="Prendi in carico" />
@@ -98,18 +99,72 @@ export default function TelegramConversationDrawer({
                   </div>
                 </section>
               ) : null}
+
+              {(detail.appointment || detail.nextDeadline) ? (
+                <section className="rounded-xl border border-sky-200 bg-sky-50 p-4 space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-sky-800">
+                    Calendario collegato
+                  </h3>
+                  {detail.appointment ? (
+                    <p className="text-sm text-stone-800">
+                      <span className="font-semibold">Appuntamento:</span> {detail.appointment.title} ·{" "}
+                      {formatDate(detail.appointment.startsAt)}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-stone-600">Nessun appuntamento fissato.</p>
+                  )}
+                  {detail.nextDeadline ? (
+                    <p className="text-sm text-stone-800">
+                      <span className="font-semibold">Prossima scadenza:</span> {detail.nextDeadline.title} ·{" "}
+                      {formatDate(detail.nextDeadline.dueAt)}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <a
+                      href="/calendar"
+                      className="rounded-md border border-sky-300 bg-white px-2 py-1 text-xs font-semibold text-sky-800"
+                    >
+                      Apri nel calendario
+                    </a>
+                    {detail.appointment ? (
+                      <>
+                        <CalendarActionButton
+                          eventId={detail.appointment.id}
+                          leadId={detail.leadId}
+                          threadId={detail.threadId}
+                          action="reschedule"
+                          label="Riprogramma"
+                        />
+                        <CalendarActionButton
+                          eventId={detail.appointment.id}
+                          leadId={detail.leadId}
+                          threadId={detail.threadId}
+                          action="cancel"
+                          label="Annulla"
+                        />
+                      </>
+                    ) : null}
+                  </div>
+                </section>
+              ) : null}
               {detail.humanRequiredReason ? (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                  <p className="font-semibold">HUMAN REQUIRED</p>
+                  <p className="font-semibold">Serve una tua risposta</p>
                   <p>{detail.humanRequiredReason}</p>
                 </div>
               ) : null}
               <div className="flex flex-wrap gap-2">
                 <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
-                  {detail.commercialState ?? "NEW"}
+                  {detail.commercialState === "CALL_BOOKED"
+                    ? "Appuntamento fissato"
+                    : detail.commercialState === "FOLLOW_UP_LATER"
+                      ? "Da ricontattare"
+                      : detail.commercialState === "HUMAN_REQUIRED"
+                        ? "Serve intervento"
+                        : detail.commercialState ?? "Nuovo"}
                 </span>
                 <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
-                  {detail.assignedMode === "HUMAN" ? "HUMAN" : "AI"}
+                  {detail.assignedMode === "HUMAN" ? "Gestione manuale" : "Attila attivo"}
                 </span>
                 {detail.sentiment ? (
                   <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
@@ -122,6 +177,9 @@ export default function TelegramConversationDrawer({
                 <HandoffButton threadId={detail.threadId} action="return_to_ai" label="Ridai all’AI" />
                 <HandoffButton threadId={detail.threadId} action="stop" label="Ferma automazione" />
               </div>
+              {detail.channel === "EMAIL" ? (
+                <ManualEmailReply threadId={detail.threadId} />
+              ) : null}
               <section className="grid gap-3 sm:grid-cols-2">
                 <InfoCard title="Contatto">
                   <p className="font-medium text-stone-900">{detail.contact.displayName}</p>
@@ -225,7 +283,7 @@ export default function TelegramConversationDrawer({
 
               <section className="space-y-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                  Attività tecnica
+                  Cronologia operativa
                 </h3>
                 {detail.events.map((event) => (
                   <div
@@ -250,6 +308,64 @@ export default function TelegramConversationDrawer({
   );
 }
 
+function ManualEmailReply({ threadId }: { threadId: string }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function send() {
+    if (!text.trim()) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/inbox/${encodeURIComponent(threadId)}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Invio non riuscito");
+      setText("");
+      setMessage("Risposta inviata e salvata nella conversazione.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Invio non riuscito");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-stone-300 bg-white p-4">
+      <h3 className="text-sm font-semibold text-stone-900">Rispondi tu</h3>
+      <p className="mt-1 text-xs text-stone-500">
+        Usa questo campo per i casi che richiedono una decisione manuale.
+      </p>
+      <textarea
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        rows={4}
+        placeholder="Scrivi la risposta al cliente…"
+        className="mt-3 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-600"
+      />
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs text-stone-400">{text.length}/4000</span>
+        <button
+          type="button"
+          disabled={busy || !text.trim() || text.length > 4000}
+          onClick={() => void send()}
+          className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+        >
+          {busy ? "Invio…" : "Invia risposta"}
+        </button>
+      </div>
+      {message ? <p className="mt-2 text-xs font-medium text-emerald-700">{message}</p> : null}
+      {error ? <p className="mt-2 text-xs font-medium text-red-700">{error}</p> : null}
+    </section>
+  );
+}
+
 function HandoffButton({
   threadId,
   action,
@@ -268,6 +384,44 @@ function HandoffButton({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ threadId, action }),
+        });
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function CalendarActionButton({
+  eventId,
+  leadId,
+  threadId,
+  action,
+  label,
+}: {
+  eventId: string;
+  leadId: string;
+  threadId: string;
+  action: "cancel" | "reschedule";
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      className="rounded-md border border-sky-300 bg-white px-2 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-50"
+      onClick={() => {
+        void fetch(`/api/calendar/${eventId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            target: "event",
+            action,
+            leadId,
+            threadId,
+            title: "Chiamata",
+          }),
+        }).then(() => {
+          window.location.reload();
         });
       }}
     >

@@ -6,6 +6,8 @@ import TelegramConversationDrawer from "@/components/telegram-conversation-drawe
 import type { InboxConversationDetail } from "@/lib/inbound/conversation";
 import type { InboxThreadItem } from "@/lib/inbound/list-inbox";
 
+type InboxView = "manual" | "ai" | "waiting" | "appointments";
+
 function formatWhen(iso: string | null): string {
   if (!iso) return "—";
   try {
@@ -25,6 +27,42 @@ function statusLabel(status: string): string {
   return status;
 }
 
+function commercialStateLabel(state: string): string {
+  const labels: Record<string, string> = {
+    NEW: "Nuovo",
+    ENGAGED: "Conversazione avviata",
+    QUALIFYING: "Qualificazione",
+    INTERESTED: "Interessato",
+    PRICING: "Prezzo",
+    CALL_PROPOSED: "Chiamata proposta",
+    CALL_BOOKED: "Appuntamento fissato",
+    FOLLOW_UP_LATER: "Da ricontattare",
+    HUMAN_REQUIRED: "Serve intervento",
+    NOT_INTERESTED: "Non interessato",
+    UNSUBSCRIBED: "Non contattare",
+  };
+  return labels[state] ?? state;
+}
+
+function inboxViewFor(item: InboxThreadItem): InboxView {
+  if (item.commercialState === "CALL_BOOKED") return "appointments";
+  if (
+    item.assignedMode === "HUMAN" ||
+    Boolean(item.humanRequiredReason) ||
+    item.status === "NEEDS_REPLY" ||
+    item.commercialState === "HUMAN_REQUIRED"
+  ) {
+    return "manual";
+  }
+  if (
+    item.commercialState === "FOLLOW_UP_LATER" ||
+    (item.nextStepAt && new Date(item.nextStepAt).getTime() > Date.now())
+  ) {
+    return "waiting";
+  }
+  return "ai";
+}
+
 export default function InboxClient() {
   const [threads, setThreads] = useState<InboxThreadItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +71,7 @@ export default function InboxClient() {
   const [conversation, setConversation] = useState<InboxConversationDetail | null>(null);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
+  const [view, setView] = useState<InboxView>("manual");
 
   async function openConversation(threadId: string) {
     setOpenThreadId(threadId);
@@ -107,52 +146,86 @@ export default function InboxClient() {
     );
   }
 
-  const social = threads.filter((t) => t.channel === "telegram");
-  const other = threads.filter((t) => t.channel !== "telegram");
+  const views: Array<{ id: InboxView; label: string; description: string }> = [
+    {
+      id: "manual",
+      label: "Da rispondere",
+      description: "Richiedono una tua decisione o il takeover manuale.",
+    },
+    {
+      id: "ai",
+      label: "Gestiti dall’AI",
+      description: "Conversazioni sicure che Attila sta portando avanti.",
+    },
+    {
+      id: "waiting",
+      label: "In attesa",
+      description: "Clienti da ricontattare più avanti o in attesa del prossimo passo.",
+    },
+    {
+      id: "appointments",
+      label: "Appuntamenti",
+      description: "Conversazioni che hanno già una chiamata fissata.",
+    },
+  ];
+  const counts = Object.fromEntries(
+    views.map((candidate) => [
+      candidate.id,
+      threads.filter((thread) => inboxViewFor(thread) === candidate.id).length,
+    ]),
+  ) as Record<InboxView, number>;
+  const visible = threads.filter((thread) => inboxViewFor(thread) === view);
+  const activeView = views.find((candidate) => candidate.id === view)!;
 
   return (
-    <div className="space-y-8">
-      {social.length > 0 ? (
-        <section className="space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold text-stone-800">
-              Contatti da Telegram
-            </h2>
-            <p className="text-xs text-stone-500">
-              Richieste intercettate dal bot. Controllale e prosegui tu la conversazione.
-            </p>
-          </div>
-          <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 bg-white">
-            {social.map((t) => (
-              <InboxRow
-                key={t.threadId}
-                item={t}
-                onOpen={() => void openConversation(t.threadId)}
-              />
-            ))}
-          </ul>
-        </section>
-      ) : null}
+    <div className="space-y-5">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {views.map((candidate) => {
+          const active = candidate.id === view;
+          const count = counts[candidate.id];
+          return (
+            <button
+              key={candidate.id}
+              type="button"
+              onClick={() => setView(candidate.id)}
+              className={
+                active
+                  ? "rounded-xl border border-stone-900 bg-stone-900 p-4 text-left text-white"
+                  : "rounded-xl border border-stone-200 bg-white p-4 text-left hover:border-stone-400"
+              }
+            >
+              <span className={active ? "text-2xl font-semibold" : "text-2xl font-semibold text-stone-900"}>
+                {count}
+              </span>
+              <span className={active ? "mt-1 block text-sm font-semibold" : "mt-1 block text-sm font-semibold text-stone-800"}>
+                {candidate.label}
+              </span>
+            </button>
+          );
+        })}
+      </section>
 
-      {other.length > 0 ? (
-        <section className="space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold text-stone-800">Altre conversazioni</h2>
-            <p className="text-xs text-stone-500">
-              Thread email e messaggi collegati alle campagne.
-            </p>
-          </div>
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold text-stone-900">{activeView.label}</h2>
+          <p className="text-sm text-stone-500">{activeView.description}</p>
+        </div>
+        {visible.length ? (
           <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 bg-white">
-            {other.map((t) => (
+            {visible.map((thread) => (
               <InboxRow
-                key={t.threadId}
-                item={t}
-                onOpen={() => void openConversation(t.threadId)}
+                key={thread.threadId}
+                item={thread}
+                onOpen={() => void openConversation(thread.threadId)}
               />
             ))}
           </ul>
-        </section>
-      ) : null}
+        ) : (
+          <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-5 py-8 text-center text-sm text-stone-500">
+            Nessuna conversazione in questa sezione.
+          </div>
+        )}
+      </section>
       {openThreadId ? (
         <TelegramConversationDrawer
           detail={conversation}
@@ -185,17 +258,17 @@ function InboxRow({
           </span>
           {item.commercialState ? (
             <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
-              {item.commercialState}
+              {commercialStateLabel(item.commercialState)}
             </span>
           ) : null}
           {item.assignedMode ? (
             <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
-              {item.assignedMode === "HUMAN" ? "HUMAN" : "AI"}
+              {item.assignedMode === "HUMAN" ? "Risposta manuale" : "Attila attivo"}
             </span>
           ) : null}
           {item.humanRequiredReason ? (
             <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-800">
-              HUMAN REQUIRED
+              Richiede te
             </span>
           ) : null}
           {item.priority === "HOT" ? (

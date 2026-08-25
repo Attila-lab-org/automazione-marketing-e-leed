@@ -1,5 +1,6 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { loadLatestSalesDraft, type PersistedSalesDraft } from '@/lib/sales/reply-persist';
+import { getActiveAppointmentForLead, getNextDeadlineForLead } from '@/lib/calendar';
 
 export type InboxConversationMessage = {
   id: string;
@@ -9,6 +10,16 @@ export type InboxConversationMessage = {
   providerMessageId: string | null;
   deliveryLabel: string;
   contextLabel: string | null;
+};
+
+export type InboxLinkedEvent = {
+  id: string;
+  title: string;
+  type: string;
+  startsAt: string | null;
+  dueAt: string | null;
+  status: string;
+  timezone: string;
 };
 
 export type InboxConversationDetail = {
@@ -54,6 +65,8 @@ export type InboxConversationDetail = {
   sentiment: string | null;
   channel: string | null;
   aiDraft: PersistedSalesDraft | null;
+  appointment: InboxLinkedEvent | null;
+  nextDeadline: InboxLinkedEvent | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -86,7 +99,7 @@ export async function getInboxConversation(
   if (threadError) throw new Error(`Conversazione: ${threadError.message}`);
   if (!thread) return null;
 
-  const [{ data: lead }, { data: source }, { data: contacts }, { data: messages }, { data: activity }, aiDraft] =
+  const [{ data: lead }, { data: source }, { data: contacts }, { data: messages }, { data: activity }, aiDraft, appointment, nextDeadline] =
     await Promise.all([
       admin
         .from('leads')
@@ -126,10 +139,13 @@ export async function getInboxConversation(
           'TELEGRAM_REPLY_FAILED',
           'TELEGRAM_REPLY_SKIPPED',
           'OPERATOR_ALERT',
+          'CALENDAR_REMINDER_FIRED',
         ])
         .order('occurred_at', { ascending: false })
         .limit(100),
-    loadLatestSalesDraft(admin, threadId),
+      loadLatestSalesDraft(admin, threadId),
+      getActiveAppointmentForLead(admin, workspaceId, thread.lead_id),
+      getNextDeadlineForLead(admin, workspaceId, thread.lead_id),
     ]);
 
   const snapshot = asRecord(source?.query_snapshot);
@@ -227,5 +243,27 @@ export async function getInboxConversation(
     sentiment: thread.sentiment ?? null,
     channel: thread.channel ?? null,
     aiDraft,
+    appointment: appointment
+      ? {
+          id: appointment.id,
+          title: appointment.title,
+          type: appointment.event_type,
+          startsAt: appointment.starts_at,
+          dueAt: appointment.due_at,
+          status: appointment.status,
+          timezone: appointment.timezone,
+        }
+      : null,
+    nextDeadline: nextDeadline
+      ? {
+          id: nextDeadline.id,
+          title: nextDeadline.title,
+          type: nextDeadline.event_type,
+          startsAt: nextDeadline.starts_at,
+          dueAt: nextDeadline.due_at,
+          status: nextDeadline.status,
+          timezone: nextDeadline.timezone,
+        }
+      : null,
   };
 }

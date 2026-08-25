@@ -68,6 +68,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: navIcon("M4 6h16v12H4zM4 7l8 6 8-6"),
   },
   {
+    href: "/calendar",
+    label: "Calendario",
+    description: "Appuntamenti, scadenze e slot disponibili.",
+    match: ["/calendar"],
+    icon: navIcon("M7 3v2M17 3v2M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm3 7h3v3H8v-3Z"),
+  },
+  {
     href: "/analytics",
     label: "Statistiche",
     description: "Andamento e conversioni",
@@ -94,6 +101,7 @@ const SECTION_LABELS: Record<string, string> = {
   demos: "Anteprime",
   templates: "Modelli",
   inbox: "Messaggi",
+  calendar: "Calendario",
   automations: "Automazioni",
   analytics: "Statistiche",
   settings: "Impostazioni",
