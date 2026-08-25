@@ -31,6 +31,8 @@ export const POST = withAdmin(async (request: Request) => {
       .update({
         assigned_mode: 'AI',
         human_required_reason: null,
+        commercial_state: 'ENGAGED',
+        status: 'OPEN',
         updated_at: new Date().toISOString(),
       })
       .eq('workspace_id', workspace.id)

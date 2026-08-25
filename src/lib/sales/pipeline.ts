@@ -13,7 +13,7 @@ import type {
 } from '@/lib/ai/commercial/schemas';
 import { getCurrentPlaybook } from './playbook-store';
 import type { ResponseMode } from './playbook';
-import { validateSalesTransition, type SalesState } from './states';
+import { resolveInboundCommercialState, type SalesState } from './states';
 import { getActiveAutonomy } from './autonomy';
 import { criticSalesReply } from '@/lib/ai/commercial/grounding';
 import { alertKindFromInbound, persistSalesReplyDraft, recordOperatorAlert } from './reply-persist';
@@ -237,9 +237,6 @@ export async function processSalesInbound(args: {
     .eq('id', args.threadId)
     .maybeSingle();
 
-  const transition = validateSalesTransition(thread?.commercial_state, classification.recommendedState);
-  const state = transition.ok ? transition.state : 'HUMAN_REQUIRED';
-
   const { count: outboundCount } = await args.admin
     .from('messages')
     .select('id', { count: 'exact', head: true })
@@ -252,6 +249,11 @@ export async function processSalesInbound(args: {
     autonomy,
     firstReply,
     channel: args.channel,
+  });
+  const state = resolveInboundCommercialState({
+    from: thread?.commercial_state,
+    recommended: classification.recommendedState,
+    humanOnly: resolved.mode === 'HUMAN_ONLY',
   });
 
   const keepPriorNeed =
@@ -279,7 +281,7 @@ export async function processSalesInbound(args: {
     ]),
   });
 
-  const humanRequired = resolved.mode === 'HUMAN_ONLY' || state === 'HUMAN_REQUIRED';
+  const humanRequired = resolved.mode === 'HUMAN_ONLY';
   const hot =
     classification.discountAsk || classification.angry || classification.intent === 'quote_request';
   await args.admin

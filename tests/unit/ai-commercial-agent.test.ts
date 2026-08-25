@@ -13,7 +13,7 @@ import {
 } from '../../src/lib/ai/operator/capabilities';
 import { extractWebsiteSnapshot } from '../../src/lib/intelligence/extract';
 import { classifyEmailFit } from '../../src/lib/intelligence/email-fit';
-import { validateSalesTransition } from '../../src/lib/sales/states';
+import { resolveInboundCommercialState, validateSalesTransition } from '../../src/lib/sales/states';
 import { resolveResponseMode } from '../../src/lib/sales/pipeline';
 import { DEFAULT_PLAYBOOK } from '../../src/lib/sales/playbook';
 import { buildAutonomyProposal } from '../../src/lib/sales/autonomy';
@@ -141,6 +141,26 @@ describe('sales conversation', () => {
     expect(resolved.mode).toBe('HUMAN_ONLY');
     expect(validateSalesTransition('ENGAGED', 'HUMAN_REQUIRED').ok).toBe(true);
     expect(validateSalesTransition('ENGAGED', 'DELETED').ok).toBe(false);
+  });
+
+  it('inbound da NEW può andare in ENGAGED/QUALIFYING senza HUMAN_REQUIRED', () => {
+    expect(validateSalesTransition('NEW', 'ENGAGED').ok).toBe(true);
+    expect(validateSalesTransition('NEW', 'QUALIFYING').ok).toBe(true);
+    expect(validateSalesTransition('HUMAN_REQUIRED', 'QUALIFYING').ok).toBe(true);
+    expect(
+      resolveInboundCommercialState({
+        from: 'NEW',
+        recommended: 'HUMAN_REQUIRED',
+        humanOnly: false,
+      }),
+    ).toBe('ENGAGED');
+    expect(
+      resolveInboundCommercialState({
+        from: 'NEW',
+        recommended: 'HUMAN_REQUIRED',
+        humanOnly: true,
+      }),
+    ).toBe('HUMAN_REQUIRED');
   });
 
   it('la bozza segue il bisogno già emerso, non solo l’ultimo messaggio', () => {
