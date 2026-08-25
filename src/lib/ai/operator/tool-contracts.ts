@@ -77,9 +77,8 @@ export const TOOL_CONTRACTS: Record<string, ToolContract> = {
   },
   reply_telegram: {
     name: 'reply_telegram',
-    tier: 'CONFIRM_EXTERNAL',
+    tier: 'INTERNAL',
     label: 'rispondi su Telegram',
-    humanConfirmLabel: 'Conferma risposta',
     auditPropose: 'propose_telegram_reply',
     auditExecute: 'execute_telegram_reply',
   },

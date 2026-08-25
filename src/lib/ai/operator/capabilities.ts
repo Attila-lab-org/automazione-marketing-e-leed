@@ -14,7 +14,6 @@ export const OPERATOR_CONFIRM_TOOLS = [
   'send_campaign',
   'enable_autonomy',
   'pause_campaign',
-  'reply_telegram',
   'cancel_appointment',
   'stop_automation',
   'set_telegram_runtime',
@@ -59,13 +58,13 @@ const WRITE_NOW_LABELS: Partial<Record<string, string>> = {
   return_to_ai: 'ridare una conversazione ad Attila',
   create_calendar_slot: 'aggiungere disponibilità in calendario',
   reschedule_appointment: 'riprogrammare un appuntamento su slot liberi',
+  reply_telegram: 'rispondere subito all’ultimo Telegram in attesa',
 };
 
 const CONFIRM_LABELS: Record<string, string> = {
   send_campaign: 'inviare campagne (email/Telegram) dopo conferma esplicita',
   enable_autonomy: 'abilitare autonomia secondo il Commercial Playbook',
   pause_campaign: 'mettere in pausa una campagna dopo conferma',
-  reply_telegram: 'far rispondere Attila su Telegram dopo conferma',
   cancel_appointment: 'annullare un appuntamento dopo conferma',
   stop_automation: 'fermare l’automazione su un contatto dopo conferma',
   set_telegram_runtime: 'avviare o fermare il bot Telegram dopo conferma',

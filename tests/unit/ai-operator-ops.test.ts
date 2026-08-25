@@ -13,7 +13,7 @@ import type { AiRunPublic } from '../../src/lib/ai/types';
 
 describe('tool contracts', () => {
   it('marks external and irreversible ops as confirm tiers', () => {
-    expect(getToolContract('reply_telegram')?.tier).toBe('CONFIRM_EXTERNAL');
+    expect(getToolContract('reply_telegram')?.tier).toBe('INTERNAL');
     expect(getToolContract('cancel_appointment')?.tier).toBe('CONFIRM_IRREVERSIBLE');
     expect(getToolContract('pause_campaign')?.tier).toBe('CONFIRM_IRREVERSIBLE');
     expect(getToolContract('create_calendar_slot')?.tier).toBe('INTERNAL');
