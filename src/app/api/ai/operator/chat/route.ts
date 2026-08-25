@@ -17,6 +17,7 @@ import { classifyOperatorIntent } from '@/lib/ai/operator/intent';
 import { emptyEntityRefs } from '@/lib/ai/operator/context';
 import { executeCampaignMutation, executePreparePlan, createSendPending } from '@/lib/ai/operator/writes';
 import { proposeAutonomyPolicy } from '@/lib/sales/autonomy';
+import { replyLatestPendingTelegram } from '@/lib/inbound/telegram-resume';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 
@@ -110,6 +111,12 @@ export const POST = withAdmin(async (request: Request) => {
               createSendPending({ admin, workspaceId: workspace.id, campaignId }),
             proposePolicy: (question) =>
               proposeAutonomyPolicy({ admin, workspaceId: workspace.id, question }),
+            replyTelegram: () =>
+              replyLatestPendingTelegram({
+                admin,
+                workspaceId: workspace.id,
+                env: process.env,
+              }),
             campaignMutation: ({ verb, campaignId, campaign }) =>
               executeCampaignMutation({
                 admin,

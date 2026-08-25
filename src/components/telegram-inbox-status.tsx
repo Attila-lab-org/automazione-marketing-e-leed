@@ -80,7 +80,7 @@ export default function TelegramInboxStatus() {
           </button>
         ) : null}
         <a
-          href="/settings#telegram"
+          href="/telegram"
           className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-800"
         >
           Configura

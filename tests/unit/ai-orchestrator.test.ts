@@ -288,6 +288,33 @@ describe('operator conversational orchestrator', () => {
     );
   });
 
+  it('rispondi a telegram esegue la risposta invece di mostrare lo stato', async () => {
+    let replied = false;
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: 'rispondi a telegram',
+      envelope: envelopeFromPath('/overview'),
+      data,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+      writes: {
+        replyTelegram: async () => {
+          replied = true;
+          return {
+            tool: 'reply_telegram',
+            ok: true,
+            summary: 'Ho risposto all’ultimo messaggio Telegram in attesa.',
+            data: { threadId: 'thread-1' },
+          };
+        },
+      },
+    });
+    expect(replied).toBe(true);
+    expect(result.events.some((e) => e.type === 'tool_done' && e.name === 'reply_telegram' && e.ok)).toBe(true);
+    expect(result.events.some((e) => e.type === 'tool_done' && e.name === 'get_telegram_inbound_status')).toBe(false);
+  });
+
   it('da dove partiresti usa tool reali e dà una raccomandazione', async () => {
     const result = await collectOperatorTurn({
       workspaceId: 'ws',

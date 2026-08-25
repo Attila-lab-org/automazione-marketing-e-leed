@@ -28,8 +28,6 @@ export type ProcessInboundResult = {
   intent?: IntentMatch;
 };
 
-const REPLY_COOLDOWN_MINUTES = 5;
-
 export function selectTelegramReplyText(args: {
   salesAgentSucceeded: boolean;
   salesMode: string | null;
@@ -114,7 +112,7 @@ function botAddress(env: NodeJS.ProcessEnv): string {
  * 1) classifica intento
  * 2) crea/aggiorna lead se rilevante (o sempre se matched)
  * 3) salva messaggio INBOUND
- * 4) auto-reply breve se abilitato e non rate-limited
+ * 4) risponde una volta a ogni nuovo messaggio, se consentito dalla policy
  */
 export async function processTelegramInbound(args: {
   admin: AppSupabaseClient;
@@ -301,43 +299,6 @@ export async function processTelegramInbound(args: {
       replied: false,
       intent,
       reason,
-    };
-  }
-
-  // Protezione anti-raffica: una risposta automatica per contatto ogni 5 minuti.
-  const since = new Date(Date.now() - REPLY_COOLDOWN_MINUTES * 60 * 1000).toISOString();
-  const { data: recentOutbound } = await admin
-    .from('messages')
-    .select('id')
-    .eq('lead_id', lead.leadId)
-    .eq('provider', 'telegram')
-    .eq('direction', 'OUTBOUND')
-    .gte('sent_at', since)
-    .limit(1)
-    .maybeSingle();
-  if (recentOutbound?.id) {
-    await admin.from('activity_log').insert({
-      workspace_id: workspaceId,
-      actor_type: 'SYSTEM',
-      entity_type: 'lead',
-      entity_id: lead.leadId,
-      lead_id: lead.leadId,
-      category: 'DECISION',
-      event_type: 'TELEGRAM_REPLY_SKIPPED',
-      message: 'Risposta Telegram non inviata: attendi 5 minuti dall’ultima risposta',
-      data: {
-        reason: 'RATE_LIMITED',
-        chat_id: message.chatId,
-        provider_message_id: message.providerMessageId,
-      },
-    });
-    return {
-      leadId: lead.leadId,
-      leadCreated: lead.created,
-      inboundMessageId: inboundRow.id,
-      replied: false,
-      intent,
-      reason: 'RATE_LIMITED',
     };
   }
 

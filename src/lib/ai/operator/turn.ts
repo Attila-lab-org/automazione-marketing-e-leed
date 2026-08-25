@@ -21,7 +21,7 @@ import type { OperatorEnvelope } from './envelope';
 import { classifyOperatorIntent } from './intent';
 import type { OperatorHistoryItem, OperatorPlan } from './orchestrator-schema';
 import { OPERATOR_ORCHESTRATOR_PROMPT_VERSION } from './orchestrator-schema';
-import { applySafetyPolicy } from './semantic-plan';
+import { applySafetyPolicy, isTelegramReplyRequest } from './semantic-plan';
 import {
   executeOperatorTool,
   OPERATOR_TOOL_NAMES,
@@ -67,6 +67,7 @@ export type OperatorWriteHooks = {
     demoId: string;
     proposal: DemoPersonalization | null;
   }) => Promise<WriteResult[]>;
+  replyTelegram?: () => Promise<WriteResult>;
 };
 
 export type OperatorTurnInput = {
@@ -116,6 +117,7 @@ export async function* runOperatorTurn(
   const config = getAiCommercialConfig(env);
   const assistMode = input.assistMode ?? 'ASSISTITO';
   const fallbackIntent = classifyOperatorIntent(input.question);
+  const telegramReplyRequested = isTelegramReplyRequest(input.question);
   let prevRefs = input.refs ?? emptyEntityRefs();
   const envelope = resolveOperatorEnvelope(input.question, input.envelope, prevRefs, fallbackIntent);
 
@@ -196,6 +198,18 @@ export async function* runOperatorTurn(
       ok: true,
       label: count != null ? `${labels.done} · ${count}` : labels.done,
       count,
+    };
+  }
+
+  if (telegramReplyRequested && input.writes?.replyTelegram) {
+    yield { type: 'tool_start', name: 'reply_telegram', label: 'Sto rispondendo su Telegram…' };
+    const replied = await input.writes.replyTelegram();
+    writes.push(replied);
+    yield {
+      type: 'tool_done',
+      name: 'reply_telegram',
+      ok: replied.ok,
+      label: replied.summary,
     };
   }
 

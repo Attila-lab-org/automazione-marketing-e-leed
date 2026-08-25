@@ -18,6 +18,14 @@ function norm(text: string): string {
     .trim();
 }
 
+export function isTelegramReplyRequest(question: string): boolean {
+  const q = norm(question);
+  return (
+    q.includes('telegram') &&
+    scoreCues(q, ['rispondi', 'risposta', 'reply', 'manda risposta', 'invia risposta']) > 0
+  );
+}
+
 function scoreCues(haystack: string, cues: string[]): number {
   let score = 0;
   for (const cue of cues) {
@@ -362,6 +370,17 @@ export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
 
 export function applySafetyPolicy(plan: OperatorPlan, question: string): OperatorPlan {
   const q = norm(question);
+  if (isTelegramReplyRequest(question)) {
+    return {
+      ...plan,
+      safetyClass: 'EXTERNAL',
+      telegramIsInboundScan: false,
+      prepareKind: 'none',
+      toolCalls: [],
+      goal: 'Rispondere all’ultimo messaggio Telegram in attesa',
+      clarification: null,
+    };
+  }
   const telegramScan =
     q.includes('telegram') &&
     !q.includes('campagna') &&

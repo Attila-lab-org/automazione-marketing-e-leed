@@ -4,6 +4,7 @@ import { getTelegramProvider } from '@/lib/providers/telegram';
 import { processSalesInbound } from '@/lib/sales/pipeline';
 import { selectTelegramReplyText } from '@/lib/inbound/process';
 import { getTelegramInboundSettings } from '@/lib/inbound/telegram-settings';
+import type { WriteResult } from '@/lib/ai/operator/writes';
 
 function parseInboundProviderId(value: string | null): { chatId: string; messageId: string } | null {
   if (!value?.startsWith('in:')) return null;
@@ -167,4 +168,55 @@ export async function resumeTelegramAiAndReply(args: {
     data: { threadId: args.threadId, outboundMessageId: outbound.id } as unknown as Json,
   });
   return { sent: true, reason: 'SENT' };
+}
+
+export async function replyLatestPendingTelegram(args: {
+  admin: AppSupabaseClient;
+  workspaceId: string;
+  env?: NodeJS.ProcessEnv;
+}): Promise<WriteResult> {
+  const { data: inboundMessages } = await args.admin
+    .from('messages')
+    .select('thread_id, created_at')
+    .eq('workspace_id', args.workspaceId)
+    .eq('provider', 'telegram')
+    .eq('direction', 'INBOUND')
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  for (const inbound of inboundMessages ?? []) {
+    const { data: reply } = await args.admin
+      .from('messages')
+      .select('id')
+      .eq('workspace_id', args.workspaceId)
+      .eq('thread_id', inbound.thread_id)
+      .eq('provider', 'telegram')
+      .eq('direction', 'OUTBOUND')
+      .gte('created_at', inbound.created_at)
+      .limit(1)
+      .maybeSingle();
+    if (reply) continue;
+
+    const result = await resumeTelegramAiAndReply({
+      admin: args.admin,
+      workspaceId: args.workspaceId,
+      threadId: inbound.thread_id,
+      env: args.env,
+    });
+    return {
+      tool: 'reply_telegram',
+      ok: result.sent,
+      summary: result.sent
+        ? 'Ho risposto all’ultimo messaggio Telegram in attesa.'
+        : `Non ho inviato la risposta Telegram: ${result.reason}.`,
+      data: { threadId: inbound.thread_id, reason: result.reason },
+    };
+  }
+
+  return {
+    tool: 'reply_telegram',
+    ok: true,
+    summary: 'Non ci sono messaggi Telegram in attesa di risposta.',
+    data: { pending: false },
+  };
 }
