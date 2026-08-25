@@ -1,5 +1,5 @@
 /**
- * Supabase Database contract — aligned to migrations 0001..0023.
+ * Supabase Database contract — aligned to migrations 0001..0024.
  * Used as createClient<Database>() so invalid column selects fail at compile time.
  *
  * Note: mapped `AsRecord` converts interfaces → closed object types so they
@@ -11,6 +11,10 @@ import type {
   ActivityLogRow,
   AiRunInsert,
   AiRunRow,
+  AiActionAuditInsert,
+  AiActionAuditRow,
+  AiAutonomyPolicyInsert,
+  AiAutonomyPolicyRow,
   AiOperatorMessageInsert,
   AiOperatorMessageRow,
   AiOperatorSessionInsert,
@@ -26,6 +30,8 @@ import type {
   CampaignPolicyVersionRow,
   CampaignRow,
   ClaimJobArgs,
+  CommercialPlaybookInsert,
+  CommercialPlaybookRow,
   CostEventInsert,
   CostEventRow,
   DemoAssetInsert,
@@ -60,15 +66,23 @@ import type {
   MessageTemplateVersionRow,
   MessageThreadInsert,
   MessageThreadRow,
+  PendingAiActionInsert,
+  PendingAiActionRow,
   ProviderConnectionInsert,
   ProviderConnectionRow,
   RecoverStuckJobsArgs,
+  SalesThreadEventInsert,
+  SalesThreadEventRow,
+  SalesThreadMemoryInsert,
+  SalesThreadMemoryRow,
   SegmentInsert,
   SegmentRow,
   SuppressionListInsert,
   SuppressionListRow,
   TagInsert,
   TagRow,
+  WebsiteAnalysisInsert,
+  WebsiteAnalysisRow,
   WebsiteAuditInsert,
   WebsiteAuditRow,
   WebsiteTemplateInsert,
@@ -142,6 +156,13 @@ export type Database = {
       ai_runs: Tbl<AiRunRow, AiRunInsert>;
       ai_operator_sessions: Tbl<AiOperatorSessionRow, AiOperatorSessionInsert>;
       ai_operator_messages: Tbl<AiOperatorMessageRow, AiOperatorMessageInsert>;
+      website_analyses: Tbl<WebsiteAnalysisRow, WebsiteAnalysisInsert>;
+      commercial_playbooks: Tbl<CommercialPlaybookRow, CommercialPlaybookInsert>;
+      sales_thread_memory: Tbl<SalesThreadMemoryRow, SalesThreadMemoryInsert>;
+      sales_thread_events: Tbl<SalesThreadEventRow, SalesThreadEventInsert>;
+      pending_ai_actions: Tbl<PendingAiActionRow, PendingAiActionInsert>;
+      ai_action_audit: Tbl<AiActionAuditRow, AiActionAuditInsert>;
+      ai_autonomy_policies: Tbl<AiAutonomyPolicyRow, AiAutonomyPolicyInsert>;
     };
     Views: {
       [_ in never]: never;

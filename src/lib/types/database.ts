@@ -879,6 +879,15 @@ export interface MessageThreadRow {
   status: ThreadStatus;
   unread_count: number;
   last_message_at: string | null;
+  channel: 'EMAIL' | 'TELEGRAM';
+  commercial_state: string;
+  assigned_mode: 'AI' | 'HUMAN';
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'HOT';
+  sentiment: string | null;
+  next_step: string | null;
+  next_step_at: string | null;
+  human_required_reason: string | null;
+  playbook_version: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -892,6 +901,15 @@ export interface MessageThreadInsert {
   status?: ThreadStatus;
   unread_count?: number;
   last_message_at?: string | null;
+  channel?: 'EMAIL' | 'TELEGRAM';
+  commercial_state?: string;
+  assigned_mode?: 'AI' | 'HUMAN';
+  priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'HOT';
+  sentiment?: string | null;
+  next_step?: string | null;
+  next_step_at?: string | null;
+  human_required_reason?: string | null;
+  playbook_version?: number | null;
 }
 
 /** messages è IMMUTABILE (trigger forbid_mutation): esiste solo Insert. */
@@ -1210,6 +1228,7 @@ export interface AiRunRow {
   error_message: string | null;
   request_id: string | null;
   meta: Json;
+  prompt_version: string | null;
   created_at: string;
 }
 
@@ -1231,6 +1250,7 @@ export interface AiRunInsert {
   error_message?: string | null;
   request_id?: string | null;
   meta?: Json;
+  prompt_version?: string | null;
   created_at?: string;
 }
 
@@ -1281,8 +1301,263 @@ export interface AiOperatorMessageInsert {
 }
 
 // ---------------------------------------------------------------------------
+// 0024 — AI commercial agent
+// ---------------------------------------------------------------------------
+
+export interface WebsiteAnalysisRow {
+  id: string;
+  workspace_id: string;
+  lead_id: string;
+  website_audit_id: string | null;
+  website_url: string | null;
+  retrieved_text_hash: string | null;
+  opportunity_score: number | null;
+  confidence: number | null;
+  visual_quality: string;
+  mobile_clarity: string;
+  cta_clarity: string;
+  booking_clarity: string;
+  trust_presentation: string;
+  strengths: Json;
+  issues: Json;
+  evidence: Json;
+  recommended_offer: string | null;
+  recommended_approach: string | null;
+  human_review_required: boolean;
+  analysis: Json;
+  provider: string | null;
+  model: string | null;
+  prompt_version: string;
+  schema_version: string;
+  created_at: string;
+}
+
+export interface WebsiteAnalysisInsert {
+  id?: string;
+  workspace_id: string;
+  lead_id: string;
+  website_audit_id?: string | null;
+  website_url?: string | null;
+  retrieved_text_hash?: string | null;
+  opportunity_score?: number | null;
+  confidence?: number | null;
+  visual_quality?: string;
+  mobile_clarity?: string;
+  cta_clarity?: string;
+  booking_clarity?: string;
+  trust_presentation?: string;
+  strengths?: Json;
+  issues?: Json;
+  evidence?: Json;
+  recommended_offer?: string | null;
+  recommended_approach?: string | null;
+  human_review_required?: boolean;
+  analysis?: Json;
+  provider?: string | null;
+  model?: string | null;
+  prompt_version?: string;
+  schema_version?: string;
+  created_at?: string;
+}
+
+export interface CommercialPlaybookRow {
+  id: string;
+  workspace_id: string;
+  version: number;
+  is_current: boolean;
+  brand: Json;
+  offer: Json;
+  pricing: Json;
+  discount: Json;
+  qualification: Json;
+  call_policy: Json;
+  promise_policy: Json;
+  human_escalation: Json;
+  autonomy: Json;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommercialPlaybookInsert {
+  id?: string;
+  workspace_id: string;
+  version?: number;
+  is_current?: boolean;
+  brand?: Json;
+  offer?: Json;
+  pricing?: Json;
+  discount?: Json;
+  qualification?: Json;
+  call_policy?: Json;
+  promise_policy?: Json;
+  human_escalation?: Json;
+  autonomy?: Json;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SalesThreadMemoryRow {
+  thread_id: string;
+  workspace_id: string;
+  business_summary: string | null;
+  main_need: string | null;
+  services_requested: Json;
+  budget_signal: string | null;
+  pricing_discussed: boolean;
+  objections: Json;
+  decision_maker_status: string | null;
+  timing: string | null;
+  preferred_channel: string | null;
+  sentiment: string | null;
+  last_commitment: string | null;
+  next_step: string | null;
+  next_step_at: string | null;
+  risk_flags: Json;
+  human_notes: string | null;
+  prompt_version: string;
+  updated_at: string;
+}
+
+export interface SalesThreadMemoryInsert {
+  thread_id: string;
+  workspace_id: string;
+  business_summary?: string | null;
+  main_need?: string | null;
+  services_requested?: Json;
+  budget_signal?: string | null;
+  pricing_discussed?: boolean;
+  objections?: Json;
+  decision_maker_status?: string | null;
+  timing?: string | null;
+  preferred_channel?: string | null;
+  sentiment?: string | null;
+  last_commitment?: string | null;
+  next_step?: string | null;
+  next_step_at?: string | null;
+  risk_flags?: Json;
+  human_notes?: string | null;
+  prompt_version?: string;
+  updated_at?: string;
+}
+
+export interface SalesThreadEventRow {
+  id: string;
+  workspace_id: string;
+  thread_id: string;
+  actor: 'AI' | 'HUMAN' | 'SYSTEM';
+  event_type: string;
+  payload: Json;
+  ai_run_id: string | null;
+  created_at: string;
+}
+
+export interface SalesThreadEventInsert {
+  id?: string;
+  workspace_id: string;
+  thread_id: string;
+  actor: 'AI' | 'HUMAN' | 'SYSTEM';
+  event_type: string;
+  payload?: Json;
+  ai_run_id?: string | null;
+  created_at?: string;
+}
+
+export interface PendingAiActionRow {
+  id: string;
+  workspace_id: string;
+  idempotency_key: string;
+  actor: 'AI' | 'HUMAN' | 'SYSTEM';
+  tool: string;
+  params: Json;
+  payload_hash: string;
+  target_summary: Json;
+  policy_state: Json;
+  status: string;
+  expires_at: string;
+  confirmed_at: string | null;
+  executed_at: string | null;
+  result: Json | null;
+  ai_run_id: string | null;
+  created_at: string;
+}
+
+export interface PendingAiActionInsert {
+  id?: string;
+  workspace_id: string;
+  idempotency_key: string;
+  actor: 'AI' | 'HUMAN' | 'SYSTEM';
+  tool: string;
+  params: Json;
+  payload_hash: string;
+  target_summary?: Json;
+  policy_state?: Json;
+  status?: string;
+  expires_at: string;
+  confirmed_at?: string | null;
+  executed_at?: string | null;
+  result?: Json | null;
+  ai_run_id?: string | null;
+  created_at?: string;
+}
+
+export interface AiActionAuditRow {
+  id: string;
+  workspace_id: string;
+  actor: 'AI' | 'HUMAN' | 'SYSTEM';
+  tool: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  action: string;
+  ai_run_id: string | null;
+  policy: Json;
+  confirmation_id: string | null;
+  result: Json;
+  created_at: string;
+}
+
+export interface AiActionAuditInsert {
+  id?: string;
+  workspace_id: string;
+  actor: 'AI' | 'HUMAN' | 'SYSTEM';
+  tool: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  action: string;
+  ai_run_id?: string | null;
+  policy?: Json;
+  confirmation_id?: string | null;
+  result?: Json;
+  created_at?: string;
+}
+
+export interface AiAutonomyPolicyRow {
+  id: string;
+  workspace_id: string;
+  name: string;
+  status: string;
+  proposal: Json;
+  rules: Json;
+  playbook_version: number | null;
+  created_at: string;
+  activated_at: string | null;
+}
+
+export interface AiAutonomyPolicyInsert {
+  id?: string;
+  workspace_id: string;
+  name?: string;
+  status?: string;
+  proposal?: Json;
+  rules?: Json;
+  playbook_version?: number | null;
+  created_at?: string;
+  activated_at?: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Mappa tabelle → Row (helper per i Domain Services / repository)
 // ---------------------------------------------------------------------------
+
 
 export interface Tables {
   workspaces: WorkspaceRow;
@@ -1321,6 +1596,13 @@ export interface Tables {
   ai_runs: AiRunRow;
   ai_operator_sessions: AiOperatorSessionRow;
   ai_operator_messages: AiOperatorMessageRow;
+  website_analyses: WebsiteAnalysisRow;
+  commercial_playbooks: CommercialPlaybookRow;
+  sales_thread_memory: SalesThreadMemoryRow;
+  sales_thread_events: SalesThreadEventRow;
+  pending_ai_actions: PendingAiActionRow;
+  ai_action_audit: AiActionAuditRow;
+  ai_autonomy_policies: AiAutonomyPolicyRow;
 }
 
 export type TableName = keyof Tables;
