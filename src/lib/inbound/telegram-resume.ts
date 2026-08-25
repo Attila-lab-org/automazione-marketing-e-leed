@@ -79,7 +79,9 @@ export async function resumeTelegramAiAndReply(args: {
   });
   const selected = selectTelegramReplyText({
     salesAgentSucceeded: true,
-    salesMode: sales.mode,
+    // Il click "Attiva Attila e rispondi ora" è l'approvazione esplicita
+    // dell'operatore per questa bozza. HUMAN_ONLY resta comunque bloccato.
+    salesMode: sales.mode === 'APPROVAL_REQUIRED' ? 'AUTO_ALLOWED' : sales.mode,
     salesDraft: sales.draft,
     salesHumanRequired: sales.humanRequired,
     salesStopKind: sales.classification.unsubscribe
