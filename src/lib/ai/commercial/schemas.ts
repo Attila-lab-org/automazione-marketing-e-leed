@@ -132,14 +132,39 @@ export const salesReplyDraftSchema = z.object({
 
 export type SalesReplyDraft = z.infer<typeof salesReplyDraftSchema>;
 
+export type SalesThreadTurn = {
+  direction: 'INBOUND' | 'OUTBOUND';
+  text: string;
+};
+
+export type SalesThreadMemorySnapshot = {
+  main_need: string | null;
+  services_requested: string[];
+  next_step: string | null;
+  pricing_discussed: boolean;
+  sentiment: string | null;
+};
+
+export type SalesReplyDraftInput = {
+  classification: InboundClassification;
+  playbookName: string;
+  pricingAllowed: boolean;
+  priceRange?: string | null;
+  bookingUrl?: string | null;
+  allowedFeatures: string[];
+  inboundText?: string;
+  recentTurns?: SalesThreadTurn[];
+  memory?: SalesThreadMemorySnapshot | null;
+};
+
 export const PROMPT_VERSIONS = {
   websiteAnalysis: 'website-analysis-v1',
   businessOpportunity: 'business-opportunity-v1',
   outbound: 'outbound-v1',
   critic: 'outbound-critic-v1',
   demo: 'demo-personalization-v1',
-  inbound: 'inbound-classify-v1',
-  reply: 'sales-reply-v1',
+  inbound: 'inbound-classify-v2',
+  reply: 'sales-reply-v2',
 } as const;
 
 function objectSchema(

@@ -129,4 +129,4 @@ export const OPERATOR_FINAL_REPLY_JSON_SCHEMA = {
   required: ['reply', 'citedTools'],
 } as const;
 
-export const OPERATOR_ORCHESTRATOR_PROMPT_VERSION = 'operator-orchestrator-v1';
+export const OPERATOR_ORCHESTRATOR_PROMPT_VERSION = 'operator-orchestrator-v2';

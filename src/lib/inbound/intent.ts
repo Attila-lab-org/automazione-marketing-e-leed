@@ -24,8 +24,8 @@ function normalizeText(text: string): string {
 }
 
 /**
- * Classificatore keyword-based prudente.
- * Nessuna risposta aggressiva: se non matcha → UNKNOWN.
+ * Classificatore keyword-based prudente per discovery/valutazione.
+ * Non decide il testo della risposta: se non matcha → UNKNOWN.
  */
 export function classifyInboundIntent(
   message: NormalizedInboundMessage,

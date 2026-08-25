@@ -8,6 +8,7 @@ import { emptyEntityRefs, resolveOrdinalSelection } from '../../src/lib/ai/opera
 import { buildOperatorCapabilityReply } from '../../src/lib/ai/operator/capabilities';
 import { planOperatorTurnMock } from '../../src/lib/ai/operator/semantic-plan';
 import { selectTelegramReplyText } from '../../src/lib/inbound/process';
+import { telegramRequiresKeywordDiscovery } from '../../src/lib/inbound/create-lead';
 import { resolveResponseMode } from '../../src/lib/sales/pipeline';
 import { DEFAULT_PLAYBOOK } from '../../src/lib/sales/playbook';
 import type { PersistAiRun } from '../../src/lib/ai/persist';
@@ -159,6 +160,100 @@ describe('operator conversational orchestrator', () => {
     expect(result.events.some((e) => e.type === 'tool_done' && e.name === 'prepare_campaign' && e.ok)).toBe(
       true,
     );
+  });
+
+  it('fammi una test e facciamo un test preparano senza inviare', async () => {
+    for (const question of ['fammi una test', 'facciamo un test', 'preparami una campagna di prova']) {
+      const result = await collectOperatorTurn({
+        workspaceId: 'ws',
+        sessionId: 's',
+        question,
+        envelope: envelopeFromPath('/overview'),
+        data,
+        persist: persist(),
+        env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+        writes: {
+          prepare: async ({ leads }) => [
+            {
+              tool: 'create_campaign',
+              ok: true,
+              summary: `Campagna creata con ${leads.length} lead.`,
+              data: { campaignId: CAMPAIGN_ID, leadCount: leads.length, deliveryMode: 'TEST' },
+            },
+          ],
+        },
+      });
+      expect(result.events.some((e) => e.type === 'tool_done' && e.name === 'prepare_campaign' && e.ok), question).toBe(
+        true,
+      );
+      expect(result.reply, question).toMatch(/0 messaggi inviati/i);
+    }
+  });
+
+  it('senza lead chiede il target e non crea campagna vuota', async () => {
+    let prepared = false;
+    const empty = createMemoryOperatorData({ leads: [] });
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: 'crea campagna test',
+      envelope: envelopeFromPath('/overview'),
+      data: empty,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+      writes: {
+        prepare: async () => {
+          prepared = true;
+          return [
+            {
+              tool: 'create_campaign',
+              ok: true,
+              summary: 'non deve succedere',
+              data: { campaignId: CAMPAIGN_ID, leadCount: 0 },
+            },
+          ];
+        },
+      },
+    });
+    expect(prepared).toBe(false);
+    expect(result.reply).toMatch(/target|città|lead|vuota/i);
+  });
+
+  it('infersce i lead dalla sessione se la ricerca è vuota', async () => {
+    const emptySearch = createMemoryOperatorData({
+      leads: [
+        {
+          id: LEAD_1,
+          name: 'Trattoria Duomo',
+          city: 'Milano',
+          category: 'restaurant',
+          discoveryScore: 91,
+          qualificationStatus: 'PREQUALIFIED',
+          websiteUrl: null,
+        },
+      ],
+    });
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: 'fammi una test',
+      envelope: envelopeFromPath('/overview'),
+      refs: { ...emptyEntityRefs(), lastLeadIds: [LEAD_1], lastLeadId: LEAD_1 },
+      data: emptySearch,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+      writes: {
+        prepare: async ({ leads }) => [
+          {
+            tool: 'create_campaign',
+            ok: true,
+            summary: `Campagna creata con ${leads.length} lead.`,
+            data: { campaignId: CAMPAIGN_ID, leadCount: leads.length, deliveryMode: 'TEST' },
+          },
+        ],
+      },
+    });
+    expect(result.events.some((e) => e.type === 'tool_done' && e.name === 'prepare_campaign' && e.ok)).toBe(true);
   });
 
   it('fai partire ricerca telegram non crea una campagna vuota', async () => {
@@ -356,24 +451,42 @@ describe('sales reply wiring', () => {
       salesAgentSucceeded: true,
       salesMode: 'AUTO_ALLOWED',
       salesDraft: 'Bozza commerciale Attila',
-      salesStopAutoReply: false,
+      salesHumanRequired: false,
+      salesStopKind: null,
       legacyEnabled: true,
       intentMatched: true,
       legacyText: 'TEMPLATE LEGACY',
     });
     expect(chosen.source).toBe('sales_ai');
     expect(chosen.text).toBe('Bozza commerciale Attila');
+    expect(chosen.skipReason).toBeNull();
 
     const pending = selectTelegramReplyText({
       salesAgentSucceeded: true,
       salesMode: 'APPROVAL_REQUIRED',
       salesDraft: 'Bozza da approvare',
-      salesStopAutoReply: false,
+      salesHumanRequired: false,
+      salesStopKind: null,
       legacyEnabled: true,
-      intentMatched: true,
+      intentMatched: false,
       legacyText: 'TEMPLATE LEGACY',
     });
     expect(pending.source).toBe('none');
+    expect(pending.skipReason).toBe('APPROVAL_REQUIRED');
+    expect(pending.skipReason).not.toBe('NO_REPLY_TEMPLATE');
+
+    const handoff = selectTelegramReplyText({
+      salesAgentSucceeded: true,
+      salesMode: 'HUMAN_ONLY',
+      salesDraft: 'Bozza da non inviare',
+      salesHumanRequired: true,
+      salesStopKind: null,
+      legacyEnabled: true,
+      intentMatched: false,
+      legacyText: 'TEMPLATE LEGACY',
+    });
+    expect(handoff.source).toBe('none');
+    expect(handoff.skipReason).toBe('HUMAN_ONLY');
   });
 
   it('prompt injection resta untrusted', () => {
@@ -399,5 +512,87 @@ describe('session ordinal refs', () => {
     expect(plan.telegramIsInboundScan).toBe(true);
     expect(plan.prepareKind).toBe('none');
     expect(plan.safetyClass).toBe('READ');
+  });
+
+  it('comprende parafrasi naturali di campagna TEST', () => {
+    const phrases = [
+      'crea campagna test',
+      'fammi una test',
+      'preparami una campagna di prova',
+      'facciamo un test',
+    ];
+    for (const question of phrases) {
+      const plan = planOperatorTurnMock({
+        question,
+        refs: emptyEntityRefs(),
+        envelope: envelopeFromPath('/overview'),
+      });
+      expect(plan.prepareKind, question).toBe('campaign');
+      expect(plan.safetyClass, question).toBe('PREPARE');
+      expect(plan.telegramIsInboundScan, question).toBe(false);
+    }
+  });
+});
+
+describe('telegram sales thread follow-up', () => {
+  it('le keyword servono solo in discovery, non sul thread già aperto', () => {
+    expect(telegramRequiresKeywordDiscovery(false, null)).toBe(true);
+    expect(telegramRequiresKeywordDiscovery(false, LEAD_1)).toBe(false);
+    expect(telegramRequiresKeywordDiscovery(true, null)).toBe(false);
+  });
+
+  it('Telegram risponde in automatico al contesto, non per keyword', () => {
+    const info = mockClassifyInbound('Ciao, mi interessa capire se potete aiutarci');
+    const telegram = resolveResponseMode({
+      classification: info,
+      playbook: DEFAULT_PLAYBOOK,
+      autonomy: null,
+      firstReply: true,
+      channel: 'TELEGRAM',
+    });
+    expect(telegram.mode).toBe('AUTO_ALLOWED');
+    expect(telegram.reason).toBe('telegram_conversation');
+
+    const email = resolveResponseMode({
+      classification: info,
+      playbook: DEFAULT_PLAYBOOK,
+      autonomy: null,
+      firstReply: true,
+      channel: 'EMAIL',
+    });
+    expect(email.mode).toBe('APPROVAL_REQUIRED');
+
+    const sent = selectTelegramReplyText({
+      salesAgentSucceeded: true,
+      salesMode: telegram.mode,
+      salesDraft: 'Bozza contestuale Attila',
+      salesHumanRequired: false,
+      salesStopKind: null,
+      legacyEnabled: true,
+      intentMatched: false,
+      legacyText: 'TEMPLATE LEGACY',
+    });
+    expect(sent.source).toBe('sales_ai');
+    expect(sent.text).toBe('Bozza contestuale Attila');
+  });
+
+  it('prezzo, sconto e legale restano HUMAN_ONLY anche su Telegram', () => {
+    const pricing = resolveResponseMode({
+      classification: mockClassifyInbound('Quanto costa?'),
+      playbook: DEFAULT_PLAYBOOK,
+      autonomy: null,
+      firstReply: false,
+      channel: 'TELEGRAM',
+    });
+    expect(pricing.mode).toBe('HUMAN_ONLY');
+
+    const discount = resolveResponseMode({
+      classification: mockClassifyInbound('Me lo fai a 350?'),
+      playbook: DEFAULT_PLAYBOOK,
+      autonomy: null,
+      firstReply: true,
+      channel: 'TELEGRAM',
+    });
+    expect(discount.mode).toBe('HUMAN_ONLY');
   });
 });

@@ -49,7 +49,39 @@ export async function findLeadFromInbound(
     .eq('external_id', message.authorId)
     .maybeSingle();
   if (error) throw new Error(`Inbound lead lookup: ${error.message}`);
-  return data?.lead_id ?? null;
+  if (data?.lead_id) return data.lead_id;
+
+  const { data: contact } = await admin
+    .from('lead_contacts')
+    .select('lead_id')
+    .eq('workspace_id', workspaceId)
+    .eq('normalized_value', contactNormalized(message))
+    .maybeSingle();
+  if (contact?.lead_id) return contact.lead_id;
+
+  const { data: prior } = await admin
+    .from('messages')
+    .select('lead_id')
+    .eq('workspace_id', workspaceId)
+    .eq('provider', 'telegram')
+    .eq('direction', 'INBOUND')
+    .like('provider_message_id', `in:${message.chatId}:%`)
+    .not('lead_id', 'is', null)
+    .limit(1)
+    .maybeSingle();
+  return prior?.lead_id ?? null;
+}
+
+/**
+ * Keyword = discovery / valutazione opportunità.
+ * Se il contatto ha già un Sales Thread / lead inbound,
+ * il follow-up non deve rimatchare le keyword iniziali.
+ */
+export function telegramRequiresKeywordDiscovery(
+  intentMatched: boolean,
+  existingLeadId: string | null,
+): boolean {
+  return !intentMatched && !existingLeadId;
 }
 
 /**
@@ -67,33 +99,40 @@ export async function upsertLeadFromInbound(
   const value = contactValue(message);
   const normalized = contactNormalized(message);
 
-  const { data: existingSource } = await admin
-    .from('lead_sources')
-    .select('lead_id')
-    .eq('workspace_id', workspaceId)
-    .eq('source_type', sourceType)
-    .eq('external_id', externalId)
-    .maybeSingle();
-
-  if (existingSource?.lead_id) {
-    await Promise.all([
-      admin
-        .from('leads')
-        .update({
-          processing_status: 'IDLE',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existingSource.lead_id),
-      admin
+  const existingLeadId = await findLeadFromInbound(admin, workspaceId, message);
+  if (existingLeadId) {
+    await admin
+      .from('leads')
+      .update({
+        processing_status: 'IDLE',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existingLeadId);
+    const { data: existingSource } = await admin
+      .from('lead_sources')
+      .select('lead_id')
+      .eq('workspace_id', workspaceId)
+      .eq('source_type', sourceType)
+      .eq('external_id', externalId)
+      .maybeSingle();
+    if (existingSource?.lead_id) {
+      await admin
         .from('lead_sources')
         .update({ query_snapshot: sourceSnapshot(message, intent) })
         .eq('workspace_id', workspaceId)
         .eq('source_type', sourceType)
-        .eq('external_id', externalId),
-    ]);
-
+        .eq('external_id', externalId);
+    } else {
+      await admin.from('lead_sources').insert({
+        workspace_id: workspaceId,
+        lead_id: existingLeadId,
+        source_type: sourceType,
+        external_id: externalId,
+        query_snapshot: sourceSnapshot(message, intent),
+      });
+    }
     return {
-      leadId: existingSource.lead_id,
+      leadId: existingLeadId,
       created: false,
       contactValue: value,
     };

@@ -3,6 +3,7 @@ import { ensureInboundThread } from '@/lib/messaging/persist';
 import { buildAutoReplyText } from '@/lib/inbound/auto-reply';
 import {
   findLeadFromInbound,
+  telegramRequiresKeywordDiscovery,
   upsertLeadFromInbound,
 } from '@/lib/inbound/create-lead';
 import { classifyInboundIntent } from '@/lib/inbound/intent';
@@ -33,22 +34,74 @@ export function selectTelegramReplyText(args: {
   salesAgentSucceeded: boolean;
   salesMode: string | null;
   salesDraft: string | null;
-  salesStopAutoReply: boolean;
+  salesHumanRequired: boolean;
+  salesStopKind: 'unsubscribe' | 'not_interested' | 'follow_up_later' | null;
   legacyEnabled: boolean;
   intentMatched: boolean;
   legacyText: string | null;
-}): { text: string | null; source: 'sales_ai' | 'legacy' | 'none' } {
-  if (args.salesStopAutoReply) return { text: null, source: 'none' };
+}): { text: string | null; source: 'sales_ai' | 'legacy' | 'none'; skipReason: string | null } {
   if (args.salesAgentSucceeded) {
-    if (args.salesMode === 'AUTO_ALLOWED' && args.salesDraft) {
-      return { text: args.salesDraft, source: 'sales_ai' };
+    if (args.salesStopKind === 'unsubscribe') {
+      return { text: null, source: 'none', skipReason: 'UNSUBSCRIBE' };
     }
-    return { text: null, source: 'none' };
+    if (args.salesStopKind === 'not_interested') {
+      return { text: null, source: 'none', skipReason: 'NOT_INTERESTED' };
+    }
+    if (args.salesStopKind === 'follow_up_later') {
+      return { text: null, source: 'none', skipReason: 'FOLLOW_UP_LATER' };
+    }
+    if (args.salesMode === 'HUMAN_ONLY') {
+      return { text: null, source: 'none', skipReason: 'HUMAN_ONLY' };
+    }
+    if (args.salesMode === 'APPROVAL_REQUIRED') {
+      return { text: null, source: 'none', skipReason: 'APPROVAL_REQUIRED' };
+    }
+    if (args.salesMode === 'DRAFT_ONLY') {
+      return { text: null, source: 'none', skipReason: 'DRAFT_ONLY' };
+    }
+    if (args.salesHumanRequired) {
+      return { text: null, source: 'none', skipReason: 'HUMAN_ONLY' };
+    }
+    if (args.salesMode === 'AUTO_ALLOWED' && args.salesDraft) {
+      return { text: args.salesDraft, source: 'sales_ai', skipReason: null };
+    }
+    if (args.salesMode === 'AUTO_ALLOWED' && !args.salesDraft) {
+      return { text: null, source: 'none', skipReason: 'SALES_DRAFT_MISSING' };
+    }
+    return { text: null, source: 'none', skipReason: args.salesMode ?? 'SALES_POLICY' };
   }
   if (args.legacyEnabled && args.intentMatched && args.legacyText) {
-    return { text: args.legacyText, source: 'legacy' };
+    return { text: args.legacyText, source: 'legacy', skipReason: null };
   }
-  return { text: null, source: 'none' };
+  if (!args.legacyEnabled) return { text: null, source: 'none', skipReason: 'AUTO_REPLY_DISABLED' };
+  if (!args.intentMatched) return { text: null, source: 'none', skipReason: 'FOLLOWUP_NO_AUTO_REPLY' };
+  return { text: null, source: 'none', skipReason: 'NO_REPLY_TEMPLATE' };
+}
+
+function skipMessageForReason(reason: string): string {
+  switch (reason) {
+    case 'AUTO_REPLY_DISABLED':
+      return 'Risposta Telegram non inviata: risposta automatica disattivata';
+    case 'HUMAN_ONLY':
+      return 'Risposta Telegram non inviata: HUMAN_ONLY, conversazione in carico all’operatore';
+    case 'APPROVAL_REQUIRED':
+      return 'Bozza Attila AI in Messaggi: APPROVAL_REQUIRED, nessun invio automatico';
+    case 'DRAFT_ONLY':
+      return 'Bozza Attila AI salvata: DRAFT_ONLY, nessun invio automatico';
+    case 'FOLLOW_UP_LATER':
+      return 'Follow-up pianificato: nessun invio immediato';
+    case 'UNSUBSCRIBE':
+    case 'NOT_INTERESTED':
+      return 'Stop deterministico: nessun invio commerciale';
+    case 'SALES_DRAFT_MISSING':
+      return 'AUTO_ALLOWED senza bozza vendibile: nessun invio';
+    case 'FOLLOWUP_NO_AUTO_REPLY':
+      return 'Messaggio Telegram successivo registrato senza risposta automatica';
+    case 'NO_REPLY_TEMPLATE':
+      return 'Risposta Telegram non inviata: testo legacy non disponibile';
+    default:
+      return 'Risposta Telegram non inviata: policy commerciale';
+  }
 }
 
 function botAddress(env: NodeJS.ProcessEnv): string {
@@ -94,7 +147,7 @@ export async function processTelegramInbound(args: {
 
   const intent = classifyInboundIntent(message, settings.keywords);
   const existingLeadId = await findLeadFromInbound(admin, workspaceId, message);
-  if (!intent.matched && !existingLeadId) {
+  if (telegramRequiresKeywordDiscovery(intent.matched, existingLeadId)) {
     return { skipped: true, reason: 'NO_INTENT', intent };
   }
 
@@ -135,10 +188,11 @@ export async function processTelegramInbound(args: {
     throw new Error(`Inbound persist: ${inboundError?.message ?? 'fallito'}`);
   }
 
-  let salesStopAutoReply = false;
   let salesDraft: string | null = null;
   let salesMode: string | null = null;
   let salesAgentUsed = false;
+  let salesHumanRequired = false;
+  let salesStopKind: 'unsubscribe' | 'not_interested' | 'follow_up_later' | null = null;
   try {
     const sales = await processSalesInbound({
       admin,
@@ -151,21 +205,20 @@ export async function processTelegramInbound(args: {
     });
     salesDraft = sales.draft;
     salesMode = sales.mode;
+    salesHumanRequired = sales.humanRequired;
     salesAgentUsed = true;
     if (sales.classification.unsubscribe) {
       await suppressLeadEmail(admin, workspaceId, lead.leadId, 'UNSUBSCRIBE');
       await stopLeadSequences(admin, workspaceId, lead.leadId);
-      salesStopAutoReply = true;
+      salesStopKind = 'unsubscribe';
     } else if (sales.classification.notInterested) {
       await stopLeadSequences(admin, workspaceId, lead.leadId);
-      salesStopAutoReply = true;
+      salesStopKind = 'not_interested';
     } else if (sales.classification.followUpLater) {
       const at = new Date();
       at.setMonth(at.getMonth() + 1);
       await scheduleFollowUpLater(admin, workspaceId, lead.leadId, threadId, at);
-      salesStopAutoReply = true;
-    } else if (sales.humanRequired || sales.mode !== 'AUTO_ALLOWED') {
-      salesStopAutoReply = sales.mode !== 'AUTO_ALLOWED';
+      salesStopKind = 'follow_up_later';
     }
   } catch (err) {
     console.error('sales inbound pipeline failed', err);
@@ -202,31 +255,28 @@ export async function processTelegramInbound(args: {
     },
   });
 
-  const legacyText = buildAutoReplyText({
-    message,
-    intent,
-    studioName: env.OWNER_SENDER_NAME,
-    template: settings.replyTemplate,
-  });
+  const legacyText =
+    !salesAgentUsed && settings.replyEnabled
+      ? buildAutoReplyText({
+          message,
+          intent,
+          studioName: env.OWNER_SENDER_NAME,
+          template: settings.replyTemplate,
+        })
+      : null;
   const chosen = selectTelegramReplyText({
     salesAgentSucceeded: salesAgentUsed,
     salesMode,
     salesDraft,
-    salesStopAutoReply,
+    salesHumanRequired,
+    salesStopKind,
     legacyEnabled: settings.replyEnabled,
     intentMatched: intent.matched,
     legacyText,
   });
   const replyText = chosen.text;
   if (!replyText) {
-    const reason =
-      salesAgentUsed && salesMode !== 'AUTO_ALLOWED'
-        ? 'SALES_DRAFT_PENDING'
-        : !intent.matched
-          ? 'FOLLOWUP_NO_AUTO_REPLY'
-          : !settings.replyEnabled
-            ? 'AUTO_REPLY_DISABLED'
-            : 'NO_REPLY_TEMPLATE';
+    const reason = chosen.skipReason ?? 'SALES_POLICY';
     await admin.from('activity_log').insert({
       workspace_id: workspaceId,
       actor_type: 'SYSTEM',
@@ -235,15 +285,14 @@ export async function processTelegramInbound(args: {
       lead_id: lead.leadId,
       category: 'DECISION',
       event_type: 'TELEGRAM_REPLY_SKIPPED',
-      message:
-        reason === 'AUTO_REPLY_DISABLED'
-          ? 'Risposta Telegram non inviata: risposta automatica disattivata'
-          : reason === 'FOLLOWUP_NO_AUTO_REPLY'
-            ? 'Messaggio Telegram successivo registrato senza risposta automatica'
-            : reason === 'SALES_DRAFT_PENDING'
-              ? 'Bozza Attila AI salvata in Messaggi: nessuna risposta automatica'
-              : 'Risposta Telegram non inviata: testo non disponibile',
-      data: { reason, chat_id: message.chatId, provider_message_id: message.providerMessageId },
+      message: skipMessageForReason(reason),
+      data: {
+        reason,
+        salesMode,
+        source: chosen.source,
+        chat_id: message.chatId,
+        provider_message_id: message.providerMessageId,
+      },
     });
     return {
       leadId: lead.leadId,

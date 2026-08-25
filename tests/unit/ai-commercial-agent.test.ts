@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mockAnalyzeWebsite, mockClassifyInbound, mockDraftOutbound } from '../../src/lib/ai/commercial/mock-impl';
+import { mockAnalyzeWebsite, mockClassifyInbound, mockDraftOutbound, mockDraftReply } from '../../src/lib/ai/commercial/mock-impl';
 import { criticDraft, hasInjectionAttempt, wrapUntrustedContent } from '../../src/lib/ai/commercial/grounding';
 import { classifyOperatorIntent } from '../../src/lib/ai/operator/intent';
 import { suggestOperatorTools } from '../../src/lib/ai/operator/registry';
@@ -141,6 +141,25 @@ describe('sales conversation', () => {
     expect(resolved.mode).toBe('HUMAN_ONLY');
     expect(validateSalesTransition('ENGAGED', 'HUMAN_REQUIRED').ok).toBe(true);
     expect(validateSalesTransition('ENGAGED', 'DELETED').ok).toBe(false);
+  });
+
+  it('la bozza segue il bisogno già emerso, non solo l’ultimo messaggio', () => {
+    const classification = mockClassifyInbound('Ok, dimmi');
+    const draft = mockDraftReply({
+      classification,
+      playbookName: 'Attila',
+      pricingAllowed: false,
+      allowedFeatures: DEFAULT_PLAYBOOK.offer.allowedFeatures,
+      inboundText: 'Ok, dimmi',
+      memory: {
+        main_need: 'Vogliono un sito vetrina per il ristorante',
+        services_requested: ['sito vetrina'],
+        next_step: 'website_request',
+        pricing_discussed: false,
+        sentiment: 'positive',
+      },
+    });
+    expect(draft.text).toMatch(/sito vetrina per il ristorante/i);
   });
 });
 

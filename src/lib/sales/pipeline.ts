@@ -6,7 +6,11 @@ import { createSupabaseAiRunStore } from '@/lib/ai/persist';
 import { estimateCostUsd } from '@/lib/ai/costs';
 import { getAiCommercialConfig } from '@/lib/ai/config';
 import { mockClassifyInbound, mockDraftReply } from '@/lib/ai/commercial/mock-impl';
-import type { InboundClassification } from '@/lib/ai/commercial/schemas';
+import type {
+  InboundClassification,
+  SalesThreadMemorySnapshot,
+  SalesThreadTurn,
+} from '@/lib/ai/commercial/schemas';
 import { getCurrentPlaybook } from './playbook-store';
 import type { ResponseMode } from './playbook';
 import { validateSalesTransition, type SalesState } from './states';
@@ -101,11 +105,57 @@ export async function upsertSalesMemory(
   });
 }
 
+function uniqueStrings(values: string[], max = 8): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+function memorySnapshot(memory: SalesMemory | null): SalesThreadMemorySnapshot | null {
+  if (!memory) return null;
+  return {
+    main_need: memory.main_need,
+    services_requested: memory.services_requested,
+    next_step: memory.next_step,
+    pricing_discussed: memory.pricing_discussed,
+    sentiment: memory.sentiment,
+  };
+}
+
+async function loadRecentTurns(
+  admin: AppSupabaseClient,
+  threadId: string,
+): Promise<SalesThreadTurn[]> {
+  const { data } = await admin
+    .from('messages')
+    .select('direction, body_snapshot')
+    .eq('thread_id', threadId)
+    .order('sent_at', { ascending: false })
+    .limit(8);
+  return (data ?? [])
+    .reverse()
+    .flatMap((row) => {
+      const text = typeof row.body_snapshot === 'string' ? row.body_snapshot.trim() : '';
+      if (!text) return [];
+      if (row.direction !== 'INBOUND' && row.direction !== 'OUTBOUND') return [];
+      return [{ direction: row.direction, text: text.slice(0, 800) }];
+    });
+}
+
 export function resolveResponseMode(args: {
   classification: InboundClassification;
   playbook: Awaited<ReturnType<typeof getCurrentPlaybook>>;
   autonomy: Awaited<ReturnType<typeof getActiveAutonomy>>;
   firstReply: boolean;
+  channel?: 'EMAIL' | 'TELEGRAM';
 }): { mode: ResponseMode; reason: string } {
   const c = args.classification;
   if (c.unsubscribe || c.notInterested) {
@@ -117,7 +167,6 @@ export function resolveResponseMode(args: {
   if (c.legal || c.angry || c.confidence < 0.45) {
     return { mode: 'HUMAN_ONLY', reason: c.angry ? 'angry' : c.legal ? 'legal' : 'low_confidence' };
   }
-  if (args.firstReply) return { mode: args.playbook.autonomy.firstReplyMode, reason: 'first_reply' };
   if (args.autonomy?.humanIntents.includes(c.intent)) {
     return { mode: 'HUMAN_ONLY', reason: 'autonomy_human_intent' };
   }
@@ -127,6 +176,10 @@ export function resolveResponseMode(args: {
   ) {
     return { mode: 'AUTO_ALLOWED', reason: 'autonomy_auto_intent' };
   }
+  if (args.channel === 'TELEGRAM') {
+    return { mode: 'AUTO_ALLOWED', reason: 'telegram_conversation' };
+  }
+  if (args.firstReply) return { mode: args.playbook.autonomy.firstReplyMode, reason: 'first_reply' };
   return { mode: args.playbook.autonomy.defaultMode, reason: 'playbook_default' };
 }
 
@@ -148,11 +201,17 @@ export async function processSalesInbound(args: {
   const env = args.env ?? process.env;
   const playbook = await getCurrentPlaybook(args.admin, args.workspaceId);
   const autonomy = await getActiveAutonomy(args.admin, args.workspaceId);
+  const priorMemory = await loadSalesMemory(args.admin, args.threadId);
+  const recentTurns = await loadRecentTurns(args.admin, args.threadId);
+  const memory = memorySnapshot(priorMemory);
   let classification: InboundClassification;
   try {
     const provider = getAICommercialProvider(env);
     const route = resolveModel('classify_inbound', env);
-    const result = await provider.classifyInbound({ text: args.text }, { model: route.model });
+    const result = await provider.classifyInbound(
+      { text: args.text, recentTurns, memory },
+      { model: route.model },
+    );
     classification = result.output;
     const persist = createSupabaseAiRunStore(args.admin);
     await persist({
@@ -192,20 +251,32 @@ export async function processSalesInbound(args: {
     playbook,
     autonomy,
     firstReply,
+    channel: args.channel,
   });
 
+  const keepPriorNeed =
+    Boolean(priorMemory?.main_need) &&
+    classification.servicesRequested.length === 0 &&
+    (classification.intent === 'info_request' ||
+      classification.intent === 'greeting' ||
+      classification.intent === 'other');
   await upsertSalesMemory(args.admin, args.workspaceId, args.threadId, {
-    main_need: classification.summary,
-    services_requested: classification.servicesRequested,
-    pricing_discussed: classification.pricing || classification.discountAsk,
+    main_need: keepPriorNeed ? priorMemory?.main_need ?? classification.summary : classification.summary,
+    services_requested: uniqueStrings([
+      ...(priorMemory?.services_requested ?? []),
+      ...classification.servicesRequested,
+    ]),
+    pricing_discussed:
+      Boolean(priorMemory?.pricing_discussed) || classification.pricing || classification.discountAsk,
     sentiment: classification.sentiment,
-    timing: classification.followUpLater ? classification.summary : null,
+    timing: classification.followUpLater ? classification.summary : priorMemory?.timing ?? null,
     next_step: classification.followUpLater ? 'follow_up_later' : classification.intent,
-    risk_flags: [
+    risk_flags: uniqueStrings([
+      ...(priorMemory?.risk_flags ?? []),
       ...(classification.unsubscribe ? ['unsubscribe'] : []),
       ...(classification.discountAsk ? ['discount'] : []),
       ...(classification.angry ? ['angry'] : []),
-    ],
+    ]),
   });
 
   const humanRequired = resolved.mode === 'HUMAN_ONLY' || state === 'HUMAN_REQUIRED';
@@ -263,6 +334,9 @@ export async function processSalesInbound(args: {
         priceRange,
         bookingUrl: playbook.call.bookingUrl,
         allowedFeatures: playbook.offer.allowedFeatures,
+        inboundText: args.text,
+        recentTurns,
+        memory,
       },
       { model: route.model },
     );
@@ -274,14 +348,21 @@ export async function processSalesInbound(args: {
       pricingAllowed: playbook.pricing.aiMayCommunicate,
       allowedFeatures: playbook.offer.allowedFeatures,
       bookingUrl: playbook.call.bookingUrl,
+      inboundText: args.text,
+      recentTurns,
+      memory,
     }).text;
   }
 
   let critic = draftText
-    ? criticSalesReply(draftText, [classification.summary, ...classification.servicesRequested], {
-        pricingAllowed: playbook.pricing.aiMayCommunicate,
-        discountAllowed: playbook.discount.allowed,
-      })
+    ? criticSalesReply(
+        draftText,
+        [classification.summary, memory?.main_need ?? '', ...classification.servicesRequested].filter(Boolean),
+        {
+          pricingAllowed: playbook.pricing.aiMayCommunicate,
+          discountAllowed: playbook.discount.allowed,
+        },
+      )
     : null;
   let mode = resolved.mode;
   if (mode === 'AUTO_ALLOWED' && critic && critic.verdict !== 'PASS') {

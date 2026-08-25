@@ -22,7 +22,7 @@ import type {
   CommercialIntent,
   IntentClassification,
 } from './types';
-import type { InboundClassification, OutboundDraft } from './commercial/schemas';
+import type { OutboundDraft } from './commercial/schemas';
 
 function notReady(method: string, phase: string): Promise<never> {
   return Promise.reject(new AiPhaseNotImplementedError(method, phase));
@@ -112,18 +112,18 @@ export class MockAICommercialProvider implements AICommercialProvider {
   ) {
     return this.wrap(mockCritiqueOutbound(input.draft, input.facts), ctx);
   }
-  async classifyInbound(input: { text: string }, ctx: AICommercialCallContext) {
+  async classifyInbound(
+    input: {
+      text: string;
+      recentTurns?: import('./commercial/schemas').SalesThreadTurn[];
+      memory?: import('./commercial/schemas').SalesThreadMemorySnapshot | null;
+    },
+    ctx: AICommercialCallContext,
+  ) {
     return this.wrap(mockClassifyInbound(input.text), ctx);
   }
   async draftReply(
-    input: {
-      classification: InboundClassification;
-      playbookName: string;
-      pricingAllowed: boolean;
-      priceRange?: string | null;
-      bookingUrl?: string | null;
-      allowedFeatures: string[];
-    },
+    input: import('./commercial/schemas').SalesReplyDraftInput,
     ctx: AICommercialCallContext,
   ) {
     return this.wrap(mockDraftReply(input), ctx);

@@ -187,11 +187,12 @@ export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
     {
       id: 'prepare',
       class: 'PREPARE',
-      score:
-        (q.includes('campagna') || /\btest\b/.test(q)) &&
-        scoreCues(q, ['crea', 'prepara', 'fammi', 'genera', 'lancia', 'preparami'])
-          ? 10
-          : scoreCues(q, ['prepara campagna', 'crea campagna', 'campagna test']),
+      score: (() => {
+        const trial = scoreCues(q, ['test', 'prova', 'campagna']);
+        const make = scoreCues(q, ['crea', 'prepara', 'fammi', 'genera', 'lancia', 'preparami', 'facciamo']);
+        if (trial > 0 && make > 0) return 12 + trial + make;
+        return scoreCues(q, ['prepara campagna', 'crea campagna', 'campagna test', 'campagna di prova']);
+      })(),
       tools: [
         call('search_leads', {
           city,

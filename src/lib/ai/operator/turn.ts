@@ -201,10 +201,22 @@ export async function* runOperatorTurn(
 
   const detail = traces.find((t) => t.name === 'get_lead_detail' && t.ok)?.result as LeadSearchHit | null | undefined;
   const searched = (traces.find((t) => t.name === 'search_leads' && t.ok)?.result ?? []) as LeadSearchHit[];
-  const leadHits = (detail ? [detail, ...searched] : searched).filter((row) => row && row.id);
+  let leadHits = (detail ? [detail, ...searched] : searched).filter((row) => row && row.id);
   if (plan.ordinal && prevRefs.lastLeadIds[plan.ordinal - 1]) {
     const picked = leadHits.find((l) => l.id === prevRefs.lastLeadIds[plan.ordinal! - 1]);
     if (picked && !detail) leadHits.unshift(picked);
+  }
+  if (
+    plan.prepareKind === 'campaign' &&
+    leadHits.length === 0 &&
+    (prevRefs.lastLeadIds.length > 0 || prevRefs.lastLeadId)
+  ) {
+    const inferredIds = prevRefs.lastLeadIds.length ? prevRefs.lastLeadIds : prevRefs.lastLeadId ? [prevRefs.lastLeadId] : [];
+    for (const id of inferredIds.slice(0, 20)) {
+      if (leadHits.some((row) => row.id === id)) continue;
+      const row = await input.data.getLeadDetail(id);
+      if (row?.id) leadHits.push(row);
+    }
   }
   const campaignId =
     (envelope.entityType === 'campaign' ? envelope.entityId : null) ?? prevRefs.lastCampaignId;
@@ -273,8 +285,9 @@ export async function* runOperatorTurn(
     writes.push({
       tool: 'create_campaign',
       ok: false,
-      summary: 'Non ho trovato lead per questa campagna. Non creo una campagna vuota.',
-      data: { blocked: 'empty_campaign' },
+      summary:
+        'Per la campagna TEST mi serve un target: città, categoria o i lead della conversazione. Non creo una campagna vuota.',
+      data: { blocked: 'empty_campaign', needsTarget: true },
     });
   }
 

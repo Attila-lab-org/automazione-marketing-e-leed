@@ -7,6 +7,7 @@ import {
   type OutboundCritique,
   type OutboundDraft,
   type SalesReplyDraft,
+  type SalesReplyDraftInput,
   type WebsiteAnalysis,
 } from './schemas';
 import { criticDraft, hasInjectionAttempt } from './grounding';
@@ -411,14 +412,7 @@ export function mockClassifyInbound(text: string): InboundClassification {
   };
 }
 
-export function mockDraftReply(input: {
-  classification: InboundClassification;
-  playbookName: string;
-  pricingAllowed: boolean;
-  priceRange?: string | null;
-  bookingUrl?: string | null;
-  allowedFeatures: string[];
-}): SalesReplyDraft {
+export function mockDraftReply(input: SalesReplyDraftInput): SalesReplyDraft {
   if (input.classification.unsubscribe || input.classification.notInterested) {
     return {
       text: 'Richiesta gestita in modo deterministico. Nessuna risposta commerciale automatica.',
@@ -470,6 +464,10 @@ export function mockDraftReply(input: {
   );
   const denied = input.classification.servicesRequested.filter((s) => !extra.includes(s));
   const lines = ['Grazie per il messaggio.'];
+  const priorNeed = input.memory?.main_need?.trim();
+  if (priorNeed && input.classification.intent === 'info_request') {
+    lines.push(`Riprendiamo da quanto già emerso: ${priorNeed}.`);
+  }
   if (extra.length) lines.push(`Posso includere: ${extra.join(', ')}.`);
   if (denied.length) lines.push(`Per ${denied.join(', ')} verifico prima se rientra nell’offerta.`);
   if (input.bookingUrl) lines.push(`Se preferisce una chiamata breve: ${input.bookingUrl}`);

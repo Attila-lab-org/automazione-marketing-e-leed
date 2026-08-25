@@ -11,6 +11,9 @@ import type {
   OutboundCritique,
   OutboundDraft,
   SalesReplyDraft,
+  SalesReplyDraftInput,
+  SalesThreadMemorySnapshot,
+  SalesThreadTurn,
   WebsiteAnalysis,
 } from './commercial/schemas';
 import type {
@@ -141,18 +144,15 @@ export interface AICommercialProvider {
     ctx: AICommercialCallContext,
   ): Promise<AICommercialResult<OutboundCritique>>;
   classifyInbound(
-    input: { text: string },
+    input: {
+      text: string;
+      recentTurns?: SalesThreadTurn[];
+      memory?: SalesThreadMemorySnapshot | null;
+    },
     ctx: AICommercialCallContext,
   ): Promise<AICommercialResult<InboundClassification>>;
   draftReply(
-    input: {
-      classification: InboundClassification;
-      playbookName: string;
-      pricingAllowed: boolean;
-      priceRange?: string | null;
-      bookingUrl?: string | null;
-      allowedFeatures: string[];
-    },
+    input: SalesReplyDraftInput,
     ctx: AICommercialCallContext,
   ): Promise<AICommercialResult<SalesReplyDraft>>;
   summarizeThread(input: unknown, ctx: AICommercialCallContext): Promise<never>;
