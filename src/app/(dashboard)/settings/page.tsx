@@ -1,10 +1,8 @@
 "use client";
 
-import EmptyState from "@/components/empty-state";
 import PageHeader from "@/components/page-header";
 import ProvidersRuntimeList from "@/components/providers-runtime-list";
 import SectionSubnav from "@/components/section-subnav";
-import AiFoundationPanel from "@/components/ai-foundation-panel";
 import CommercialPlaybookPanel from "@/components/commercial-playbook-panel";
 import TelegramControlPanel from "@/components/telegram-control-panel";
 import { SETTINGS_SUBNAV } from "@/lib/navigation";
@@ -25,20 +23,9 @@ export default function SettingsPage() {
         <ProvidersRuntimeList layout="stack" />
       </section>
 
-      <AiFoundationPanel />
-
       <CommercialPlaybookPanel />
 
       <TelegramControlPanel />
-
-      <EmptyState
-        title="Invio di prova sicuro"
-        description="Le campagne di prova possono inviare email reali soltanto agli indirizzi autorizzati. I clienti veri non vengono contattati."
-        nextAction={{
-          label: "Vai alle attività",
-          href: "/leads",
-        }}
-      />
     </div>
   );
 }
