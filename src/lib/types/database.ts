@@ -1187,6 +1187,54 @@ export interface CostEventInsert {
 }
 
 // ---------------------------------------------------------------------------
+// 0022 — AI commercial runs (model/token/cost observability)
+// ---------------------------------------------------------------------------
+
+export type AiRunStatus = 'ok' | 'error' | 'timeout' | 'invalid_output';
+
+export interface AiRunRow {
+  id: string;
+  workspace_id: string;
+  provider: string;
+  model: string;
+  task_type: string;
+  lead_id: string | null;
+  campaign_id: string | null;
+  thread_id: string | null;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number;
+  latency_ms: number;
+  status: AiRunStatus;
+  error_message: string | null;
+  request_id: string | null;
+  meta: Json;
+  created_at: string;
+}
+
+export interface AiRunInsert {
+  id?: string;
+  workspace_id: string;
+  provider: string;
+  model: string;
+  task_type: string;
+  lead_id?: string | null;
+  campaign_id?: string | null;
+  thread_id?: string | null;
+  input_tokens?: number;
+  cached_input_tokens?: number;
+  output_tokens?: number;
+  estimated_cost_usd?: number;
+  latency_ms?: number;
+  status: AiRunStatus;
+  error_message?: string | null;
+  request_id?: string | null;
+  meta?: Json;
+  created_at?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Mappa tabelle → Row (helper per i Domain Services / repository)
 // ---------------------------------------------------------------------------
 
@@ -1224,6 +1272,7 @@ export interface Tables {
   provider_connections: ProviderConnectionRow;
   workspace_feature_flags: WorkspaceFeatureFlagRow;
   cost_events: CostEventRow;
+  ai_runs: AiRunRow;
 }
 
 export type TableName = keyof Tables;

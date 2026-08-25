@@ -4,6 +4,7 @@ import EmptyState from "@/components/empty-state";
 import PageHeader from "@/components/page-header";
 import ProvidersRuntimeList from "@/components/providers-runtime-list";
 import SectionSubnav from "@/components/section-subnav";
+import AiFoundationPanel from "@/components/ai-foundation-panel";
 import TelegramControlPanel from "@/components/telegram-control-panel";
 import { SETTINGS_SUBNAV } from "@/lib/navigation";
 
@@ -13,7 +14,7 @@ export default function SettingsPage() {
       <SectionSubnav items={[...SETTINGS_SUBNAV]} />
       <PageHeader
         title="Impostazioni"
-        description="Controlla se database, ricerca, email e contatti sono collegati e pronti all’uso."
+        description="Controlla se database, ricerca, email, AI e contatti sono collegati e pronti all’uso."
       />
 
       <section aria-label="Stato dei collegamenti" className="space-y-3">
@@ -22,6 +23,8 @@ export default function SettingsPage() {
         </h2>
         <ProvidersRuntimeList layout="stack" />
       </section>
+
+      <AiFoundationPanel />
 
       <TelegramControlPanel />
 

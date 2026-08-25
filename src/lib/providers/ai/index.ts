@@ -1,6 +1,7 @@
 /**
- * Factory AIProvider — selezione via env AI_PROVIDER_MODE (mock|live),
- * default mock (§22.3).
+ * Factory AIProvider (copy stub) — distinta da getAICommercialProvider (AI-0).
+ * AI_PROVIDER_MODE=openai|live resta uno stub: generateMessage non è usato
+ * dai job di invio, quindi non altera il comportamento email.
  */
 
 import { AIProviderLive } from './live';
@@ -19,11 +20,14 @@ export { AIProviderLive } from './live';
 
 export function getAIProvider(env: NodeJS.ProcessEnv = process.env): AIProvider {
   const mode = (env.AI_PROVIDER_MODE ?? 'mock').toLowerCase();
-  if (mode === 'live') {
-    return new AIProviderLive({ apiKey: env.AI_API_KEY ?? '', model: env.AI_MODEL });
+  if (mode === 'live' || mode === 'openai') {
+    return new AIProviderLive({
+      apiKey: env.OPENAI_API_KEY ?? env.AI_API_KEY ?? env.AI_PROVIDER_API_KEY ?? '',
+      model: env.AI_MODEL,
+    });
   }
   if (mode !== 'mock') {
-    throw new Error(`AI_PROVIDER_MODE "${mode}" non valido: atteso mock|live`);
+    throw new Error(`AI_PROVIDER_MODE "${mode}" non valido: atteso mock|openai`);
   }
   return new AIProviderMock();
 }

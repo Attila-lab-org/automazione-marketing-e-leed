@@ -4,6 +4,7 @@
  */
 
 import { getAppUrlStatus } from '@/lib/app-url';
+import { getPublicAiReadiness } from '@/lib/ai/readiness';
 import { getGooglePlacesProvider } from '@/lib/providers/google-places';
 import { getTelegramCredentialStatus } from '@/lib/providers/telegram/webhook';
 import { getOwnerCommercialStatus } from '@/lib/templates/owner-commercial';
@@ -127,6 +128,40 @@ async function probeGooglePlaces(env: NodeJS.ProcessEnv): Promise<ProviderStatus
       detail: message.replace(/AIza[0-9A-Za-z_-]{10,}/g, '[REDACTED_KEY]').slice(0, 180),
     };
   }
+}
+
+function probeAi(env: NodeJS.ProcessEnv): ProviderStatusItem {
+  const readiness = getPublicAiReadiness(env);
+  if (!readiness.modeValid) {
+    return {
+      id: 'ai',
+      name: 'AI',
+      status: 'error',
+      detail: readiness.detail,
+    };
+  }
+  if (readiness.mode === 'mock') {
+    return {
+      id: 'ai',
+      name: 'AI',
+      status: 'mock',
+      detail: 'AI_PROVIDER_MODE=mock · nessuna chiamata OpenAI',
+    };
+  }
+  if (!readiness.apiKeyConfigured) {
+    return {
+      id: 'ai',
+      name: 'AI',
+      status: 'not_configured',
+      detail: 'mode=openai ma OPENAI_API_KEY assente',
+    };
+  }
+  return {
+    id: 'ai',
+    name: 'AI',
+    status: 'ready',
+    detail: `OpenAI pronto · Luna ${readiness.models.luna}`,
+  };
 }
 
 function staticMockProvider(
@@ -309,7 +344,7 @@ export async function getProvidersStatus(
         'BROWSER_WORKER_PROVIDER_MODE',
         env,
       ),
-      staticMockProvider('ai', 'AI', 'AI_PROVIDER_MODE', env),
+      probeAi(env),
     ],
     commercial: commercialConfig(env),
   };

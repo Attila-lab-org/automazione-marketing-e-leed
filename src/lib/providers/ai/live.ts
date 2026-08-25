@@ -22,7 +22,7 @@ export class AIProviderLive implements AIProvider {
   constructor(config: AILiveConfig) {
     if (!config.apiKey) {
       throw new Error(
-        'AIProviderLive: credenziali mancanti — configurare AI_API_KEY oppure usare AI_PROVIDER_MODE=mock',
+        'AIProviderLive: credenziali mancanti — configurare OPENAI_API_KEY oppure usare AI_PROVIDER_MODE=mock',
       );
     }
     this.config = config;

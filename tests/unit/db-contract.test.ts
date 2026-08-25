@@ -16,11 +16,12 @@ type MessagesRow = Database['public']['Tables']['messages']['Row'];
 describe('Database contract / schema drift (P0.12)', () => {
   const migrationsDir = path.resolve(__dirname, '../../supabase/migrations');
 
-  it('migrations 0001..0016 exist', () => {
+  it('migrations 0001..0022 exist', () => {
     const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
     expect(files[0]).toMatch(/^0001_/);
     expect(files.some((f) => f.startsWith('0016_'))).toBe(true);
-    expect(files.length).toBeGreaterThanOrEqual(16);
+    expect(files.some((f) => f.startsWith('0022_'))).toBe(true);
+    expect(files.length).toBeGreaterThanOrEqual(22);
   });
 
   it('leads: discovery_confidence exists; confidence column absent in types', () => {

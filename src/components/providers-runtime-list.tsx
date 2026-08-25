@@ -26,7 +26,7 @@ const TOOLTIPS: Record<string, string> = {
   resend: "Servizio usato per inviare le email. In modalità prova scrive solo agli indirizzi autorizzati.",
   telegram: "Bot Telegram per intercettare richieste (sito/e-commerce) e creare contatti da gestire.",
   browser_worker: "Servizio che analizza i siti e crea le immagini quando sarà attivato.",
-  ai: "Servizio che aiuta a preparare i testi quando sarà attivato.",
+  ai: "Classificazione e analisi interne. Non invia messaggi ai clienti.",
 };
 
 const PROVIDER_NAMES: Record<string, string> = {
@@ -35,7 +35,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   resend: "Invio email",
   telegram: "Telegram inbound",
   browser_worker: "Analisi siti",
-  ai: "Scrittura assistita",
+  ai: "AI commerciale",
 };
 
 const COMMERCIAL_NAMES: Record<string, string> = {
