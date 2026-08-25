@@ -18,10 +18,14 @@ export async function resumeTelegramAiAndReply(args: {
   workspaceId: string;
   threadId: string;
   env?: NodeJS.ProcessEnv;
+  /** Conferma operatore: consente l’invio anche se l’ascolto inbound è spento. */
+  allowWhenDisabled?: boolean;
 }): Promise<{ sent: boolean; reason: string }> {
   const env = args.env ?? process.env;
   const settings = await getTelegramInboundSettings(args.admin, args.workspaceId);
-  if (!settings.enabled) return { sent: false, reason: 'TELEGRAM_DISABLED' };
+  if (!settings.enabled && !args.allowWhenDisabled) {
+    return { sent: false, reason: 'TELEGRAM_DISABLED' };
+  }
 
   const { data: thread } = await args.admin
     .from('message_threads')
@@ -174,6 +178,7 @@ export async function replyLatestPendingTelegram(args: {
   admin: AppSupabaseClient;
   workspaceId: string;
   env?: NodeJS.ProcessEnv;
+  allowWhenDisabled?: boolean;
 }): Promise<WriteResult> {
   const { data: inboundMessages } = await args.admin
     .from('messages')
@@ -202,13 +207,18 @@ export async function replyLatestPendingTelegram(args: {
       workspaceId: args.workspaceId,
       threadId: inbound.thread_id,
       env: args.env,
+      allowWhenDisabled: args.allowWhenDisabled,
     });
+    const reasonLabel =
+      result.reason === 'TELEGRAM_DISABLED'
+        ? 'Telegram non è attivo in ascolto. Scrivi «avvia telegram», conferma, poi riprova.'
+        : result.reason;
     return {
       tool: 'reply_telegram',
       ok: result.sent,
       summary: result.sent
         ? 'Ho risposto all’ultimo messaggio Telegram in attesa.'
-        : `Non ho inviato la risposta Telegram: ${result.reason}.`,
+        : `Non ho inviato la risposta Telegram: ${reasonLabel}.`,
       data: { threadId: inbound.thread_id, reason: result.reason },
     };
   }

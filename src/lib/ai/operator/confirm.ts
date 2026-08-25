@@ -38,7 +38,15 @@ export async function confirmPendingAction(args: {
 
   const claimed = await claimPendingForExecution(args.admin, args.workspaceId, row.id);
   if (!claimed) {
-    return { ok: false, summary: 'Azione già in esecuzione o già eseguita.' };
+    // Recovery: già claimed ma non executed (retry dopo errore / doppio click)
+    const again = await getPendingAction(args.admin, args.workspaceId, args.pendingActionId);
+    if (again?.status === 'confirmed' && !again.executed_at) {
+      // continua
+    } else if (again?.status === 'executed') {
+      return { ok: true, summary: 'Azione già eseguita.', result: again.result };
+    } else {
+      return { ok: false, summary: 'Azione già in esecuzione. Attendi un momento e riprova se non vedi l’esito.' };
+    }
   }
 
   let result: unknown = {};

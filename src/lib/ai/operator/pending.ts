@@ -133,7 +133,7 @@ export async function getPendingAction(
   const { data, error } = await admin
     .from('pending_ai_actions')
     .select(
-      'id, tool, params, payload_hash, target_summary, status, expires_at, result',
+      'id, tool, params, payload_hash, target_summary, status, expires_at, result, executed_at, confirmed_at',
     )
     .eq('workspace_id', workspaceId)
     .eq('id', id)

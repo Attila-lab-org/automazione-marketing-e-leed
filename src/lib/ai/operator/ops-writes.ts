@@ -463,6 +463,7 @@ export async function executeOpsActionNow(args: {
         workspaceId: args.workspaceId,
         threadId,
         env,
+        allowWhenDisabled: true,
       });
       await recordAiAudit(args.admin, {
         workspaceId: args.workspaceId,
@@ -473,12 +474,16 @@ export async function executeOpsActionNow(args: {
         entityId: threadId,
         result: { sent: result.sent, reason: result.reason },
       });
+      const reasonLabel =
+        result.reason === 'TELEGRAM_DISABLED'
+          ? 'Telegram non è attivo. Scrivi «avvia telegram», conferma, poi riprova.'
+          : result.reason;
       return {
         tool: 'reply_telegram',
         ok: result.sent,
         summary: result.sent
           ? 'Ho fatto rispondere Attila sulla conversazione Telegram.'
-          : `Non ho inviato: ${result.reason}.`,
+          : `Non ho inviato: ${reasonLabel}.`,
         data: { threadId, reason: result.reason },
       };
     }
@@ -486,6 +491,7 @@ export async function executeOpsActionNow(args: {
       admin: args.admin,
       workspaceId: args.workspaceId,
       env,
+      allowWhenDisabled: true,
     });
     await recordAiAudit(args.admin, {
       workspaceId: args.workspaceId,

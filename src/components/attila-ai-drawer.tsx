@@ -122,6 +122,7 @@ export default function AttilaAiDrawer() {
   const [tools, setTools] = useState<ToolStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [modeLabel, setModeLabel] = useState("ASSISTITO");
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const [seq, setSeq] = useState(0);
@@ -338,8 +339,11 @@ export default function AttilaAiDrawer() {
                           <button
                             key={`${action.type}-${action.pendingActionId}`}
                             type="button"
-                            className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                            disabled={confirmingId === action.pendingActionId || busy}
+                            className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
                             onClick={() => {
+                              if (confirmingId) return;
+                              setConfirmingId(action.pendingActionId);
                               void fetch("/api/ai/operator/confirm", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
@@ -347,20 +351,27 @@ export default function AttilaAiDrawer() {
                                   pendingActionId: action.pendingActionId,
                                   accept: action.type === "confirm_action",
                                 }),
-                              }).then(async (response) => {
-                                const data = (await response.json()) as { summary?: string; error?: string };
-                                setMessages((current) => [
-                                  ...current,
-                                  {
-                                    id: `sys-${Date.now()}`,
-                                    role: "assistant",
-                                    content: data.summary ?? data.error ?? "Azione aggiornata",
-                                  },
-                                ]);
-                              });
+                              })
+                                .then(async (response) => {
+                                  const data = (await response.json()) as {
+                                    summary?: string;
+                                    error?: string;
+                                  };
+                                  setMessages((current) => [
+                                    ...current.map((row) =>
+                                      row.id === message.id ? { ...row, actions: undefined } : row,
+                                    ),
+                                    {
+                                      id: `sys-${Date.now()}`,
+                                      role: "assistant",
+                                      content: data.summary ?? data.error ?? "Azione aggiornata",
+                                    },
+                                  ]);
+                                })
+                                .finally(() => setConfirmingId(null));
                             }}
                           >
-                            {action.label}
+                            {confirmingId === action.pendingActionId ? "Attendi…" : action.label}
                           </button>
                         ) : action.type === "send_followup" ? (
                           <button
