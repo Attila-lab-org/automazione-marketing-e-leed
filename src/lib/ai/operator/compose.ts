@@ -25,7 +25,7 @@ export function composeOperatorReply(
   if (intent?.kind === 'UNKNOWN') {
     return {
       reply:
-        'Non ho collegato questa richiesta a un’azione del Sales OS. Vuoi trovare lead, preparare una campagna TEST, vedere i blocker, oppure altro?',
+        'Non ho collegato questa richiesta a un’azione. Prova: «rispondi a telegram», «prendi in carico», «aggiungi disponibilità domani alle 15:00», «riprogramma appuntamento», oppure preparare una campagna TEST.',
       actions: [],
     };
   }
@@ -94,6 +94,60 @@ export function composeOperatorReply(
     parts.push(personalize.summary);
     const path = typeof personalize.data.publicPath === 'string' ? personalize.data.publicPath : null;
     if (path) actions.push({ type: 'open_demo', path, label: 'Apri demo' });
+  }
+
+  const opsWrite = writes.find((w) =>
+    [
+      'reply_telegram',
+      'take_over_thread',
+      'return_to_ai',
+      'stop_automation',
+      'create_calendar_slot',
+      'cancel_appointment',
+      'reschedule_appointment',
+      'set_telegram_runtime',
+    ].includes(w.tool),
+  );
+  if (opsWrite) {
+    parts.push(opsWrite.summary);
+    const href = typeof opsWrite.data.href === 'string' ? opsWrite.data.href : null;
+    const threadId = typeof opsWrite.data.threadId === 'string' ? opsWrite.data.threadId : null;
+    const pendingId = typeof opsWrite.data.pendingActionId === 'string' ? opsWrite.data.pendingActionId : null;
+    const confirmLabel = opsWrite.data.confirmLabel;
+    if (href?.startsWith('/inbox') || threadId) {
+      actions.push({
+        type: 'open_inbox',
+        ...(threadId ? { threadId } : {}),
+        label: 'Apri messaggi',
+      });
+    }
+    if (pendingId && opsWrite.ok) {
+      const label =
+        confirmLabel === 'Conferma risposta' ||
+        confirmLabel === 'Conferma azione' ||
+        confirmLabel === 'Metti in pausa' ||
+        confirmLabel === 'Conferma invio' ||
+        confirmLabel === 'Abilita policy'
+          ? confirmLabel
+          : 'Conferma azione';
+      actions.push({ type: 'confirm_action', pendingActionId: pendingId, label });
+      actions.push({ type: 'cancel_action', pendingActionId: pendingId, label: 'Annulla' });
+    }
+    if (opsWrite.tool === 'create_calendar_slot' || opsWrite.tool === 'reschedule_appointment') {
+      actions.push({ type: 'open_calendar', label: 'Apri calendario' });
+    }
+  }
+
+  const pauseWrite = writes.find((w) => w.tool === 'pause_campaign');
+  if (pauseWrite) {
+    parts.push(pauseWrite.summary);
+    const pendingId = typeof pauseWrite.data.pendingActionId === 'string' ? pauseWrite.data.pendingActionId : null;
+    const campaignId = typeof pauseWrite.data.campaignId === 'string' ? pauseWrite.data.campaignId : null;
+    if (campaignId) actions.push({ type: 'open_campaign', campaignId, label: 'Apri campagna' });
+    if (pendingId && pauseWrite.ok) {
+      actions.push({ type: 'confirm_action', pendingActionId: pendingId, label: 'Metti in pausa' });
+      actions.push({ type: 'cancel_action', pendingActionId: pendingId, label: 'Annulla' });
+    }
   }
 
   const mutation = writes.find((w) => w.tool === 'campaign_mutation');
@@ -248,13 +302,103 @@ export function composeOperatorReply(
   }
 
   const conversations = byName.get('list_conversations') as Array<{ leadName: string }> | undefined;
-  if (conversations) {
+  if (conversations && !opsWrite) {
     parts.push(
       conversations.length
         ? `Ci sono ${conversations.length} conversazioni in Messaggi.`
         : 'Non ci sono conversazioni in Messaggi.',
     );
     if (conversations.length) actions.push({ type: 'open_inbox', label: 'Apri messaggi' });
+  }
+
+  const calendarSummary = byName.get('get_calendar_summary') as
+    | {
+        scheduledAppointments: number;
+        completedAppointments: number;
+        cancelledAppointments: number;
+        upcomingThisWeek: number;
+        availableSlots: number;
+        nextAppointments: Array<{ label: string; leadName?: string | null; id: string }>;
+        periodLabel: string;
+      }
+    | undefined;
+  if (calendarSummary) {
+    parts.push(
+      `In calendario hai ${calendarSummary.scheduledAppointments} appuntamenti fissati (status SCHEDULED), di cui ${calendarSummary.upcomingThisWeek} questa settimana. Completati: ${calendarSummary.completedAppointments}. Annullati: ${calendarSummary.cancelledAppointments}. Slot liberi: ${calendarSummary.availableSlots}.`,
+    );
+    if (calendarSummary.nextAppointments.length) {
+      parts.push(
+        `Prossimi: ${calendarSummary.nextAppointments
+          .slice(0, 5)
+          .map((e) => `${e.label}${e.leadName ? ` (${e.leadName})` : ''}`)
+          .join('; ')}.`,
+      );
+    } else {
+      parts.push('Nessun appuntamento SCHEDULED nei prossimi giorni.');
+    }
+    actions.push({
+      type: 'open_calendar',
+      ...(calendarSummary.nextAppointments[0]?.id
+        ? { focus: calendarSummary.nextAppointments[0].id }
+        : {}),
+      label: 'Apri calendario',
+    });
+  }
+
+  const calendarEvents = byName.get('list_calendar_events') as
+    | Array<{ label: string; status: string; leadName?: string | null }>
+    | undefined;
+  if (calendarEvents && !calendarSummary) {
+    parts.push(
+      calendarEvents.length
+        ? `Eventi calendario: ${calendarEvents
+            .slice(0, 8)
+            .map((e) => `${e.label} [${e.status}]`)
+            .join('; ')}.`
+        : 'Nessun evento in calendario per il periodo richiesto.',
+    );
+    actions.push({ type: 'open_calendar', label: 'Apri calendario' });
+  }
+
+  const slots = byName.get('list_available_slots') as Array<{ label: string }> | undefined;
+  if (slots) {
+    parts.push(
+      slots.length
+        ? `Disponibilità aperte: ${slots.slice(0, 8).map((s) => s.label).join('; ')}.`
+        : 'Non ci sono slot disponibili. Aggiungine uno, es. «aggiungi disponibilità domani alle 15:00».',
+    );
+    actions.push({ type: 'open_calendar', label: 'Apri calendario' });
+  }
+
+  const conversation = byName.get('get_conversation') as
+    | {
+        leadName?: string;
+        status?: string;
+        assignedMode?: string | null;
+        messages?: Array<{ direction: string; body: string }>;
+        threadId?: string;
+      }
+    | null
+    | undefined;
+  if (conversation?.leadName && !opsWrite) {
+    parts.push(
+      `Conversazione con ${conversation.leadName} (${conversation.status ?? 'aperta'}${
+        conversation.assignedMode ? `, modalità ${conversation.assignedMode}` : ''
+      }).`,
+    );
+    if (conversation.messages?.length) {
+      const last = conversation.messages.slice(-4);
+      parts.push(
+        last
+          .map((m) => `${m.direction === 'INBOUND' ? 'Cliente' : 'Noi'}: ${m.body.slice(0, 120)}`)
+          .join('\n'),
+      );
+    }
+    actions.push({
+      type: 'open_inbox',
+      ...(conversation.threadId ? { threadId: conversation.threadId } : {}),
+      label: 'Apri messaggi',
+    });
   }
 
   const demoInspect = byName.get('inspect_demo') as { publicPath?: string; leadName?: string } | undefined;

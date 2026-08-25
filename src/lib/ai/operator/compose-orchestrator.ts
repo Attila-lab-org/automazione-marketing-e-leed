@@ -1,7 +1,18 @@
 import { buildOperatorCapabilityReply } from './capabilities';
 import type { OperatorComposeInput } from './orchestrator-input';
 import type { OperatorFinalReply } from './orchestrator-schema';
-import type { BlockerItem, CampaignSummary, DailyReport, DemoSummary, LeadSearchHit, TelegramInboundStatus, TemplateSummary } from './registry';
+import type {
+  BlockerItem,
+  CalendarEventHit,
+  CalendarSlotHit,
+  CalendarSummary,
+  CampaignSummary,
+  DailyReport,
+  DemoSummary,
+  LeadSearchHit,
+  TelegramInboundStatus,
+  TemplateSummary,
+} from './registry';
 
 function succeeded<T>(input: OperatorComposeInput, name: string): T | undefined {
   const row = input.traces.find((t) => t.ok && t.name === name);
@@ -19,6 +30,39 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
 
   const parts: string[] = [];
   if (input.writeSummaries.length) parts.push(input.writeSummaries.join(' '));
+
+  const calendar = succeeded<CalendarSummary>(input, 'get_calendar_summary');
+  if (calendar) {
+    parts.push(
+      `In calendario hai ${calendar.scheduledAppointments} appuntamenti fissati (SCHEDULED), di cui ${calendar.upcomingThisWeek} questa settimana. Completati: ${calendar.completedAppointments}. Annullati: ${calendar.cancelledAppointments}. Slot liberi: ${calendar.availableSlots}.`,
+    );
+    if (calendar.nextAppointments.length) {
+      parts.push(
+        `Prossimi: ${calendar.nextAppointments
+          .slice(0, 5)
+          .map((e) => `${e.label}${e.leadName ? ` (${e.leadName})` : ''}`)
+          .join('; ')}.`,
+      );
+    }
+  }
+
+  const events = succeeded<CalendarEventHit[]>(input, 'list_calendar_events');
+  if (events && !calendar) {
+    parts.push(
+      events.length
+        ? `Eventi: ${events.slice(0, 8).map((e) => `${e.label} [${e.status}]`).join('; ')}.`
+        : 'Nessun evento in calendario per il periodo richiesto.',
+    );
+  }
+
+  const slots = succeeded<CalendarSlotHit[]>(input, 'list_available_slots');
+  if (slots) {
+    parts.push(
+      slots.length
+        ? `Disponibilità: ${slots.slice(0, 8).map((s) => s.label).join('; ')}.`
+        : 'Nessuno slot disponibile.',
+    );
+  }
 
   const telegram = succeeded<TelegramInboundStatus>(input, 'get_telegram_inbound_status');
   if (telegram) {
@@ -104,7 +148,7 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
     return {
       reply:
         input.plan.clarification ??
-        'Ho i dati degli strumenti usati. Dimmi se vuoi approfondire lead, campagna, demo o Telegram.',
+        'Ho i dati degli strumenti usati. Dimmi se vuoi approfondire lead, campagna, calendario, demo o Telegram.',
       citedTools: cited,
     };
   }

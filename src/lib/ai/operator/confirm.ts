@@ -1,8 +1,10 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { approveCampaignLeads } from '@/lib/campaigns/review-queue';
-import { getPendingAction, hashPayload, markPending } from '@/lib/ai/operator/pending';
+import { getPendingAction, hashPayload, markPending, claimPendingForExecution } from '@/lib/ai/operator/pending';
 import { pauseCampaign, recordAiAudit } from '@/lib/ai/operator/writes';
 import { activateAutonomyPolicy } from '@/lib/sales/autonomy';
+import { executeOpsActionNow } from '@/lib/ai/operator/ops-writes';
+import { getToolContract } from '@/lib/ai/operator/tool-contracts';
 
 export async function confirmPendingAction(args: {
   admin: AppSupabaseClient;
@@ -12,7 +14,9 @@ export async function confirmPendingAction(args: {
 }): Promise<{ ok: boolean; summary: string; result?: unknown }> {
   const row = await getPendingAction(args.admin, args.workspaceId, args.pendingActionId);
   if (!row) return { ok: false, summary: 'Azione non trovata' };
-  if (row.status !== 'pending') return { ok: false, summary: `Azione già ${row.status}` };
+  if (row.status !== 'pending' && row.status !== 'confirmed') {
+    return { ok: false, summary: `Azione già ${row.status}` };
+  }
   if (new Date(row.expires_at) < new Date()) {
     await markPending(args.admin, args.workspaceId, row.id, { status: 'expired' });
     return { ok: false, summary: 'Conferma scaduta' };
@@ -29,32 +33,78 @@ export async function confirmPendingAction(args: {
       status: 'cancelled',
       result: { cancelled: true },
     });
-    return { ok: true, summary: 'Azione annullata. Nessun invio.' };
+    return { ok: true, summary: 'Azione annullata. Nessuna modifica eseguita.' };
   }
 
-  await markPending(args.admin, args.workspaceId, row.id, {
-    status: 'confirmed',
-    confirmed_at: new Date().toISOString(),
-  });
+  const claimed = await claimPendingForExecution(args.admin, args.workspaceId, row.id);
+  if (!claimed) {
+    return { ok: false, summary: 'Azione già in esecuzione o già eseguita.' };
+  }
 
   let result: unknown = {};
-  if (row.tool === 'send_campaign') {
-    const campaignId = String(params.campaignId ?? '');
-    result = await approveCampaignLeads(args.admin, args.workspaceId, campaignId);
-  } else if (row.tool === 'enable_autonomy') {
-    await activateAutonomyPolicy(args.admin, args.workspaceId, String(params.policyId ?? ''));
-    result = { activated: true };
-  } else if (row.tool === 'pause_campaign') {
-    const campaignId = String(params.campaignId ?? '');
-    await pauseCampaign(args.admin, args.workspaceId, campaignId);
-    result = { paused: true, campaignId };
-  } else if (row.tool === 'delete_campaign') {
-    return {
-      ok: false,
-      summary: 'Le campagne non vengono eliminate definitivamente dal sistema. Posso metterla in pausa.',
-    };
-  } else {
-    return { ok: false, summary: 'Tool non eseguibile dopo conferma' };
+  let summary = 'Azione eseguita come confermata.';
+
+  try {
+    if (row.tool === 'send_campaign') {
+      const campaignId = String(params.campaignId ?? '');
+      result = await approveCampaignLeads(args.admin, args.workspaceId, campaignId);
+    } else if (row.tool === 'enable_autonomy') {
+      await activateAutonomyPolicy(args.admin, args.workspaceId, String(params.policyId ?? ''));
+      result = { activated: true };
+    } else if (row.tool === 'pause_campaign') {
+      const campaignId = String(params.campaignId ?? '');
+      await pauseCampaign(args.admin, args.workspaceId, campaignId);
+      result = { paused: true, campaignId };
+    } else if (row.tool === 'delete_campaign') {
+      return {
+        ok: false,
+        summary: 'Le campagne non vengono eliminate definitivamente dal sistema. Posso metterla in pausa.',
+      };
+    } else if (
+      row.tool === 'reply_telegram' ||
+      row.tool === 'cancel_appointment' ||
+      row.tool === 'stop_automation' ||
+      row.tool === 'set_telegram_runtime'
+    ) {
+      const action =
+        row.tool === 'set_telegram_runtime'
+          ? String(params.runtimeAction ?? 'stop') === 'start'
+            ? 'start_telegram'
+            : 'stop_telegram'
+          : row.tool;
+      const executed = await executeOpsActionNow({
+        admin: args.admin,
+        workspaceId: args.workspaceId,
+        action,
+        params,
+        refs: {
+          lastThreadId: typeof params.threadId === 'string' ? params.threadId : null,
+          lastLeadId: typeof params.leadId === 'string' ? params.leadId : null,
+          lastEventId: typeof params.eventId === 'string' ? params.eventId : null,
+        },
+      });
+      result = executed.data;
+      summary = executed.summary;
+      if (!executed.ok) {
+        await markPending(args.admin, args.workspaceId, row.id, {
+          status: 'pending',
+          result: { failed: true, ...(executed.data as object) },
+        });
+        return { ok: false, summary: executed.summary, result };
+      }
+    } else {
+      const contract = getToolContract(row.tool);
+      if (!contract) {
+        return { ok: false, summary: 'Tool non eseguibile dopo conferma' };
+      }
+      return { ok: false, summary: 'Tool non eseguibile dopo conferma' };
+    }
+  } catch (error) {
+    await markPending(args.admin, args.workspaceId, row.id, {
+      status: 'pending',
+      result: { error: error instanceof Error ? error.message : 'errore' },
+    });
+    throw error;
   }
 
   await markPending(args.admin, args.workspaceId, row.id, {
@@ -70,5 +120,5 @@ export async function confirmPendingAction(args: {
     confirmationId: row.id,
     result: result as Record<string, unknown>,
   });
-  return { ok: true, summary: 'Azione eseguita come confermata.', result };
+  return { ok: true, summary, result };
 }

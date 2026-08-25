@@ -32,6 +32,12 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
     label: z.literal('Apri messaggi'),
   }),
   z.object({
+    type: z.literal('open_calendar'),
+    week: z.string().max(20).optional(),
+    focus: z.string().uuid().optional(),
+    label: z.literal('Apri calendario'),
+  }),
+  z.object({
     type: z.literal('show_blockers'),
     campaignId: z.string().uuid().optional(),
     label: z.literal('Mostra blocker'),
@@ -43,6 +49,8 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
       z.literal('Conferma invio'),
       z.literal('Abilita policy'),
       z.literal('Metti in pausa'),
+      z.literal('Conferma azione'),
+      z.literal('Conferma risposta'),
     ]),
   }),
   z.object({
@@ -149,7 +157,14 @@ export function hrefForAction(action: OperatorAction): string {
     case 'open_demo':
       return action.path.startsWith('/') ? action.path : `/${action.path}`;
     case 'open_inbox':
-      return '/inbox';
+      return action.threadId ? `/inbox?thread=${action.threadId}` : '/inbox';
+    case 'open_calendar': {
+      const params = new URLSearchParams();
+      if (action.week) params.set('week', action.week);
+      if (action.focus) params.set('focus', action.focus);
+      const qs = params.toString();
+      return qs ? `/calendar?${qs}` : '/calendar';
+    }
     case 'show_blockers':
       return action.campaignId ? `/campaigns/${action.campaignId}` : '/campaigns';
     case 'confirm_action':

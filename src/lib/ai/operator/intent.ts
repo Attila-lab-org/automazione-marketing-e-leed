@@ -87,7 +87,7 @@ function isPauseCommand(q: string): boolean {
 
 function isReadQuestion(q: string): boolean {
   if (
-    /ieri|oggi|andata|report|numeri|briefing|brief|lead|attivit|miglior|ristorant|review|da controllare|messagg|inbox|conversaz|telegram|riepilogo|dashboard|quanto|blocc|perch|blocker|aprila|apri questa|apri la campagna|stato della campagna|dettagli campagna/.test(
+    /ieri|oggi|andata|report|numeri|briefing|brief|lead|attivit|miglior|ristorant|review|da controllare|messagg|inbox|conversaz|telegram|riepilogo|dashboard|quanto|blocc|perch|blocker|aprila|apri questa|apri la campagna|stato della campagna|dettagli campagna|appuntament|calendario|disponibilit|slot|fissat|confermat/.test(
       q,
     )
   ) {

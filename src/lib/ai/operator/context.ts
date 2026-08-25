@@ -12,6 +12,8 @@ export type OperatorEntityRefs = {
   lastDemoId: string | null;
   lastTemplateId: string | null;
   lastThreadId: string | null;
+  lastEventId: string | null;
+  lastSlotId: string | null;
   lastReviewContext: boolean;
   lastOperation: string | null;
   lastDemoProposal: DemoPersonalization | null;
@@ -25,6 +27,8 @@ export function emptyEntityRefs(): OperatorEntityRefs {
     lastDemoId: null,
     lastTemplateId: null,
     lastThreadId: null,
+    lastEventId: null,
+    lastSlotId: null,
     lastReviewContext: false,
     lastOperation: null,
     lastDemoProposal: null,
@@ -58,6 +62,14 @@ export function parseEntityRefs(raw: unknown): OperatorEntityRefs {
     lastThreadId:
       typeof nested.lastThreadId === 'string' && UUID_RE.test(nested.lastThreadId)
         ? nested.lastThreadId
+        : null,
+    lastEventId:
+      typeof nested.lastEventId === 'string' && UUID_RE.test(nested.lastEventId)
+        ? nested.lastEventId
+        : null,
+    lastSlotId:
+      typeof nested.lastSlotId === 'string' && UUID_RE.test(nested.lastSlotId)
+        ? nested.lastSlotId
         : null,
     lastReviewContext: nested.lastReviewContext === true,
     lastOperation: typeof nested.lastOperation === 'string' ? nested.lastOperation.slice(0, 80) : null,
@@ -119,6 +131,8 @@ export function mergeEntityRefs(
     lastDemoId: prev.lastDemoId,
     lastTemplateId: prev.lastTemplateId,
     lastThreadId: prev.lastThreadId,
+    lastEventId: prev.lastEventId,
+    lastSlotId: prev.lastSlotId,
     lastReviewContext: prev.lastReviewContext,
     lastOperation: prev.lastOperation,
     lastDemoProposal: prev.lastDemoProposal,
@@ -152,6 +166,24 @@ export function mergeEntityRefs(
   if (demoWrite?.ok) {
     const proposal = parseDemoProposal(demoWrite.data.proposal);
     if (proposal) next.lastDemoProposal = proposal;
+  }
+  const threadWrite = writes.find(
+    (w) => w.ok && typeof w.data.threadId === 'string' && UUID_RE.test(w.data.threadId),
+  );
+  if (threadWrite && typeof threadWrite.data.threadId === 'string') {
+    next.lastThreadId = threadWrite.data.threadId;
+  }
+  const eventWrite = writes.find(
+    (w) => w.ok && typeof w.data.eventId === 'string' && UUID_RE.test(w.data.eventId),
+  );
+  if (eventWrite && typeof eventWrite.data.eventId === 'string') {
+    next.lastEventId = eventWrite.data.eventId;
+  }
+  const slotWrite = writes.find(
+    (w) => w.ok && typeof w.data.slotId === 'string' && UUID_RE.test(w.data.slotId),
+  );
+  if (slotWrite && typeof slotWrite.data.slotId === 'string') {
+    next.lastSlotId = slotWrite.data.slotId;
   }
   if (writes[0]?.tool) next.lastOperation = writes[0].tool;
 
@@ -190,6 +222,30 @@ export function mergeEntityRefs(
     if (trace.name === 'get_conversation' && trace.result && typeof trace.result === 'object') {
       const id = (trace.result as { threadId?: unknown }).threadId;
       if (typeof id === 'string' && UUID_RE.test(id)) next.lastThreadId = id;
+    }
+    if (trace.name === 'list_calendar_events' && Array.isArray(trace.result) && trace.result[0]) {
+      const id = (trace.result[0] as { id?: unknown }).id;
+      if (typeof id === 'string' && UUID_RE.test(id)) next.lastEventId = next.lastEventId ?? id;
+      const leadId = (trace.result[0] as { leadId?: unknown }).leadId;
+      if (typeof leadId === 'string' && UUID_RE.test(leadId)) next.lastLeadId = next.lastLeadId ?? leadId;
+      const threadId = (trace.result[0] as { threadId?: unknown }).threadId;
+      if (typeof threadId === 'string' && UUID_RE.test(threadId)) {
+        next.lastThreadId = next.lastThreadId ?? threadId;
+      }
+    }
+    if (trace.name === 'get_calendar_summary' && trace.result && typeof trace.result === 'object') {
+      const nextAppts = (trace.result as { nextAppointments?: Array<{ id?: string; leadId?: string; threadId?: string }> })
+        .nextAppointments;
+      const first = nextAppts?.[0];
+      if (first?.id && UUID_RE.test(first.id)) next.lastEventId = next.lastEventId ?? first.id;
+      if (first?.leadId && UUID_RE.test(first.leadId)) next.lastLeadId = next.lastLeadId ?? first.leadId;
+      if (first?.threadId && UUID_RE.test(first.threadId)) {
+        next.lastThreadId = next.lastThreadId ?? first.threadId;
+      }
+    }
+    if (trace.name === 'list_available_slots' && Array.isArray(trace.result) && trace.result[0]) {
+      const id = (trace.result[0] as { id?: unknown }).id;
+      if (typeof id === 'string' && UUID_RE.test(id)) next.lastSlotId = next.lastSlotId ?? id;
     }
   }
 

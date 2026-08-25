@@ -5,11 +5,15 @@ import { listReviewQueue } from '@/lib/campaigns/review-queue';
 import { getOutreachPausedAll } from '@/lib/settings/outreach-pause';
 import { resolveAppUrl } from '@/lib/app-url';
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
-import { europeRomeDayRange } from './time';
+import { europeRomeDayRange, formatEuropeRome } from './time';
 import { listDemos, loadDemoById } from '@/lib/demos/load';
 import { getTelegramInboundSettings } from '@/lib/inbound/telegram-settings';
+import { listAvailableSlots, listCalendarEvents } from '@/lib/calendar';
 import type {
   BlockerItem,
+  CalendarEventHit,
+  CalendarSlotHit,
+  CalendarSummary,
   CampaignDetail,
   CampaignSummary,
   ConversationHit,
@@ -395,6 +399,12 @@ export function createSupabaseOperatorData(
         channelLabel: detail.chat.isGroup ? 'Gruppo' : 'Chat',
         preview: detail.messages.at(-1)?.body?.slice(0, 160) ?? null,
         status: detail.replyStatus.state,
+        assignedMode: detail.assignedMode ?? null,
+        messages: detail.messages.slice(-12).map((m) => ({
+          direction: m.direction,
+          body: (m.body ?? '').slice(0, 400),
+          at: m.sentAt,
+        })),
       };
     },
 
@@ -468,6 +478,128 @@ export function createSupabaseOperatorData(
     async inspectTemplate(templateId) {
       const templates = await this.listTemplates();
       return templates.find((t) => t.id === templateId) ?? null;
+    },
+
+    async listCalendarEvents(input) {
+      const fromIso = input?.fromIso ?? new Date().toISOString();
+      const events = await listCalendarEvents(admin, workspaceId, {
+        fromIso,
+        toIso: input?.toIso,
+        leadId: input?.leadId,
+        status: input?.status as 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | undefined,
+        types: ['APPOINTMENT'],
+      });
+      const leadIds = [...new Set(events.map((e) => e.lead_id).filter(Boolean))] as string[];
+      const leadNames = new Map<string, string>();
+      if (leadIds.length) {
+        const { data: leads } = await admin
+          .from('leads')
+          .select('id, name')
+          .eq('workspace_id', workspaceId)
+          .in('id', leadIds);
+        for (const lead of leads ?? []) leadNames.set(lead.id, lead.name);
+      }
+      return events.slice(0, input?.limit ?? 20).map(
+        (event): CalendarEventHit => ({
+          id: event.id,
+          title: event.title,
+          eventType: event.event_type,
+          status: event.status,
+          startsAt: event.starts_at,
+          endsAt: event.ends_at,
+          leadId: event.lead_id,
+          leadName: event.lead_id ? leadNames.get(event.lead_id) ?? null : null,
+          threadId: event.thread_id,
+          label: event.starts_at
+            ? `${formatEuropeRome(event.starts_at)} · ${event.title}`
+            : event.title,
+        }),
+      );
+    },
+
+    async listAvailableSlots(input) {
+      const slots = await listAvailableSlots(admin, workspaceId, {
+        fromIso: input?.fromIso,
+        limit: input?.limit ?? 10,
+      });
+      return slots.map(
+        (slot): CalendarSlotHit => ({
+          id: slot.id,
+          startsAt: slot.starts_at,
+          endsAt: slot.ends_at,
+          status: slot.status,
+          label: formatEuropeRome(slot.starts_at),
+        }),
+      );
+    },
+
+    async getCalendarSummary(input) {
+      const daysAhead = input?.daysAhead ?? 14;
+      const now = new Date();
+      const to = new Date(now.getTime() + daysAhead * 24 * 60 * 60_000);
+      const weekEnd = new Date(now.getTime() + 7 * 24 * 60 * 60_000);
+      const [allScheduled, completed, cancelled, upcoming, slots] = await Promise.all([
+        listCalendarEvents(admin, workspaceId, {
+          types: ['APPOINTMENT'],
+          status: 'SCHEDULED',
+          fromIso: now.toISOString(),
+        }),
+        admin
+          .from('calendar_events')
+          .select('id', { count: 'exact', head: true })
+          .eq('workspace_id', workspaceId)
+          .eq('event_type', 'APPOINTMENT')
+          .eq('status', 'COMPLETED'),
+        admin
+          .from('calendar_events')
+          .select('id', { count: 'exact', head: true })
+          .eq('workspace_id', workspaceId)
+          .eq('event_type', 'APPOINTMENT')
+          .eq('status', 'CANCELLED'),
+        listCalendarEvents(admin, workspaceId, {
+          types: ['APPOINTMENT'],
+          status: 'SCHEDULED',
+          fromIso: now.toISOString(),
+          toIso: to.toISOString(),
+        }),
+        listAvailableSlots(admin, workspaceId, { limit: 40 }),
+      ]);
+      const thisWeek = allScheduled.filter(
+        (e) => e.starts_at && new Date(e.starts_at).getTime() <= weekEnd.getTime(),
+      );
+      const leadIds = [...new Set(upcoming.slice(0, 5).map((e) => e.lead_id).filter(Boolean))] as string[];
+      const leadNames = new Map<string, string>();
+      if (leadIds.length) {
+        const { data: leads } = await admin
+          .from('leads')
+          .select('id, name')
+          .eq('workspace_id', workspaceId)
+          .in('id', leadIds);
+        for (const lead of leads ?? []) leadNames.set(lead.id, lead.name);
+      }
+      const nextAppointments: CalendarEventHit[] = upcoming.slice(0, 5).map((event) => ({
+        id: event.id,
+        title: event.title,
+        eventType: event.event_type,
+        status: event.status,
+        startsAt: event.starts_at,
+        endsAt: event.ends_at,
+        leadId: event.lead_id,
+        leadName: event.lead_id ? leadNames.get(event.lead_id) ?? null : null,
+        threadId: event.thread_id,
+        label: event.starts_at
+          ? `${formatEuropeRome(event.starts_at)} · ${event.title}`
+          : event.title,
+      }));
+      return {
+        scheduledAppointments: allScheduled.length,
+        completedAppointments: completed.count ?? 0,
+        cancelledAppointments: cancelled.count ?? 0,
+        upcomingThisWeek: thisWeek.length,
+        availableSlots: slots.length,
+        nextAppointments,
+        periodLabel: `prossimi ${daysAhead} giorni`,
+      } satisfies CalendarSummary;
     },
   };
 }
@@ -574,6 +706,23 @@ export function createMemoryOperatorData(seed?: {
     },
     async inspectTemplate(templateId) {
       return seed?.templates?.find((t) => t.id === templateId) ?? null;
+    },
+    async listCalendarEvents() {
+      return [];
+    },
+    async listAvailableSlots() {
+      return [];
+    },
+    async getCalendarSummary() {
+      return {
+        scheduledAppointments: 0,
+        completedAppointments: 0,
+        cancelledAppointments: 0,
+        upcomingThisWeek: 0,
+        availableSlots: 0,
+        nextAppointments: [],
+        periodLabel: 'prossimi 14 giorni',
+      };
     },
   };
 }

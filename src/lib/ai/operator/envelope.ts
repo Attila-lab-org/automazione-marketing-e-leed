@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const OPERATOR_ENTITY_TYPES = ['none', 'campaign', 'lead', 'thread', 'review'] as const;
+export const OPERATOR_ENTITY_TYPES = ['none', 'campaign', 'lead', 'thread', 'review', 'calendar', 'event'] as const;
 export type OperatorEntityType = (typeof OPERATOR_ENTITY_TYPES)[number];
 
 export const operatorEnvelopeSchema = z.object({
@@ -27,6 +27,7 @@ export function envelopeFromPath(pathname: string, search = ''): OperatorEnvelop
   const city = params.get('city')?.trim() || undefined;
   const query = params.get('q')?.trim() || undefined;
   const filters = city || query ? { city, query } : undefined;
+  const threadParam = params.get('thread')?.trim() || undefined;
 
   if (parts[0] === 'campaigns' && parts[1] && UUID_RE.test(parts[1])) {
     return { route: pathname, entityType: 'campaign', entityId: parts[1], filters };
@@ -34,8 +35,20 @@ export function envelopeFromPath(pathname: string, search = ''): OperatorEnvelop
   if (parts[0] === 'leads' && parts[1] && UUID_RE.test(parts[1])) {
     return { route: pathname, entityType: 'lead', entityId: parts[1], filters };
   }
-  if (parts[0] === 'inbox' && parts[1] && UUID_RE.test(parts[1])) {
-    return { route: pathname, entityType: 'thread', entityId: parts[1], filters };
+  if (parts[0] === 'inbox' || parts[0] === 'telegram') {
+    if (threadParam && UUID_RE.test(threadParam)) {
+      return { route: pathname, entityType: 'thread', entityId: threadParam, filters };
+    }
+    if (parts[1] && UUID_RE.test(parts[1])) {
+      return { route: pathname, entityType: 'thread', entityId: parts[1], filters };
+    }
+  }
+  if (parts[0] === 'calendar') {
+    const focus = params.get('focus')?.trim() || undefined;
+    if (focus && UUID_RE.test(focus)) {
+      return { route: pathname, entityType: 'event', entityId: focus, filters };
+    }
+    return { route: pathname, entityType: 'calendar', entityId: null, filters };
   }
   if (parts[0] === 'review-queue') {
     return { route: pathname, entityType: 'review', entityId: null, filters };

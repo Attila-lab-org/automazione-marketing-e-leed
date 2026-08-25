@@ -16,9 +16,10 @@ type ChatMessage = {
 type ToolStatus = { id: string; label: string; done: boolean; ok: boolean };
 
 const SUGGESTIONS = [
-  "Come è andata ieri?",
-  "Quali sono i 20 migliori ristoranti di Milano?",
-  "Preparami una campagna TEST con i 20 migliori ristoranti di Milano.",
+  "Cosa puoi fare?",
+  "Quanti appuntamenti ho?",
+  "Rispondi a telegram",
+  "Aggiungi disponibilità domani alle 15:00",
 ];
 
 function parseSseChunk(buffer: string): { events: unknown[]; rest: string } {
@@ -145,7 +146,40 @@ export default function AttilaAiDrawer() {
         }
       })
       .catch(() => undefined);
+    try {
+      const saved = window.sessionStorage.getItem("attila-operator-session");
+      if (saved) {
+        setSessionId(saved);
+        void fetch(`/api/ai/operator/sessions?sessionId=${encodeURIComponent(saved)}`)
+          .then((r) => r.json())
+          .then((data) => {
+            if (!Array.isArray(data?.messages) || !data.messages.length) return;
+            setMessages(
+              data.messages.map(
+                (m: { id: string; role: "user" | "assistant"; content: string; actions?: OperatorAction[] }) => ({
+                  id: m.id,
+                  role: m.role,
+                  content: m.content,
+                  actions: m.actions,
+                }),
+              ),
+            );
+          })
+          .catch(() => undefined);
+      }
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    try {
+      window.sessionStorage.setItem("attila-operator-session", sessionId);
+    } catch {
+      /* ignore */
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
@@ -250,9 +284,13 @@ export default function AttilaAiDrawer() {
                     ? "Contesto: campagna"
                     : pathname.startsWith("/leads")
                       ? "Contesto: attività"
-                      : pathname.startsWith("/inbox")
+                      : pathname.startsWith("/inbox") || pathname.startsWith("/telegram")
                         ? "Contesto: messaggi"
-                        : "Comanda il Sales OS. Gli invii restano confermati."}
+                        : pathname.startsWith("/calendar")
+                          ? "Contesto: calendario"
+                          : pathname.startsWith("/review")
+                            ? "Contesto: review"
+                            : "Comanda lead, campagne, messaggi e calendario. Invii e stop restano confermati."}
                 </p>
               </div>
               <button
@@ -268,7 +306,7 @@ export default function AttilaAiDrawer() {
               {messages.length === 0 ? (
                 <div className="space-y-2">
                   <p className="text-sm text-stone-600">
-                    Posso spiegarti i numeri, i lead e perché una campagna è ferma.
+                    Posso gestire appuntamenti, Telegram, campagne e lead da qui. Gli invii e le azioni irreversibili restano da confermare.
                   </p>
                   {SUGGESTIONS.map((item) => (
                     <button

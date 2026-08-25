@@ -18,6 +18,7 @@ import { emptyEntityRefs } from '@/lib/ai/operator/context';
 import { executeCampaignMutation, executePreparePlan, createSendPending } from '@/lib/ai/operator/writes';
 import { proposeAutonomyPolicy } from '@/lib/sales/autonomy';
 import { replyLatestPendingTelegram } from '@/lib/inbound/telegram-resume';
+import { proposeOrExecuteOps } from '@/lib/ai/operator/ops-writes';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 
@@ -115,6 +116,19 @@ export const POST = withAdmin(async (request: Request) => {
               replyLatestPendingTelegram({
                 admin,
                 workspaceId: workspace.id,
+                env: process.env,
+              }),
+            runOps: (action) =>
+              proposeOrExecuteOps({
+                admin,
+                workspaceId: workspace.id,
+                action,
+                question: message,
+                refs: {
+                  lastThreadId: sessionRefs.lastThreadId,
+                  lastLeadId: sessionRefs.lastLeadId,
+                  lastEventId: sessionRefs.lastEventId,
+                },
                 env: process.env,
               }),
             campaignMutation: ({ verb, campaignId, campaign }) =>

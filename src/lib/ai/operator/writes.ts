@@ -113,22 +113,29 @@ export async function executePreparePlan(args: {
         },
       ];
     }
-    await pauseCampaign(args.admin, args.workspaceId, args.campaignId);
-    await recordAiAudit(args.admin, {
-      workspaceId: args.workspaceId,
-      actor: 'AI',
-      tool: 'pause_campaign',
-      action: 'pause',
-      entityType: 'campaign',
-      entityId: args.campaignId,
-    });
+    const { data: campaign } = await args.admin
+      .from('campaigns')
+      .select('id, name, status')
+      .eq('workspace_id', args.workspaceId)
+      .eq('id', args.campaignId)
+      .maybeSingle();
+    if (!campaign) {
+      return [
+        {
+          tool: 'pause_campaign',
+          ok: false,
+          summary: 'Campagna non trovata.',
+          data: { campaignId: args.campaignId },
+        },
+      ];
+    }
     return [
-      {
-        tool: 'pause_campaign',
-        ok: true,
-        summary: 'Campagna messa in pausa. Nessun invio ulteriore finché non la riprendi.',
-        data: { campaignId: args.campaignId },
-      },
+      await createPausePending({
+        admin: args.admin,
+        workspaceId: args.workspaceId,
+        campaignId: args.campaignId,
+        campaign: { name: campaign.name, status: campaign.status },
+      }),
     ];
   }
 

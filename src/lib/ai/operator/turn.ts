@@ -22,6 +22,7 @@ import { classifyOperatorIntent } from './intent';
 import type { OperatorHistoryItem, OperatorPlan } from './orchestrator-schema';
 import { OPERATOR_ORCHESTRATOR_PROMPT_VERSION } from './orchestrator-schema';
 import { applySafetyPolicy, isTelegramReplyRequest } from './semantic-plan';
+import { detectOperatorOpsAction } from './ops-writes';
 import {
   executeOperatorTool,
   OPERATOR_TOOL_NAMES,
@@ -68,6 +69,7 @@ export type OperatorWriteHooks = {
     proposal: DemoPersonalization | null;
   }) => Promise<WriteResult[]>;
   replyTelegram?: () => Promise<WriteResult>;
+  runOps?: (action: Exclude<import('./ops-writes').OperatorOpsAction, 'none'>) => Promise<WriteResult>;
 };
 
 export type OperatorTurnInput = {
@@ -118,7 +120,14 @@ export async function* runOperatorTurn(
   const assistMode = input.assistMode ?? 'ASSISTITO';
   const fallbackIntent = classifyOperatorIntent(input.question);
   const telegramReplyRequested = isTelegramReplyRequest(input.question);
+  const opsAction = detectOperatorOpsAction(input.question);
   let prevRefs = input.refs ?? emptyEntityRefs();
+  if (input.envelope.entityType === 'thread' && input.envelope.entityId) {
+    prevRefs = { ...prevRefs, lastThreadId: input.envelope.entityId };
+  }
+  if (input.envelope.entityType === 'event' && input.envelope.entityId) {
+    prevRefs = { ...prevRefs, lastEventId: input.envelope.entityId };
+  }
   const envelope = resolveOperatorEnvelope(input.question, input.envelope, prevRefs, fallbackIntent);
 
   const traces: Array<{ name: OperatorToolName; result: unknown; ok: boolean }> = [];
@@ -201,7 +210,32 @@ export async function* runOperatorTurn(
     };
   }
 
-  if (telegramReplyRequested && input.writes?.replyTelegram) {
+  if (opsAction !== 'none' && input.writes?.runOps) {
+    const labels: Record<string, string> = {
+      reply_telegram: 'Sto rispondendo su Telegram…',
+      take_over: 'Sto passando in gestione manuale…',
+      return_to_ai: 'Sto riattivando Attila…',
+      stop_automation: 'Sto fermando l’automazione…',
+      create_slot: 'Sto aggiungendo disponibilità…',
+      cancel_appointment: 'Sto annullando l’appuntamento…',
+      reschedule_appointment: 'Sto riprogrammando…',
+      start_telegram: 'Sto avviando Telegram…',
+      stop_telegram: 'Sto fermando Telegram…',
+    };
+    yield {
+      type: 'tool_start',
+      name: opsAction,
+      label: labels[opsAction] ?? 'Sto eseguendo l’azione…',
+    };
+    const opsResult = await input.writes.runOps(opsAction);
+    writes.push(opsResult);
+    yield {
+      type: 'tool_done',
+      name: opsAction,
+      ok: opsResult.ok,
+      label: opsResult.summary,
+    };
+  } else if (telegramReplyRequested && input.writes?.replyTelegram) {
     yield { type: 'tool_start', name: 'reply_telegram', label: 'Sto rispondendo su Telegram…' };
     const replied = await input.writes.replyTelegram();
     writes.push(replied);
@@ -361,7 +395,7 @@ export async function* runOperatorTurn(
     };
   }
 
-  if (plan.safetyClass === 'EXTERNAL') {
+  if (plan.safetyClass === 'EXTERNAL' && opsAction === 'none' && !telegramReplyRequested) {
     const targetId =
       campaignId ?? (traces.find((t) => t.name === 'get_campaign_detail')?.result as { id?: string } | undefined)?.id;
     if (targetId && input.writes?.sendPending) {
@@ -443,6 +477,11 @@ export async function* runOperatorTurn(
     assistMode,
   );
   actions = deterministic.actions;
+  // Preferisci il testo grounded quando la reply AI non riporta i numeri/dati tool
+  const groundedCalendar = traces.some((t) => t.ok && t.name === 'get_calendar_summary');
+  if (groundedCalendar && deterministic.reply && !/\b\d+\s+appuntament/i.test(replyText)) {
+    replyText = deterministic.reply;
+  }
   if (writes.length && !replyText.includes(writes[0]?.summary.slice(0, 24) ?? '___never___')) {
     if (writes[0]?.summary) replyText = `${writes[0].summary} ${replyText}`.trim();
   }

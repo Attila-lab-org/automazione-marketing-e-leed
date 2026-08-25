@@ -7,6 +7,7 @@ import type {
   OperatorSafetyClass,
 } from './orchestrator-schema';
 import type { OperatorToolName } from './registry';
+import { detectOperatorOpsAction } from './ops-writes';
 
 function norm(text: string): string {
   return text
@@ -247,6 +248,30 @@ export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
       prepareKind: /applica/.test(q) ? 'apply' : 'personalize',
     },
     {
+      id: 'calendar',
+      class: 'READ',
+      score: scoreCues(q, [
+        'appuntament',
+        'calendario',
+        'disponibilit',
+        'slot',
+        'fissat',
+        'confermat',
+        'chiamata',
+        'quando ho',
+        'quanti appuntament',
+      ]),
+      tools: [
+        call('get_calendar_summary'),
+        call('list_calendar_events', { limit: 10 }),
+        ...(scoreCues(q, ['disponibilit', 'slot', 'liberi', 'alternative']) > 0
+          ? [call('list_available_slots', { limit: 8 })]
+          : []),
+      ],
+      goal: 'Leggere appuntamenti e disponibilità reali dal calendario',
+      prepareKind: 'none',
+    },
+    {
       id: 'template',
       class: 'READ',
       score: scoreCues(q, ['template', 'demo', 'controlla', 'fammi vedere', 'apri la demo']),
@@ -370,10 +395,32 @@ export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
 
 export function applySafetyPolicy(plan: OperatorPlan, question: string): OperatorPlan {
   const q = norm(question);
+  const ops = detectOperatorOpsAction(question);
+  if (ops !== 'none') {
+    const toolCalls: OperatorPlan['toolCalls'] =
+      ops === 'start_telegram' || ops === 'stop_telegram'
+        ? [call('get_telegram_inbound_status')]
+        : ops === 'take_over' ||
+            ops === 'return_to_ai' ||
+            ops === 'stop_automation' ||
+            ops === 'reply_telegram'
+          ? [call('list_conversations')]
+          : [];
+    return {
+      ...plan,
+      // READ evita prepare campagna / send_pending; l’azione ops gira a parte in turn.ts
+      safetyClass: 'READ',
+      telegramIsInboundScan: false,
+      prepareKind: 'none',
+      toolCalls,
+      goal: `Operazione commerciale: ${ops}`,
+      clarification: null,
+    };
+  }
   if (isTelegramReplyRequest(question)) {
     return {
       ...plan,
-      safetyClass: 'EXTERNAL',
+      safetyClass: 'READ',
       telegramIsInboundScan: false,
       prepareKind: 'none',
       toolCalls: [],
@@ -384,7 +431,7 @@ export function applySafetyPolicy(plan: OperatorPlan, question: string): Operato
   const telegramScan =
     q.includes('telegram') &&
     !q.includes('campagna') &&
-    scoreCues(q, ['ricerca', 'cerca', 'scan', 'ascolto', 'monitor', 'intercett', 'fai partire', 'avvia']) > 0;
+    scoreCues(q, ['ricerca', 'cerca', 'scan', 'ascolto', 'monitor', 'intercett']) > 0;
   if (telegramScan || plan.telegramIsInboundScan) {
     return {
       ...plan,

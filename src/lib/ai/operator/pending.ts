@@ -72,6 +72,32 @@ export async function createPendingAction(
     };
   }
 
+  if (existing && (existing.status === 'expired' || existing.status === 'cancelled' || new Date(existing.expires_at) <= new Date())) {
+    await admin
+      .from('pending_ai_actions')
+      .update({
+        status: 'pending',
+        params: args.params as Json,
+        payload_hash: payloadHash,
+        target_summary: args.targetSummary as Json,
+        expires_at: expiresAt,
+        result: null,
+        confirmed_at: null,
+        executed_at: null,
+      })
+      .eq('workspace_id', args.workspaceId)
+      .eq('id', existing.id);
+    return {
+      id: existing.id,
+      tool: args.tool,
+      params: args.params,
+      payloadHash,
+      targetSummary: args.targetSummary,
+      status: 'pending',
+      expiresAt,
+    };
+  }
+
   const { data, error } = await admin
     .from('pending_ai_actions')
     .insert({
@@ -131,6 +157,27 @@ export async function markPending(
     .eq('workspace_id', workspaceId)
     .eq('id', id);
   if (error) throw new Error(error.message);
+}
+
+/** Claim atomico: solo uno dei click paralleli passa da pending → confirmed. */
+export async function claimPendingForExecution(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+  id: string,
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from('pending_ai_actions')
+    .update({
+      status: 'confirmed',
+      confirmed_at: new Date().toISOString(),
+    })
+    .eq('workspace_id', workspaceId)
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return Boolean(data?.id);
 }
 
 export { hashPayload };

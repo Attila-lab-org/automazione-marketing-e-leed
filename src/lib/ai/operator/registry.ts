@@ -19,6 +19,9 @@ export const OPERATOR_TOOL_NAMES = [
   'list_demos',
   'inspect_demo',
   'inspect_template',
+  'list_calendar_events',
+  'list_available_slots',
+  'get_calendar_summary',
 ] as const;
 
 export type OperatorToolName = (typeof OPERATOR_TOOL_NAMES)[number];
@@ -131,6 +134,39 @@ export type ConversationHit = {
   channelLabel: string;
   preview: string | null;
   status: string;
+  assignedMode?: string | null;
+  messages?: Array<{ direction: string; body: string; at: string }>;
+};
+
+export type CalendarEventHit = {
+  id: string;
+  title: string;
+  eventType: string;
+  status: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  leadId: string | null;
+  leadName: string | null;
+  threadId: string | null;
+  label: string;
+};
+
+export type CalendarSlotHit = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  status: string;
+  label: string;
+};
+
+export type CalendarSummary = {
+  scheduledAppointments: number;
+  completedAppointments: number;
+  cancelledAppointments: number;
+  upcomingThisWeek: number;
+  availableSlots: number;
+  nextAppointments: CalendarEventHit[];
+  periodLabel: string;
 };
 
 export type OperatorDataSource = {
@@ -150,6 +186,15 @@ export type OperatorDataSource = {
   listDemos(): Promise<DemoSummary[]>;
   inspectDemo(demoId: string): Promise<DemoSummary | null>;
   inspectTemplate(templateId: string): Promise<TemplateSummary | null>;
+  listCalendarEvents(input?: {
+    fromIso?: string;
+    toIso?: string;
+    leadId?: string;
+    status?: string;
+    limit?: number;
+  }): Promise<CalendarEventHit[]>;
+  listAvailableSlots(input?: { fromIso?: string; limit?: number }): Promise<CalendarSlotHit[]>;
+  getCalendarSummary(input?: { daysAhead?: number }): Promise<CalendarSummary>;
 };
 
 export function plannedFromOrchestratorCall(
@@ -191,6 +236,26 @@ const threadIdInput = z.object({ threadId: z.string().uuid().optional() }).stric
 const dailyInput = z.object({ daysAgo: z.number().int().min(0).max(14).optional() }).strict();
 const demoIdInput = z.object({ demoId: z.string().uuid().optional() }).strict();
 const templateIdInput = z.object({ templateId: z.string().uuid().optional() }).strict();
+const calendarEventsInput = z
+  .object({
+    fromIso: z.string().max(40).optional(),
+    toIso: z.string().max(40).optional(),
+    leadId: z.string().uuid().optional(),
+    status: z.string().max(40).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  })
+  .strict();
+const calendarSlotsInput = z
+  .object({
+    fromIso: z.string().max(40).optional(),
+    limit: z.number().int().min(1).max(40).optional(),
+  })
+  .strict();
+const calendarSummaryInput = z
+  .object({
+    daysAhead: z.number().int().min(1).max(60).optional(),
+  })
+  .strict();
 
 export const TOOL_INPUT_SCHEMAS: Record<OperatorToolName, z.ZodType> = {
   get_dashboard_summary: optionalId,
@@ -209,6 +274,9 @@ export const TOOL_INPUT_SCHEMAS: Record<OperatorToolName, z.ZodType> = {
   list_demos: optionalId,
   inspect_demo: demoIdInput,
   inspect_template: templateIdInput,
+  list_calendar_events: calendarEventsInput,
+  list_available_slots: calendarSlotsInput,
+  get_calendar_summary: calendarSummaryInput,
 };
 
 export const TOOL_LABELS: Record<OperatorToolName, { start: string; done: string }> = {
@@ -231,6 +299,9 @@ export const TOOL_LABELS: Record<OperatorToolName, { start: string; done: string
   list_demos: { start: 'Sto leggendo le demo…', done: 'Demo caricate' },
   inspect_demo: { start: 'Sto ispezionando la demo…', done: 'Demo ispezionata' },
   inspect_template: { start: 'Sto ispezionando il template…', done: 'Template ispezionato' },
+  list_calendar_events: { start: 'Sto leggendo il calendario…', done: 'Eventi calendario caricati' },
+  list_available_slots: { start: 'Sto leggendo le disponibilità…', done: 'Slot caricati' },
+  get_calendar_summary: { start: 'Sto contando gli appuntamenti…', done: 'Riepilogo calendario pronto' },
 };
 
 export function isOperatorToolName(name: string): name is OperatorToolName {
@@ -337,6 +408,40 @@ export async function executeOperatorTool(
       }
       return { ok: true, name, result: await data.inspectTemplate(templateId) };
     }
+    case 'list_calendar_events':
+      return {
+        ok: true,
+        name,
+        result: await data.listCalendarEvents({
+          fromIso: typeof args.fromIso === 'string' ? args.fromIso : undefined,
+          toIso: typeof args.toIso === 'string' ? args.toIso : undefined,
+          leadId:
+            typeof args.leadId === 'string'
+              ? args.leadId
+              : envelope.entityType === 'lead'
+                ? envelope.entityId ?? undefined
+                : undefined,
+          status: typeof args.status === 'string' ? args.status : undefined,
+          limit: typeof args.limit === 'number' ? args.limit : 20,
+        }),
+      };
+    case 'list_available_slots':
+      return {
+        ok: true,
+        name,
+        result: await data.listAvailableSlots({
+          fromIso: typeof args.fromIso === 'string' ? args.fromIso : undefined,
+          limit: typeof args.limit === 'number' ? args.limit : 10,
+        }),
+      };
+    case 'get_calendar_summary':
+      return {
+        ok: true,
+        name,
+        result: await data.getCalendarSummary({
+          daysAhead: typeof args.daysAhead === 'number' ? args.daysAhead : 14,
+        }),
+      };
   }
 }
 
