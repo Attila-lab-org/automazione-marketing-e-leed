@@ -67,6 +67,7 @@ export async function ensureInboundThread(
       status: 'NEEDS_REPLY',
       unread_count: 1,
       last_message_at: new Date().toISOString(),
+      channel: subject.toLowerCase().includes('telegram') ? 'TELEGRAM' : 'EMAIL',
     })
     .select('id')
     .single();

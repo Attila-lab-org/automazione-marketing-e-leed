@@ -14,6 +14,12 @@ export type InboxThreadItem = {
   preview: string | null;
   businessStatus: string;
   needsAttention: boolean;
+  commercialState: string | null;
+  assignedMode: 'AI' | 'HUMAN' | null;
+  priority: string | null;
+  sentiment: string | null;
+  nextStep: string | null;
+  humanRequiredReason: string | null;
 };
 
 /**
@@ -28,7 +34,7 @@ export async function listInboxThreads(
   const { data: threads, error } = await admin
     .from('message_threads')
     .select(
-      'id, lead_id, subject, status, unread_count, last_message_at, campaign_id, leads(id, name, business_status)',
+      'id, lead_id, subject, status, unread_count, last_message_at, campaign_id, channel, commercial_state, assigned_mode, priority, sentiment, next_step, human_required_reason, leads(id, name, business_status)',
     )
     .eq('workspace_id', workspaceId)
     .order('last_message_at', { ascending: false, nullsFirst: false })
@@ -119,7 +125,16 @@ export async function listInboxThreads(
       contactHandle: contactByLead.get(t.lead_id) ?? null,
       preview: latest?.body?.slice(0, 160) ?? null,
       businessStatus: lead?.business_status ?? 'NEW',
-      needsAttention: t.status === 'NEEDS_REPLY' || (t.unread_count ?? 0) > 0,
+      needsAttention:
+        t.status === 'NEEDS_REPLY' ||
+        (t.unread_count ?? 0) > 0 ||
+        t.commercial_state === 'HUMAN_REQUIRED',
+      commercialState: t.commercial_state ?? null,
+      assignedMode: t.assigned_mode === 'HUMAN' || t.assigned_mode === 'AI' ? t.assigned_mode : null,
+      priority: t.priority ?? null,
+      sentiment: t.sentiment ?? null,
+      nextStep: t.next_step ?? null,
+      humanRequiredReason: t.human_required_reason ?? null,
     };
   });
 }

@@ -48,7 +48,7 @@ export default function TelegramConversationDrawer({
         <header className="flex items-start justify-between gap-4 border-b border-stone-200 bg-white px-5 py-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">
-              Conversazione Telegram
+              {detail?.channel === "EMAIL" ? "Conversazione Email" : "Conversazione Telegram"}
             </p>
             <h2 className="mt-1 text-lg font-semibold text-stone-900">
               {detail?.leadName ?? "Caricamento…"}
@@ -73,6 +73,30 @@ export default function TelegramConversationDrawer({
 
           {detail ? (
             <>
+              {detail.humanRequiredReason ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  <p className="font-semibold">HUMAN REQUIRED</p>
+                  <p>{detail.humanRequiredReason}</p>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
+                  {detail.commercialState ?? "NEW"}
+                </span>
+                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
+                  {detail.assignedMode === "HUMAN" ? "HUMAN" : "AI"}
+                </span>
+                {detail.sentiment ? (
+                  <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
+                    {detail.sentiment}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <HandoffButton threadId={detail.threadId} action="take_over" label="Prendi in carico" />
+                <HandoffButton threadId={detail.threadId} action="return_to_ai" label="Ridai all’AI" />
+                <HandoffButton threadId={detail.threadId} action="stop" label="Ferma automazione" />
+              </div>
               <section className="grid gap-3 sm:grid-cols-2">
                 <InfoCard title="Contatto">
                   <p className="font-medium text-stone-900">{detail.contact.displayName}</p>
@@ -198,6 +222,32 @@ export default function TelegramConversationDrawer({
         </div>
       </aside>
     </div>
+  );
+}
+
+function HandoffButton({
+  threadId,
+  action,
+  label,
+}: {
+  threadId: string;
+  action: "take_over" | "return_to_ai" | "stop";
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+      onClick={() => {
+        void fetch("/api/inbox/handoff", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ threadId, action }),
+        });
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

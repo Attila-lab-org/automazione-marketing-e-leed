@@ -183,6 +183,21 @@ function InboxRow({
           <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800">
             {item.channelLabel}
           </span>
+          {item.commercialState ? (
+            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
+              {item.commercialState}
+            </span>
+          ) : null}
+          {item.assignedMode ? (
+            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
+              {item.assignedMode === "HUMAN" ? "HUMAN" : "AI"}
+            </span>
+          ) : null}
+          {item.humanRequiredReason ? (
+            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-800">
+              HUMAN REQUIRED
+            </span>
+          ) : null}
           {item.needsAttention ? (
             <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
               Da gestire
@@ -195,6 +210,9 @@ function InboxRow({
         </div>
         {item.contactHandle ? (
           <p className="text-xs text-stone-500">{item.contactHandle}</p>
+        ) : null}
+        {item.nextStep ? (
+          <p className="text-xs text-stone-500">Prossimo passo: {item.nextStep}</p>
         ) : null}
         {item.preview ? (
           <p className="line-clamp-2 text-sm text-stone-600">{item.preview}</p>

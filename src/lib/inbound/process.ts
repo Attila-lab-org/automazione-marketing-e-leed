@@ -13,6 +13,8 @@ import type {
   OutboundReplyResult,
 } from '@/lib/inbound/types';
 import type { TelegramProvider } from '@/lib/providers/telegram';
+import { processSalesInbound } from '@/lib/sales/pipeline';
+import { scheduleFollowUpLater, stopLeadSequences, suppressLeadEmail } from '@/lib/sales/stop';
 
 export type ProcessInboundResult = {
   skipped?: boolean;
@@ -111,12 +113,41 @@ export async function processTelegramInbound(args: {
     throw new Error(`Inbound persist: ${inboundError?.message ?? 'fallito'}`);
   }
 
+  let salesStopAutoReply = false;
+  try {
+    const sales = await processSalesInbound({
+      admin,
+      workspaceId,
+      threadId,
+      leadId: lead.leadId,
+      text: message.text,
+      channel: 'TELEGRAM',
+      env,
+    });
+    if (sales.classification.unsubscribe) {
+      await suppressLeadEmail(admin, workspaceId, lead.leadId, 'UNSUBSCRIBE');
+      await stopLeadSequences(admin, workspaceId, lead.leadId);
+      salesStopAutoReply = true;
+    } else if (sales.classification.notInterested) {
+      await stopLeadSequences(admin, workspaceId, lead.leadId);
+      salesStopAutoReply = true;
+    } else if (sales.classification.followUpLater) {
+      const at = new Date();
+      at.setMonth(at.getMonth() + 1);
+      await scheduleFollowUpLater(admin, workspaceId, lead.leadId, threadId, at);
+      salesStopAutoReply = true;
+    } else if (sales.humanRequired) {
+      salesStopAutoReply = true;
+    }
+  } catch (err) {
+    console.error('sales inbound pipeline failed', err);
+  }
+
   await admin
     .from('message_threads')
     .update({
-      status: 'NEEDS_REPLY',
-      unread_count: 1,
       last_message_at: message.occurredAt,
+      unread_count: 1,
       updated_at: new Date().toISOString(),
     })
     .eq('id', threadId);
@@ -143,14 +174,15 @@ export async function processTelegramInbound(args: {
     },
   });
 
-  const replyText = settings.replyEnabled && intent.matched
-    ? buildAutoReplyText({
-        message,
-        intent,
-        studioName: env.OWNER_SENDER_NAME,
-        template: settings.replyTemplate,
-      })
-    : null;
+  const replyText =
+    !salesStopAutoReply && settings.replyEnabled && intent.matched
+      ? buildAutoReplyText({
+          message,
+          intent,
+          studioName: env.OWNER_SENDER_NAME,
+          template: settings.replyTemplate,
+        })
+      : null;
   if (!replyText) {
     const reason = !intent.matched
       ? 'FOLLOWUP_NO_AUTO_REPLY'

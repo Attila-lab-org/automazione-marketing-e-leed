@@ -5,6 +5,7 @@ import PageHeader from "@/components/page-header";
 import ProvidersRuntimeList from "@/components/providers-runtime-list";
 import SectionSubnav from "@/components/section-subnav";
 import AiFoundationPanel from "@/components/ai-foundation-panel";
+import CommercialPlaybookPanel from "@/components/commercial-playbook-panel";
 import TelegramControlPanel from "@/components/telegram-control-panel";
 import { SETTINGS_SUBNAV } from "@/lib/navigation";
 
@@ -25,6 +26,8 @@ export default function SettingsPage() {
       </section>
 
       <AiFoundationPanel />
+
+      <CommercialPlaybookPanel />
 
       <TelegramControlPanel />
 

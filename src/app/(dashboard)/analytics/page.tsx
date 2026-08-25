@@ -1,6 +1,7 @@
 import EmptyState from "@/components/empty-state";
 import KpiCard from "@/components/kpi-card";
 import PageHeader from "@/components/page-header";
+import AiKpiCards from "@/components/ai-kpi-cards";
 
 /**
  * Analytics (§6.1, §20): conversioni e performance del funnel.
@@ -72,6 +73,11 @@ export default function AnalyticsPage() {
             accent="green"
           />
         </div>
+      </section>
+
+      <section aria-label="Attila AI" className="space-y-3">
+        <h2 className="text-sm font-semibold text-stone-800">Attila AI</h2>
+        <AiKpiCards />
       </section>
 
       <EmptyState

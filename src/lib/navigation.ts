@@ -17,5 +17,6 @@ export const MESSAGE_SUBNAV = [
 
 export const SETTINGS_SUBNAV = [
   { href: "/settings", label: "Collegamenti", description: "Controlla se i servizi esterni sono configurati." },
+  { href: "/settings/playbook", label: "Commercial Playbook", description: "Limiti commerciali dell’AI." },
   { href: "/automations", label: "Automazioni", description: "Controlla quali attività vengono eseguite automaticamente." },
 ] as const;

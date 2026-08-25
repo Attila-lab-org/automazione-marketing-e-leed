@@ -46,6 +46,12 @@ export type InboxConversationDetail = {
     detail: string | null;
     occurredAt: string;
   }>;
+  commercialState: string | null;
+  assignedMode: string | null;
+  humanRequiredReason: string | null;
+  nextStep: string | null;
+  sentiment: string | null;
+  channel: string | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -71,7 +77,7 @@ export async function getInboxConversation(
 ): Promise<InboxConversationDetail | null> {
   const { data: thread, error: threadError } = await admin
     .from('message_threads')
-    .select('id, lead_id, subject, status, unread_count, last_message_at')
+    .select('id, lead_id, subject, status, unread_count, last_message_at, channel, commercial_state, assigned_mode, human_required_reason, next_step, sentiment')
     .eq('workspace_id', workspaceId)
     .eq('id', threadId)
     .maybeSingle();
@@ -210,5 +216,11 @@ export async function getInboxConversation(
         occurredAt: event.occurred_at,
       };
     }),
+    commercialState: thread.commercial_state ?? null,
+    assignedMode: thread.assigned_mode ?? null,
+    humanRequiredReason: thread.human_required_reason ?? null,
+    nextStep: thread.next_step ?? null,
+    sentiment: thread.sentiment ?? null,
+    channel: thread.channel ?? null,
   };
 }
