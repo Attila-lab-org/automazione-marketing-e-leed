@@ -111,11 +111,15 @@ export default function InboxClient() {
       try {
         const loadedThreads = await refreshThreads();
         if (!cancelled) {
-          const leadId = new URLSearchParams(window.location.search).get("lead");
-          const requested = leadId
-            ? loadedThreads.find((thread) => thread.leadId === leadId)
-            : null;
-          if (requested) void openConversation(requested.threadId);
+          const params = new URLSearchParams(window.location.search);
+          const threadId = params.get("thread");
+          const leadId = params.get("lead");
+          if (threadId) {
+            void openConversation(threadId);
+          } else if (leadId) {
+            const requested = loadedThreads.find((thread) => thread.leadId === leadId);
+            if (requested) void openConversation(requested.threadId);
+          }
         }
       } catch (err) {
         if (!cancelled) {

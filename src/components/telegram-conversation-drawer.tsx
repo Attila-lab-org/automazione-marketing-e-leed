@@ -114,7 +114,11 @@ export default function TelegramConversationDrawer({
                   ) : null}
                   <div className="flex flex-wrap gap-2 pt-1">
                     <a
-                      href="/calendar"
+                      href={
+                        detail.appointment?.startsAt
+                          ? `/calendar?week=${encodeURIComponent(detail.appointment.startsAt.slice(0, 10))}&focus=${encodeURIComponent(detail.appointment.id)}`
+                          : "/calendar"
+                      }
                       className="rounded-md border border-sky-300 bg-white px-2 py-1 text-xs font-semibold text-sky-800"
                     >
                       Apri nel calendario

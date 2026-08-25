@@ -9,7 +9,7 @@ export default function CalendarPage() {
       <SectionSubnav items={[...MESSAGE_SUBNAV]} />
       <PageHeader
         title="Calendario"
-        description="Slot disponibili, appuntamenti con i clienti, scadenze lavoro e promemoria operativi."
+        description="Vedi gli appuntamenti della settimana, apri la conversazione collegata e aggiungi solo ciò che serve."
       />
       <CalendarClient />
     </div>

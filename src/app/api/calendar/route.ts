@@ -57,17 +57,69 @@ export const GET = withAdmin(async (request: Request) => {
   ]);
 
   const leadIds = [...new Set(events.map((e) => e.lead_id).filter(Boolean))] as string[];
+  const threadIds = [...new Set(events.map((e) => e.thread_id).filter(Boolean))] as string[];
   const leadsById = new Map<string, { id: string; name: string }>();
-  if (leadIds.length) {
-    const { data: leads } = await admin
-      .from('leads')
-      .select('id, name')
-      .eq('workspace_id', workspace.id)
-      .in('id', leadIds);
-    for (const lead of leads ?? []) {
-      leadsById.set(lead.id, { id: lead.id, name: lead.name });
+  const threadsById = new Map<
+    string,
+    {
+      id: string;
+      channel: string | null;
+      commercialState: string | null;
+      nextStep: string | null;
+      preview: string | null;
     }
-  }
+  >();
+
+  await Promise.all([
+    leadIds.length
+      ? admin
+          .from('leads')
+          .select('id, name')
+          .eq('workspace_id', workspace.id)
+          .in('id', leadIds)
+          .then(({ data: leads }) => {
+            for (const lead of leads ?? []) {
+              leadsById.set(lead.id, { id: lead.id, name: lead.name });
+            }
+          })
+      : Promise.resolve(),
+    threadIds.length
+      ? admin
+          .from('message_threads')
+          .select('id, channel, commercial_state, next_step')
+          .eq('workspace_id', workspace.id)
+          .in('id', threadIds)
+          .then(async ({ data: threads }) => {
+            const previewByThread = new Map<string, string>();
+            if (threads?.length) {
+              const { data: messages } = await admin
+                .from('messages')
+                .select('thread_id, body_snapshot, created_at')
+                .eq('workspace_id', workspace.id)
+                .in(
+                  'thread_id',
+                  threads.map((t) => t.id),
+                )
+                .order('created_at', { ascending: false })
+                .limit(Math.max(40, threads.length * 3));
+              for (const message of messages ?? []) {
+                if (!previewByThread.has(message.thread_id) && message.body_snapshot) {
+                  previewByThread.set(message.thread_id, String(message.body_snapshot).slice(0, 160));
+                }
+              }
+            }
+            for (const thread of threads ?? []) {
+              threadsById.set(thread.id, {
+                id: thread.id,
+                channel: thread.channel ?? null,
+                commercialState: thread.commercial_state ?? null,
+                nextStep: thread.next_step ?? null,
+                preview: previewByThread.get(thread.id) ?? null,
+              });
+            }
+          })
+      : Promise.resolve(),
+  ]);
 
   return NextResponse.json({
     fromIso,
@@ -75,6 +127,7 @@ export const GET = withAdmin(async (request: Request) => {
     events: events.map((event) => ({
       ...event,
       lead: event.lead_id ? leadsById.get(event.lead_id) ?? null : null,
+      thread: event.thread_id ? threadsById.get(event.thread_id) ?? null : null,
     })),
     slots,
   });
