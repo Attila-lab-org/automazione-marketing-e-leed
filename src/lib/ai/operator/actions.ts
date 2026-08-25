@@ -34,12 +34,21 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('confirm_action'),
     pendingActionId: z.string().uuid(),
-    label: z.union([z.literal('Conferma invio'), z.literal('Abilita policy')]),
+    label: z.union([
+      z.literal('Conferma invio'),
+      z.literal('Abilita policy'),
+      z.literal('Metti in pausa'),
+    ]),
   }),
   z.object({
     type: z.literal('cancel_action'),
     pendingActionId: z.string().uuid(),
     label: z.literal('Annulla'),
+  }),
+  z.object({
+    type: z.literal('send_followup'),
+    message: z.string().min(1).max(200),
+    label: z.literal('Elimina definitivamente'),
   }),
 ]);
 
@@ -138,6 +147,7 @@ export function hrefForAction(action: OperatorAction): string {
       return action.campaignId ? `/campaigns/${action.campaignId}` : '/campaigns';
     case 'confirm_action':
     case 'cancel_action':
+    case 'send_followup':
       return '#';
   }
 }

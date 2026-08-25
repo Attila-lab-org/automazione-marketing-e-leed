@@ -8,10 +8,12 @@ import {
   appendOperatorMessage,
   createOperatorSession,
   getOperatorSession,
+  saveOperatorSessionRefs,
 } from '@/lib/ai/operator/sessions';
 import { runOperatorTurn } from '@/lib/ai/operator/turn';
 import { classifyOperatorIntent } from '@/lib/ai/operator/intent';
-import { createSendPending, executePreparePlan } from '@/lib/ai/operator/writes';
+import { emptyEntityRefs } from '@/lib/ai/operator/context';
+import { executeCampaignMutation, executePreparePlan, createSendPending } from '@/lib/ai/operator/writes';
 import { proposeAutonomyPolicy } from '@/lib/sales/autonomy';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
@@ -44,13 +46,16 @@ export const POST = withAdmin(async (request: Request) => {
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
   let sessionId = typeof body.sessionId === 'string' ? body.sessionId : null;
+  let sessionRefs = emptyEntityRefs();
   if (sessionId) {
     const existing = await getOperatorSession(admin, workspace.id, sessionId);
     if (!existing) sessionId = null;
+    else sessionRefs = existing.refs;
   }
   if (!sessionId) {
     const created = await createOperatorSession(admin, workspace.id, envelope);
     sessionId = created.id;
+    sessionRefs = created.refs;
   }
 
   await appendOperatorMessage(admin, {
@@ -77,6 +82,7 @@ export const POST = withAdmin(async (request: Request) => {
           sessionId: sessionId!,
           question: message,
           envelope,
+          refs: sessionRefs,
           data: createSupabaseOperatorData(admin, workspace.id),
           persist: createSupabaseAiRunStore(admin),
           writes: {
@@ -93,6 +99,14 @@ export const POST = withAdmin(async (request: Request) => {
               createSendPending({ admin, workspaceId: workspace.id, campaignId }),
             proposePolicy: (question) =>
               proposeAutonomyPolicy({ admin, workspaceId: workspace.id, question }),
+            campaignMutation: ({ verb, campaignId, campaign }) =>
+              executeCampaignMutation({
+                admin,
+                workspaceId: workspace.id,
+                verb,
+                campaignId,
+                campaign,
+              }),
           },
         })) {
           if (event.type === 'tool_done') {
@@ -102,6 +116,7 @@ export const POST = withAdmin(async (request: Request) => {
             assistant = event.reply;
             actions = event.actions;
             runId = event.run?.id ?? null;
+            sessionRefs = event.refs;
           }
           send(event);
         }
@@ -114,6 +129,12 @@ export const POST = withAdmin(async (request: Request) => {
             actions: actions as never,
             toolTrace,
             aiRunId: runId,
+          });
+          await saveOperatorSessionRefs(admin, {
+            workspaceId: workspace.id,
+            sessionId: sessionId!,
+            envelope,
+            refs: sessionRefs,
           });
         }
       } catch (err) {

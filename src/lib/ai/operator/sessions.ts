@@ -1,12 +1,14 @@
 import type { Json } from '@/lib/types/database';
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import type { OperatorAction } from './actions';
+import { emptyEntityRefs, parseEntityRefs, type OperatorEntityRefs } from './context';
 import type { OperatorEnvelope } from './envelope';
 
 export type OperatorSessionRecord = {
   id: string;
   title: string;
   createdAt: string;
+  refs: OperatorEntityRefs;
 };
 
 export type OperatorMessageRecord = {
@@ -17,22 +19,30 @@ export type OperatorMessageRecord = {
   createdAt: string;
 };
 
+function sessionContextPayload(envelope: OperatorEnvelope, refs: OperatorEntityRefs): Json {
+  return {
+    ...envelope,
+    refs,
+  } as unknown as Json;
+}
+
 export async function createOperatorSession(
   admin: AppSupabaseClient,
   workspaceId: string,
   envelope: OperatorEnvelope,
 ): Promise<OperatorSessionRecord> {
+  const refs = emptyEntityRefs();
   const { data, error } = await admin
     .from('ai_operator_sessions')
     .insert({
       workspace_id: workspaceId,
       title: 'Attila AI',
-      context: envelope as unknown as Json,
+      context: sessionContextPayload(envelope, refs),
     })
-    .select('id, title, created_at')
+    .select('id, title, created_at, context')
     .single();
   if (error || !data) throw new Error(error?.message ?? 'Sessione AI non creata');
-  return { id: data.id, title: data.title, createdAt: data.created_at };
+  return { id: data.id, title: data.title, createdAt: data.created_at, refs };
 }
 
 export async function getOperatorSession(
@@ -42,13 +52,38 @@ export async function getOperatorSession(
 ): Promise<OperatorSessionRecord | null> {
   const { data, error } = await admin
     .from('ai_operator_sessions')
-    .select('id, title, created_at')
+    .select('id, title, created_at, context')
     .eq('workspace_id', workspaceId)
     .eq('id', sessionId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return { id: data.id, title: data.title, createdAt: data.created_at };
+  return {
+    id: data.id,
+    title: data.title,
+    createdAt: data.created_at,
+    refs: parseEntityRefs(data.context),
+  };
+}
+
+export async function saveOperatorSessionRefs(
+  admin: AppSupabaseClient,
+  input: {
+    workspaceId: string;
+    sessionId: string;
+    envelope: OperatorEnvelope;
+    refs: OperatorEntityRefs;
+  },
+): Promise<void> {
+  const { error } = await admin
+    .from('ai_operator_sessions')
+    .update({
+      context: sessionContextPayload(input.envelope, input.refs),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', input.sessionId)
+    .eq('workspace_id', input.workspaceId);
+  if (error) throw new Error(error.message);
 }
 
 export async function listOperatorMessages(

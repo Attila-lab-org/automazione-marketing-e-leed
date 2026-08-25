@@ -5,6 +5,12 @@ import { classifyOperatorIntent } from '../../src/lib/ai/operator/intent';
 import { suggestOperatorTools } from '../../src/lib/ai/operator/registry';
 import { envelopeFromPath } from '../../src/lib/ai/operator/envelope';
 import { hashPayload } from '../../src/lib/ai/operator/pending';
+import { mergeEntityRefs } from '../../src/lib/ai/operator/context';
+import {
+  buildOperatorCapabilityReply,
+  CAMPAIGN_MUTATION_CAPABILITIES,
+  HARD_DELETE_FOLLOWUP,
+} from '../../src/lib/ai/operator/capabilities';
 import { extractWebsiteSnapshot } from '../../src/lib/intelligence/extract';
 import { classifyEmailFit } from '../../src/lib/intelligence/email-fit';
 import { validateSalesTransition } from '../../src/lib/sales/states';
@@ -56,6 +62,23 @@ describe('operator intent router', () => {
 
   it('invia campagna richiede conferma EXTERNAL', () => {
     expect(classifyOperatorIntent('Invia la campagna Milano.').kind).toBe('EXTERNAL');
+  });
+
+  it('cosa puoi fare è HELP senza dashboard', () => {
+    expect(classifyOperatorIntent('cosa puoi fare?').kind).toBe('HELP');
+    const planned = suggestOperatorTools('cosa puoi fare?', envelopeFromPath('/overview'));
+    expect(planned).toEqual([]);
+  });
+
+  it('cancella campagna è DESTRUCTIVE e non dashboard', () => {
+    expect(classifyOperatorIntent('cancella campagna').kind).toBe('DESTRUCTIVE');
+    const planned = suggestOperatorTools('cancella campagna', envelopeFromPath('/overview'));
+    expect(planned.some((c) => c.name === 'get_dashboard_summary')).toBe(false);
+  });
+
+  it('intent sconosciuto non cade sul dashboard', () => {
+    expect(classifyOperatorIntent('parlami del tempo a Venezia').kind).toBe('UNKNOWN');
+    expect(suggestOperatorTools('parlami del tempo a Venezia', envelopeFromPath('/overview'))).toEqual([]);
   });
 });
 
@@ -209,5 +232,244 @@ describe('operator prepare without send', () => {
     expect(result.reply).toMatch(/0 messaggi inviati/i);
     expect(result.actions.some((a) => a.type === 'open_campaign')).toBe(true);
     expect(result.actions.some((a) => a.type === 'open_review')).toBe(true);
+    expect(result.refs.lastCampaignId).toBe(CAMPAIGN_ID);
+  });
+});
+
+const PENDING_PAUSE_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+
+function dashboardQueried(events: Array<{ type: string; name?: string }>): boolean {
+  return events.some((e) => e.type === 'tool_start' && e.name === 'get_dashboard_summary');
+}
+
+describe('operator conversational router', () => {
+  const data = createMemoryOperatorData({
+    leads: [
+      {
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        name: 'Trattoria Duomo',
+        city: 'Milano',
+        category: 'restaurant',
+        discoveryScore: 91,
+        qualificationStatus: 'PREQUALIFIED',
+        websiteUrl: null,
+      },
+    ],
+    campaigns: [
+      {
+        id: CAMPAIGN_ID,
+        name: 'Milano Restaurant TEST',
+        status: 'DRAFT',
+        mode: 'MANUAL',
+        deliveryMode: 'TEST',
+        createdAt: '2026-08-25T08:00:00.000Z',
+        totals: { leads: 20, review: 0, failed: 0 },
+      },
+    ],
+    dashboard: { leadsTotal: 99, leadsQualified: 12, campaignsActive: 3 },
+  });
+
+  it('cosa puoi fare genera HELP dalle capability registrate senza query dashboard', async () => {
+    const help = buildOperatorCapabilityReply('ASSISTITO');
+    expect(help.now.length).toBeGreaterThan(0);
+    expect(help.confirm.length).toBeGreaterThan(0);
+    expect(help.human.length).toBeGreaterThan(0);
+    expect(CAMPAIGN_MUTATION_CAPABILITIES.hardDelete).toBe(false);
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: 'cosa puoi fare?',
+      envelope: envelopeFromPath('/overview'),
+      data,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+    });
+    expect(result.reply).toMatch(/Posso fare ora/);
+    expect(result.reply).toMatch(/Richiede conferma/);
+    expect(result.reply).toMatch(/Richiede intervento umano/);
+    expect(result.reply).toContain(help.now[0]!);
+    expect(result.reply).not.toMatch(/99/);
+    expect(dashboardQueried(result.events)).toBe(false);
+  });
+
+  it('cancella campagna è mutation e non usa il dashboard summary', async () => {
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: 'cancella campagna',
+      envelope: envelopeFromPath('/overview'),
+      data,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+      writes: {
+        campaignMutation: async ({ campaignId }) => [
+          {
+            tool: 'campaign_mutation',
+            ok: false,
+            summary: 'Quale campagna vuoi fermare o eliminare?',
+            data: { needsCampaign: true, campaignId },
+          },
+        ],
+      },
+    });
+    expect(classifyOperatorIntent('cancella campagna').kind).toBe('DESTRUCTIVE');
+    expect(result.reply).toMatch(/quale campagna/i);
+    expect(result.reply).not.toMatch(/99 attività/);
+    expect(dashboardQueried(result.events)).toBe(false);
+  });
+
+  it('cancellala dopo creazione campagna risolve il referente di sessione', async () => {
+    const prepared = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: 'Preparami una campagna TEST con i 20 migliori ristoranti di Milano.',
+      envelope: envelopeFromPath('/leads'),
+      data,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+      writes: {
+        prepare: async ({ leads }) => [
+          {
+            tool: 'create_campaign',
+            ok: true,
+            summary: 'Campagna creata',
+            data: { campaignId: CAMPAIGN_ID, leadCount: leads.length, skipped: 0, deliveryMode: 'TEST' },
+          },
+          {
+            tool: 'prepare_campaign',
+            ok: true,
+            summary: 'Preparazione avviata',
+            data: { campaignId: CAMPAIGN_ID, enqueued: leads.length, selected: leads.length },
+          },
+        ],
+      },
+    });
+    expect(prepared.refs.lastCampaignId).toBe(CAMPAIGN_ID);
+
+    const cancel = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: 'cancellala',
+      envelope: envelopeFromPath('/overview'),
+      refs: prepared.refs,
+      data,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+      writes: {
+        campaignMutation: async ({ campaignId, campaign }) => [
+          {
+            tool: 'campaign_mutation',
+            ok: true,
+            summary: `Vuoi fermare «${campaign?.name}» oppure eliminarla definitivamente?`,
+            data: {
+              campaignId,
+              name: campaign?.name,
+              status: campaign?.status,
+              leadCount: campaign?.totals?.leads,
+              pendingActionId: PENDING_PAUSE_ID,
+              hardDelete: false,
+              choice: true,
+              canPause: true,
+            },
+          },
+        ],
+      },
+    });
+    expect(cancel.reply).toContain('Milano Restaurant TEST');
+    expect(cancel.reply).toMatch(/fermare|pausa/i);
+    expect(dashboardQueried(cancel.events)).toBe(false);
+    expect(cancel.actions.some((a) => a.type === 'confirm_action' && a.label === 'Metti in pausa')).toBe(
+      true,
+    );
+  });
+
+  it('azione distruttiva richiede conferma e non cancella da sola', async () => {
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: 'cancella questa campagna',
+      envelope: envelopeFromPath(`/campaigns/${CAMPAIGN_ID}`),
+      data,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+      writes: {
+        campaignMutation: async ({ campaign }) => [
+          {
+            tool: 'campaign_mutation',
+            ok: true,
+            summary: `Vuoi fermare «${campaign?.name}» oppure eliminarla definitivamente? Nessuna modifica finché non confermi.`,
+            data: {
+              campaignId: CAMPAIGN_ID,
+              name: campaign?.name,
+              pendingActionId: PENDING_PAUSE_ID,
+              hardDelete: false,
+              choice: true,
+              canPause: true,
+            },
+          },
+        ],
+      },
+    });
+    expect(result.actions.some((a) => a.type === 'confirm_action')).toBe(true);
+    expect(result.actions.some((a) => a.type === 'send_followup' && a.message === HARD_DELETE_FOLLOWUP)).toBe(
+      true,
+    );
+    expect(result.reply).toMatch(/non confermi|confermi/i);
+    expect(result.events.some((e) => e.type === 'tool_done' && e.name === 'pause_campaign' && e.ok)).toBe(
+      false,
+    );
+  });
+
+  it('unknown intent chiede chiarimento senza dashboard', async () => {
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: 'parlami del tempo a Venezia',
+      envelope: envelopeFromPath('/overview'),
+      data,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+    });
+    expect(result.reply).toMatch(/Non ho collegato/i);
+    expect(result.reply).not.toMatch(/99/);
+    expect(dashboardQueried(result.events)).toBe(false);
+  });
+
+  it('hard-delete inesistente non viene inventato', async () => {
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: HARD_DELETE_FOLLOWUP,
+      envelope: envelopeFromPath('/overview'),
+      refs: mergeEntityRefs(
+        { lastCampaignId: CAMPAIGN_ID, lastLeadIds: [], lastReviewContext: true },
+        [],
+        [],
+      ),
+      data,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+      writes: {
+        campaignMutation: async () => [
+          {
+            tool: 'campaign_mutation',
+            ok: true,
+            summary:
+              'Le campagne non vengono eliminate definitivamente dal sistema. Posso metterla in pausa.',
+            data: {
+              campaignId: CAMPAIGN_ID,
+              hardDelete: false,
+              choice: false,
+              canPause: true,
+              pendingActionId: PENDING_PAUSE_ID,
+            },
+          },
+        ],
+      },
+    });
+    expect(classifyOperatorIntent(HARD_DELETE_FOLLOWUP).kind).toBe('DESTRUCTIVE');
+    expect(classifyOperatorIntent(HARD_DELETE_FOLLOWUP).writeVerb).toBe('hard_delete');
+    expect(result.reply).toMatch(/non vengono eliminate definitivamente/i);
+    expect(result.actions.some((a) => a.type === 'send_followup')).toBe(false);
   });
 });

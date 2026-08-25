@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { OperatorEnvelope } from './envelope';
+import { classifyOperatorIntent, type OperatorIntent } from './intent';
 
 export const OPERATOR_TOOL_NAMES = [
   'get_dashboard_summary',
@@ -240,17 +241,45 @@ export async function executeOperatorTool(
   }
 }
 
-export function suggestOperatorTools(question: string, envelope: OperatorEnvelope): PlannedToolCall[] {
+function campaignCalls(envelope: OperatorEnvelope, withStats = true): PlannedToolCall[] {
+  const campaignId = envelope.entityType === 'campaign' ? envelope.entityId : undefined;
+  if (!campaignId) return [{ name: 'list_campaigns', args: {} }];
+  const calls: PlannedToolCall[] = [{ name: 'get_campaign_detail', args: { campaignId } }];
+  if (withStats) calls.push({ name: 'get_campaign_stats', args: { campaignId } });
+  return calls;
+}
+
+export function suggestOperatorTools(
+  question: string,
+  envelope: OperatorEnvelope,
+  intent: OperatorIntent = classifyOperatorIntent(question),
+): PlannedToolCall[] {
   const q = question.toLowerCase();
   const calls: PlannedToolCall[] = [];
   const has = (name: OperatorToolName) => calls.some((c) => c.name === name);
 
-  if (/prepara|crea una campagna|fai partire|invia la campagna|avvia la campagna|gestisci automaticamente|analizz/.test(q)) {
+  if (intent.kind === 'HELP' || intent.kind === 'UNKNOWN') return [];
+
+  if (intent.kind === 'DESTRUCTIVE') {
+    return campaignCalls(envelope);
+  }
+
+  if (intent.kind === 'POLICY') return [];
+
+  if (intent.kind === 'EXTERNAL') {
+    return envelope.entityType === 'campaign' && envelope.entityId
+      ? campaignCalls(envelope)
+      : [{ name: 'list_campaigns', args: {} }];
+  }
+
+  if (intent.kind === 'PREPARE') {
+    if (intent.writeVerb === 'pause' || intent.writeVerb === 'resume') {
+      return campaignCalls(envelope, false);
+    }
     if (/analizz/.test(q) && envelope.entityType === 'lead' && envelope.entityId) {
       calls.push({ name: 'get_lead_detail', args: { leadId: envelope.entityId } });
       return calls;
     }
-    // WRITE/POLICY intents are handled by the turn router, not reinterpreted as READ.
     if (/lead|ristorant|milano|roma|napoli|torino|firenze|bologna|miglior/.test(q)) {
       const cityMatch = question.match(/\b(milano|roma|napoli|torino|firenze|bologna|bergamo|brescia|genova|padova|verona)\b/i);
       const limitMatch = q.match(/\b(\d{1,2})\b/);
@@ -286,12 +315,19 @@ export function suggestOperatorTools(question: string, envelope: OperatorEnvelop
       },
     });
   }
-  if (/blocc|perch|blocker|ferma|pausa/.test(q)) {
+  if (/aprila|apri questa|apri la campagna|stato della campagna|dettagli campagna/.test(q)) {
+    for (const call of campaignCalls(envelope)) {
+      if (!has(call.name)) calls.push(call);
+    }
+  }
+  if (/blocc|perch|blocker/.test(q)) {
     const campaignId = envelope.entityType === 'campaign' ? envelope.entityId : undefined;
     if (campaignId) {
-      calls.push({ name: 'get_campaign_detail', args: { campaignId } });
-      calls.push({ name: 'get_campaign_stats', args: { campaignId } });
-    } else {
+      if (!has('get_campaign_detail')) {
+        calls.push({ name: 'get_campaign_detail', args: { campaignId } });
+        calls.push({ name: 'get_campaign_stats', args: { campaignId } });
+      }
+    } else if (!has('list_campaigns')) {
       calls.push({ name: 'list_campaigns', args: {} });
     }
     calls.push({ name: 'get_blockers', args: campaignId ? { campaignId } : {} });
@@ -303,9 +339,6 @@ export function suggestOperatorTools(question: string, envelope: OperatorEnvelop
     calls.push({ name: 'list_conversations', args: {} });
   }
   if (/riepilogo|dashboard|quanto/.test(q) && !has('get_daily_report')) {
-    calls.push({ name: 'get_dashboard_summary', args: {} });
-  }
-  if (calls.length === 0) {
     calls.push({ name: 'get_dashboard_summary', args: {} });
   }
   return calls;

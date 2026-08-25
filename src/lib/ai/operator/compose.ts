@@ -1,6 +1,8 @@
 import type { OperatorAction, OperatorReply } from './actions';
+import { buildOperatorCapabilityReply, HARD_DELETE_FOLLOWUP, type OperatorAssistMode } from './capabilities';
 import type { DailyReport, LeadSearchHit, OperatorToolName } from './registry';
 import type { OperatorEnvelope } from './envelope';
+import type { OperatorIntent } from './intent';
 import type { WriteResult } from './writes';
 
 function metricText(metric: DailyReport['metrics'][keyof DailyReport['metrics']]): string | null {
@@ -13,7 +15,21 @@ export function composeOperatorReply(
   envelope: OperatorEnvelope,
   traces: Array<{ name: OperatorToolName; result: unknown }>,
   writes: WriteResult[] = [],
+  intent?: OperatorIntent,
+  assistMode: OperatorAssistMode = 'ASSISTITO',
 ): OperatorReply {
+  if (intent?.kind === 'HELP') {
+    const help = buildOperatorCapabilityReply(assistMode);
+    return { reply: help.reply, actions: [] };
+  }
+  if (intent?.kind === 'UNKNOWN') {
+    return {
+      reply:
+        'Non ho collegato questa richiesta a un’azione del Sales OS. Vuoi trovare lead, preparare una campagna TEST, vedere i blocker, oppure altro?',
+      actions: [],
+    };
+  }
+
   const byName = new Map(traces.map((t) => [t.name, t.result]));
   const actions: OperatorAction[] = [];
   const parts: string[] = [];
@@ -68,6 +84,36 @@ export function composeOperatorReply(
     if (pendingId) {
       actions.push({ type: 'confirm_action', pendingActionId: pendingId, label: 'Abilita policy' });
       actions.push({ type: 'cancel_action', pendingActionId: pendingId, label: 'Annulla' });
+    }
+  }
+
+  const mutation = writes.find((w) => w.tool === 'campaign_mutation');
+  if (mutation) {
+    parts.push(mutation.summary);
+    const campaignId = typeof mutation.data.campaignId === 'string' ? mutation.data.campaignId : null;
+    const pendingId = typeof mutation.data.pendingActionId === 'string' ? mutation.data.pendingActionId : null;
+    const listed = byName.get('list_campaigns') as Array<{ id: string; name: string; status: string }> | undefined;
+    if (campaignId) actions.push({ type: 'open_campaign', campaignId, label: 'Apri campagna' });
+    if (pendingId && mutation.data.canPause !== false) {
+      actions.push({ type: 'confirm_action', pendingActionId: pendingId, label: 'Metti in pausa' });
+    }
+    if (campaignId && mutation.data.hardDelete === false && mutation.data.choice !== false) {
+      actions.push({
+        type: 'send_followup',
+        message: HARD_DELETE_FOLLOWUP,
+        label: 'Elimina definitivamente',
+      });
+    }
+    if (pendingId) {
+      actions.push({ type: 'cancel_action', pendingActionId: pendingId, label: 'Annulla' });
+    }
+    if (!campaignId && listed?.length) {
+      parts.push(
+        listed
+          .slice(0, 5)
+          .map((row) => `«${row.name}» (${row.id.slice(0, 8)}…, ${row.status})`)
+          .join('; ') + '.',
+      );
     }
   }
 
@@ -202,9 +248,10 @@ export function composeOperatorReply(
     if (conversations.length) actions.push({ type: 'open_inbox', label: 'Apri messaggi' });
   }
 
-  const uniqueActions = actions.filter(
-    (action, index) => actions.findIndex((a) => a.type === action.type) === index,
-  );
+  const uniqueActions = actions.filter((action, index) => {
+    const key = JSON.stringify(action);
+    return actions.findIndex((a) => JSON.stringify(a) === key) === index;
+  });
 
   if (parts.length === 0) {
     parts.push('Ho letto i dati disponibili, ma non c’è un riepilogo specifico per questa domanda.');

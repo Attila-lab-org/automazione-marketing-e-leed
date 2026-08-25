@@ -1,7 +1,7 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { approveCampaignLeads } from '@/lib/campaigns/review-queue';
 import { getPendingAction, hashPayload, markPending } from '@/lib/ai/operator/pending';
-import { recordAiAudit } from '@/lib/ai/operator/writes';
+import { pauseCampaign, recordAiAudit } from '@/lib/ai/operator/writes';
 import { activateAutonomyPolicy } from '@/lib/sales/autonomy';
 
 export async function confirmPendingAction(args: {
@@ -44,6 +44,15 @@ export async function confirmPendingAction(args: {
   } else if (row.tool === 'enable_autonomy') {
     await activateAutonomyPolicy(args.admin, args.workspaceId, String(params.policyId ?? ''));
     result = { activated: true };
+  } else if (row.tool === 'pause_campaign') {
+    const campaignId = String(params.campaignId ?? '');
+    await pauseCampaign(args.admin, args.workspaceId, campaignId);
+    result = { paused: true, campaignId };
+  } else if (row.tool === 'delete_campaign') {
+    return {
+      ok: false,
+      summary: 'Le campagne non vengono eliminate definitivamente dal sistema. Posso metterla in pausa.',
+    };
   } else {
     return { ok: false, summary: 'Tool non eseguibile dopo conferma' };
   }

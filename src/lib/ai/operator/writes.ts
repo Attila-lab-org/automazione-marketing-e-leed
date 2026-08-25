@@ -7,8 +7,9 @@ import { parseTestRecipientAllowlist } from '@/lib/campaigns/test-delivery';
 import { analyzeLeadWebsite } from '@/lib/intelligence/analyze';
 import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
 import { createPendingAction } from './pending';
+import { CAMPAIGN_MUTATION_CAPABILITIES } from './capabilities';
 import type { OperatorIntent } from './intent';
-import type { LeadSearchHit } from './registry';
+import type { CampaignDetail, LeadSearchHit } from './registry';
 
 export type WriteResult = {
   tool: string;
@@ -101,7 +102,17 @@ export async function executePreparePlan(args: {
     return results;
   }
 
-  if (verb === 'pause' && args.campaignId) {
+  if (verb === 'pause') {
+    if (!args.campaignId) {
+      return [
+        {
+          tool: 'pause_campaign',
+          ok: false,
+          summary: 'Quale campagna vuoi mettere in pausa? Aprila o indica il nome.',
+          data: { needsCampaign: true },
+        },
+      ];
+    }
     await pauseCampaign(args.admin, args.workspaceId, args.campaignId);
     await recordAiAudit(args.admin, {
       workspaceId: args.workspaceId,
@@ -121,7 +132,17 @@ export async function executePreparePlan(args: {
     ];
   }
 
-  if (verb === 'resume' && args.campaignId) {
+  if (verb === 'resume') {
+    if (!args.campaignId) {
+      return [
+        {
+          tool: 'resume_campaign',
+          ok: false,
+          summary: 'Quale campagna vuoi riprendere? Aprila o indica il nome.',
+          data: { needsCampaign: true },
+        },
+      ];
+    }
     await resumeCampaign(args.admin, args.workspaceId, args.campaignId);
     await recordAiAudit(args.admin, {
       workspaceId: args.workspaceId,
@@ -283,6 +304,124 @@ export async function createSendPending(args: {
       name: campaign.name,
     },
   };
+}
+
+export async function createPausePending(args: {
+  admin: AppSupabaseClient;
+  workspaceId: string;
+  campaignId: string;
+  campaign: { name: string; status: string; leadCount?: number };
+}): Promise<WriteResult> {
+  const pending = await createPendingAction(args.admin, {
+    workspaceId: args.workspaceId,
+    tool: 'pause_campaign',
+    params: { campaignId: args.campaignId },
+    targetSummary: {
+      campaignId: args.campaignId,
+      name: args.campaign.name,
+      status: args.campaign.status,
+      leadCount: args.campaign.leadCount ?? 0,
+    },
+  });
+  await recordAiAudit(args.admin, {
+    workspaceId: args.workspaceId,
+    actor: 'AI',
+    tool: 'pause_campaign',
+    action: 'pending',
+    entityType: 'campaign',
+    entityId: args.campaignId,
+    confirmationId: pending.id,
+  });
+  return {
+    tool: 'pause_campaign',
+    ok: true,
+    summary: `Conferma per mettere in pausa «${args.campaign.name}».`,
+    data: {
+      pendingActionId: pending.id,
+      campaignId: args.campaignId,
+      name: args.campaign.name,
+    },
+  };
+}
+
+export async function executeCampaignMutation(args: {
+  admin: AppSupabaseClient;
+  workspaceId: string;
+  verb: 'cancel' | 'hard_delete';
+  campaignId: string | null;
+  campaign: CampaignDetail | null;
+}): Promise<WriteResult[]> {
+  if (!args.campaignId || !args.campaign) {
+    return [
+      {
+        tool: 'campaign_mutation',
+        ok: false,
+        summary: 'Quale campagna vuoi fermare o eliminare? Indicami il nome oppure aprila.',
+        data: { needsCampaign: true, canHardDelete: CAMPAIGN_MUTATION_CAPABILITIES.hardDelete },
+      },
+    ];
+  }
+
+  const shortId = args.campaignId.slice(0, 8);
+  const leadCount = Number(args.campaign.totals?.leads ?? 0);
+  const facts = `«${args.campaign.name}» (${shortId}…), ${leadCount} lead, stato ${args.campaign.status}.`;
+
+  if (args.verb === 'hard_delete' && !CAMPAIGN_MUTATION_CAPABILITIES.hardDelete) {
+    const pause = CAMPAIGN_MUTATION_CAPABILITIES.pause
+      ? await createPausePending({
+          admin: args.admin,
+          workspaceId: args.workspaceId,
+          campaignId: args.campaignId,
+          campaign: { name: args.campaign.name, status: args.campaign.status, leadCount },
+        })
+      : null;
+    return [
+      {
+        tool: 'campaign_mutation',
+        ok: true,
+        summary: `Le campagne non vengono eliminate definitivamente dal sistema. ${facts} Posso metterla in pausa.`,
+        data: {
+          campaignId: args.campaignId,
+          name: args.campaign.name,
+          status: args.campaign.status,
+          leadCount,
+          shortId,
+          hardDelete: false,
+          choice: false,
+          canPause: CAMPAIGN_MUTATION_CAPABILITIES.pause,
+          pendingActionId: pause?.data.pendingActionId,
+        },
+      },
+    ];
+  }
+
+  const pause = CAMPAIGN_MUTATION_CAPABILITIES.pause
+    ? await createPausePending({
+        admin: args.admin,
+        workspaceId: args.workspaceId,
+        campaignId: args.campaignId,
+        campaign: { name: args.campaign.name, status: args.campaign.status, leadCount },
+      })
+    : null;
+
+  return [
+    {
+      tool: 'campaign_mutation',
+      ok: true,
+      summary: `Vuoi fermare «${args.campaign.name}» oppure eliminarla definitivamente? ${facts} Metterla in pausa ferma gli invii. Nessuna modifica finché non confermi.`,
+      data: {
+        campaignId: args.campaignId,
+        name: args.campaign.name,
+        status: args.campaign.status,
+        leadCount,
+        shortId,
+        hardDelete: false,
+        choice: true,
+        canPause: CAMPAIGN_MUTATION_CAPABILITIES.pause,
+        pendingActionId: pause?.data.pendingActionId,
+      },
+    },
+  ];
 }
 
 function dedupeLeads(leads: LeadSearchHit[]): LeadSearchHit[] {

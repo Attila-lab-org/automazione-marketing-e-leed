@@ -324,6 +324,15 @@ export default function AttilaAiDrawer() {
                           >
                             {action.label}
                           </button>
+                        ) : action.type === "send_followup" ? (
+                          <button
+                            key={`${action.type}-${action.label}`}
+                            type="button"
+                            className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                            onClick={() => void send(action.message)}
+                          >
+                            {action.label}
+                          </button>
                         ) : (
                           <Link
                             key={`${action.type}-${hrefForAction(action)}`}
