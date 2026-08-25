@@ -33,7 +33,11 @@ export function getPublicAiReadiness(
     apiKeyConfigured: config.apiKeyConfigured,
     routerEnabled: config.routerEnabled,
     models: config.models,
-    budgetsUsd: config.budgetsUsd,
+    budgetsUsd: {
+      normalLead: config.budgetsUsd.normalLead,
+      hotLead: config.budgetsUsd.hotLead,
+      thread: config.budgetsUsd.thread,
+    },
     timeoutMs: config.timeoutMs,
     ready: isAiCommercialReady(config),
     detail,

@@ -4,6 +4,20 @@
  */
 
 import { z } from 'zod';
+import type {
+  BusinessOpportunity,
+  DemoPersonalization,
+  InboundClassification,
+  OutboundCritique,
+  OutboundDraft,
+  SalesReplyDraft,
+  WebsiteAnalysis,
+} from './commercial/schemas';
+import type {
+  BusinessAnalysisInput,
+  OutboundWriterInput,
+  WebsiteAnalysisInput,
+} from './commercial/mock-impl';
 
 export type AiProviderMode = 'mock' | 'openai';
 
@@ -104,13 +118,41 @@ export interface AICommercialProvider {
     input: ClassifyIntentInput,
     ctx: AICommercialCallContext,
   ): Promise<AICommercialResult<IntentClassification>>;
-  analyzeBusiness(input: unknown, ctx: AICommercialCallContext): Promise<never>;
-  analyzeWebsite(input: unknown, ctx: AICommercialCallContext): Promise<never>;
-  personalizeDemo(input: unknown, ctx: AICommercialCallContext): Promise<never>;
-  draftOutbound(input: unknown, ctx: AICommercialCallContext): Promise<never>;
-  critiqueOutbound(input: unknown, ctx: AICommercialCallContext): Promise<never>;
-  classifyInbound(input: unknown, ctx: AICommercialCallContext): Promise<never>;
-  draftReply(input: unknown, ctx: AICommercialCallContext): Promise<never>;
+  analyzeBusiness(
+    input: BusinessAnalysisInput,
+    ctx: AICommercialCallContext,
+  ): Promise<AICommercialResult<BusinessOpportunity>>;
+  analyzeWebsite(
+    input: WebsiteAnalysisInput,
+    ctx: AICommercialCallContext,
+  ): Promise<AICommercialResult<WebsiteAnalysis>>;
+  personalizeDemo(
+    input: BusinessAnalysisInput,
+    ctx: AICommercialCallContext,
+  ): Promise<AICommercialResult<DemoPersonalization>>;
+  draftOutbound(
+    input: OutboundWriterInput,
+    ctx: AICommercialCallContext,
+  ): Promise<AICommercialResult<OutboundDraft>>;
+  critiqueOutbound(
+    input: { draft: OutboundDraft; facts: string[] },
+    ctx: AICommercialCallContext,
+  ): Promise<AICommercialResult<OutboundCritique>>;
+  classifyInbound(
+    input: { text: string },
+    ctx: AICommercialCallContext,
+  ): Promise<AICommercialResult<InboundClassification>>;
+  draftReply(
+    input: {
+      classification: InboundClassification;
+      playbookName: string;
+      pricingAllowed: boolean;
+      priceRange?: string | null;
+      bookingUrl?: string | null;
+      allowedFeatures: string[];
+    },
+    ctx: AICommercialCallContext,
+  ): Promise<AICommercialResult<SalesReplyDraft>>;
   summarizeThread(input: unknown, ctx: AICommercialCallContext): Promise<never>;
   answerOperator(input: unknown, ctx: AICommercialCallContext): Promise<never>;
 }

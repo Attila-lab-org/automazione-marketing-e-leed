@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { createDemoFromLead } from '@/lib/demos/create';
 import { enrichLeadEmail } from '@/lib/enrichment/enrich-lead-email';
 import { enrichLeadFromGoogleIfNeeded } from '@/lib/leads/google-enrich';
@@ -25,6 +26,8 @@ import {
   resolveTestDelivery,
   testSequenceDelayMs,
 } from '@/lib/campaigns/test-delivery';
+import { applyAiOutboundIfAllowed } from '@/lib/messaging/ai-outbound';
+import { analyzeLeadWebsite } from '@/lib/intelligence/analyze';
 import { ensureMessageThread } from '@/lib/messaging/persist';
 
 type JobRef = {
@@ -66,6 +69,8 @@ export async function handleJob(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Record<string, unknown>> {
   switch (job.jobType) {
+    case 'WEBSITE_ANALYSIS':
+      return handleWebsiteAnalysis(admin, job, env);
     case 'LEAD_ENRICHMENT':
       return handleLeadEnrichment(admin, job, env);
     case 'DEMO_GENERATION':
@@ -78,6 +83,31 @@ export async function handleJob(
       return handleFollowupStep(admin, job, env);
     default:
       return { skipped: true, reason: `Unsupported job type ${job.jobType}` };
+  }
+}
+
+async function handleWebsiteAnalysis(
+  admin: SupabaseClient,
+  job: { workspaceId: string; entityId: string; inputSnapshot: Record<string, unknown> },
+  env: NodeJS.ProcessEnv,
+) {
+  const leadId = String(job.inputSnapshot.leadId ?? job.entityId);
+  try {
+    const result = await analyzeLeadWebsite({
+      admin: admin as AppSupabaseClient,
+      workspaceId: job.workspaceId,
+      leadId,
+      env,
+    });
+    return {
+      opportunityScore: result.opportunity.aiOpportunityScore,
+      retrieved: result.snapshot.retrieved,
+    };
+  } catch (err) {
+    return {
+      deferred: true,
+      reason: err instanceof Error ? err.message : 'website_analysis_failed',
+    };
   }
 }
 
@@ -145,6 +175,15 @@ async function handleLeadEnrichment(
     .in('business_status', ['NEW', 'QUALIFIED', 'CAMPAIGN_READY']);
 
   const queue = new SupabaseJobQueue(admin);
+  await queue.enqueue({
+    workspaceId: job.workspaceId,
+    jobType: 'WEBSITE_ANALYSIS',
+    entityType: 'lead',
+    entityId: leadId,
+    idempotencyKey: `WEBSITE_ANALYSIS:lead:${leadId}:v1`,
+    inputSnapshot: { leadId, campaignLeadId: job.entityId },
+    priority: 80,
+  });
   await queue.enqueue({
     workspaceId: job.workspaceId,
     jobType: 'DEMO_GENERATION',
@@ -250,13 +289,32 @@ async function handleMessageGeneration(
       ? await buildVisualEmailDraft(admin, job.workspaceId, job.entityId, env)
       : await buildFollowupDraft(admin, job.workspaceId, job.entityId, sequenceStep, env);
 
+  const { data: clRow } = await admin
+    .from('campaign_leads')
+    .select('campaign_id')
+    .eq('id', job.entityId)
+    .maybeSingle();
+  const { data: campaignMode } = clRow?.campaign_id
+    ? await admin.from('campaigns').select('delivery_mode').eq('id', clRow.campaign_id).maybeSingle()
+    : { data: null };
+  const ai =
+    sequenceStep === 0
+      ? await applyAiOutboundIfAllowed({
+          admin,
+          workspaceId: job.workspaceId,
+          campaignLeadId: job.entityId,
+          deliveryMode: campaignMode?.delivery_mode,
+          env,
+        })
+      : { used: false, critic: null };
+
   await updateCampaignLead(
     admin,
     job.entityId,
     { status: sequenceStep === 0 ? 'REVIEW' : 'APPROVED' },
-    { draftId: draft.draftId, subject: draft.subject, sequenceStep },
+    { draftId: draft.draftId, subject: draft.subject, sequenceStep, aiOutbound: ai },
   );
-  return { draftId: draft.draftId, subject: draft.subject, sequenceStep };
+  return { draftId: draft.draftId, subject: draft.subject, sequenceStep, aiOutbound: ai };
 }
 
 async function scheduleNextFollowup(

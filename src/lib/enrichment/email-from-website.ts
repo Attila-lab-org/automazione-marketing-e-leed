@@ -155,7 +155,7 @@ function confidenceFor(
   return 0.4;
 }
 
-async function fetchHtmlSafe(startUrl: string): Promise<string | null> {
+export async function fetchHtmlSafe(startUrl: string): Promise<string | null> {
   let current = (await assertSafePublicUrlResolved(startUrl)).toString();
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     await assertSafePublicUrlResolved(current);

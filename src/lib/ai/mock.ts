@@ -1,5 +1,18 @@
 import { AiPhaseNotImplementedError } from './errors';
 import { estimateTokensFromText } from './costs';
+import {
+  mockAnalyzeBusiness,
+  mockAnalyzeWebsite,
+  mockClassifyInbound,
+  mockCritiqueOutbound,
+  mockDraftOutbound,
+  mockDraftReply,
+  mockPersonalizeDemo,
+  type BusinessAnalysisInput,
+  type OutboundWriterInput,
+  type WebsiteAnalysisInput,
+} from './commercial/mock-impl';
+import type { InboundClassification, OutboundDraft } from './commercial/schemas';
 import type {
   AICommercialCallContext,
   AICommercialProvider,
@@ -79,31 +92,57 @@ export class MockAICommercialProvider implements AICommercialProvider {
     };
   }
 
-  analyzeBusiness(): Promise<never> {
-    return notReady('analyzeBusiness', 'AI-2');
+  async analyzeBusiness(input: BusinessAnalysisInput, ctx: AICommercialCallContext) {
+    return this.wrap(mockAnalyzeBusiness(input), ctx);
   }
-  analyzeWebsite(): Promise<never> {
-    return notReady('analyzeWebsite', 'AI-2');
+  async analyzeWebsite(input: WebsiteAnalysisInput, ctx: AICommercialCallContext) {
+    return this.wrap(mockAnalyzeWebsite(input), ctx);
   }
-  personalizeDemo(): Promise<never> {
-    return notReady('personalizeDemo', 'AI-2');
+  async personalizeDemo(input: BusinessAnalysisInput, ctx: AICommercialCallContext) {
+    return this.wrap(mockPersonalizeDemo(input), ctx);
   }
-  draftOutbound(): Promise<never> {
-    return notReady('draftOutbound', 'AI-2');
+  async draftOutbound(input: OutboundWriterInput, ctx: AICommercialCallContext) {
+    return this.wrap(mockDraftOutbound(input), ctx);
   }
-  critiqueOutbound(): Promise<never> {
-    return notReady('critiqueOutbound', 'AI-2');
+  async critiqueOutbound(
+    input: { draft: OutboundDraft; facts: string[] },
+    ctx: AICommercialCallContext,
+  ) {
+    return this.wrap(mockCritiqueOutbound(input.draft, input.facts), ctx);
   }
-  classifyInbound(): Promise<never> {
-    return notReady('classifyInbound', 'AI-4');
+  async classifyInbound(input: { text: string }, ctx: AICommercialCallContext) {
+    return this.wrap(mockClassifyInbound(input.text), ctx);
   }
-  draftReply(): Promise<never> {
-    return notReady('draftReply', 'AI-4');
+  async draftReply(
+    input: {
+      classification: InboundClassification;
+      playbookName: string;
+      pricingAllowed: boolean;
+      priceRange?: string | null;
+      bookingUrl?: string | null;
+      allowedFeatures: string[];
+    },
+    ctx: AICommercialCallContext,
+  ) {
+    return this.wrap(mockDraftReply(input), ctx);
   }
   summarizeThread(): Promise<never> {
     return notReady('summarizeThread', 'AI-1');
   }
   answerOperator(): Promise<never> {
     return notReady('answerOperator', 'AI-1');
+  }
+
+  private wrap<T>(output: T, ctx: AICommercialCallContext): AICommercialResult<T> {
+    return {
+      output,
+      model: ctx.model,
+      requestId: `mock-${this.generatedBy}`,
+      usage: {
+        inputTokens: estimateTokensFromText(JSON.stringify(output).slice(0, 2000)),
+        cachedInputTokens: 0,
+        outputTokens: estimateTokensFromText(JSON.stringify(output)),
+      },
+    };
   }
 }

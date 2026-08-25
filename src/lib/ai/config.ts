@@ -15,9 +15,13 @@ export type AiCommercialConfig = {
     normalLead: number;
     hotLead: number;
     thread: number;
+    operatorRequest: number;
   };
   timeoutMs: number;
   solEscalateBelow: number;
+  outboundEnabled: boolean;
+  outboundProduction: boolean;
+  maxToolCalls: number;
 };
 
 function envString(env: NodeJS.ProcessEnv, key: string, fallback: string): string {
@@ -81,9 +85,13 @@ export function getAiCommercialConfig(env: NodeJS.ProcessEnv = process.env): AiC
       normalLead: envNumber(env, 'AI_MAX_COST_NORMAL_LEAD_USD', 0.05),
       hotLead: envNumber(env, 'AI_MAX_COST_HOT_LEAD_USD', 0.25),
       thread: envNumber(env, 'AI_MAX_COST_THREAD_USD', 1),
+      operatorRequest: envNumber(env, 'AI_MAX_COST_OPERATOR_USD', 0.2),
     },
     timeoutMs: Math.max(1, Math.floor(envNumber(env, 'AI_REQUEST_TIMEOUT_MS', 20_000))),
     solEscalateBelow: envNumber(env, 'AI_SOL_ESCALATE_CONFIDENCE', 0.35),
+    outboundEnabled: envFlag(env, 'AI_OUTBOUND_ENABLED', true),
+    outboundProduction: envFlag(env, 'AI_OUTBOUND_PRODUCTION', false),
+    maxToolCalls: Math.max(1, Math.floor(envNumber(env, 'AI_MAX_TOOL_CALLS_PER_TURN', 8))),
   };
 }
 
