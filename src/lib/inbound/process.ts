@@ -29,6 +29,28 @@ export type ProcessInboundResult = {
 
 const REPLY_COOLDOWN_MINUTES = 5;
 
+export function selectTelegramReplyText(args: {
+  salesAgentSucceeded: boolean;
+  salesMode: string | null;
+  salesDraft: string | null;
+  salesStopAutoReply: boolean;
+  legacyEnabled: boolean;
+  intentMatched: boolean;
+  legacyText: string | null;
+}): { text: string | null; source: 'sales_ai' | 'legacy' | 'none' } {
+  if (args.salesStopAutoReply) return { text: null, source: 'none' };
+  if (args.salesAgentSucceeded) {
+    if (args.salesMode === 'AUTO_ALLOWED' && args.salesDraft) {
+      return { text: args.salesDraft, source: 'sales_ai' };
+    }
+    return { text: null, source: 'none' };
+  }
+  if (args.legacyEnabled && args.intentMatched && args.legacyText) {
+    return { text: args.legacyText, source: 'legacy' };
+  }
+  return { text: null, source: 'none' };
+}
+
 function botAddress(env: NodeJS.ProcessEnv): string {
   const u = env.TELEGRAM_BOT_USERNAME?.trim();
   return u ? `@${u.replace(/^@/, '')}` : 'telegram:bot';
@@ -114,6 +136,9 @@ export async function processTelegramInbound(args: {
   }
 
   let salesStopAutoReply = false;
+  let salesDraft: string | null = null;
+  let salesMode: string | null = null;
+  let salesAgentUsed = false;
   try {
     const sales = await processSalesInbound({
       admin,
@@ -124,6 +149,9 @@ export async function processTelegramInbound(args: {
       channel: 'TELEGRAM',
       env,
     });
+    salesDraft = sales.draft;
+    salesMode = sales.mode;
+    salesAgentUsed = true;
     if (sales.classification.unsubscribe) {
       await suppressLeadEmail(admin, workspaceId, lead.leadId, 'UNSUBSCRIBE');
       await stopLeadSequences(admin, workspaceId, lead.leadId);
@@ -136,8 +164,8 @@ export async function processTelegramInbound(args: {
       at.setMonth(at.getMonth() + 1);
       await scheduleFollowUpLater(admin, workspaceId, lead.leadId, threadId, at);
       salesStopAutoReply = true;
-    } else if (sales.humanRequired) {
-      salesStopAutoReply = true;
+    } else if (sales.humanRequired || sales.mode !== 'AUTO_ALLOWED') {
+      salesStopAutoReply = sales.mode !== 'AUTO_ALLOWED';
     }
   } catch (err) {
     console.error('sales inbound pipeline failed', err);
@@ -174,21 +202,31 @@ export async function processTelegramInbound(args: {
     },
   });
 
-  const replyText =
-    !salesStopAutoReply && settings.replyEnabled && intent.matched
-      ? buildAutoReplyText({
-          message,
-          intent,
-          studioName: env.OWNER_SENDER_NAME,
-          template: settings.replyTemplate,
-        })
-      : null;
+  const legacyText = buildAutoReplyText({
+    message,
+    intent,
+    studioName: env.OWNER_SENDER_NAME,
+    template: settings.replyTemplate,
+  });
+  const chosen = selectTelegramReplyText({
+    salesAgentSucceeded: salesAgentUsed,
+    salesMode,
+    salesDraft,
+    salesStopAutoReply,
+    legacyEnabled: settings.replyEnabled,
+    intentMatched: intent.matched,
+    legacyText,
+  });
+  const replyText = chosen.text;
   if (!replyText) {
-    const reason = !intent.matched
-      ? 'FOLLOWUP_NO_AUTO_REPLY'
-      : !settings.replyEnabled
-        ? 'AUTO_REPLY_DISABLED'
-        : 'NO_REPLY_TEMPLATE';
+    const reason =
+      salesAgentUsed && salesMode !== 'AUTO_ALLOWED'
+        ? 'SALES_DRAFT_PENDING'
+        : !intent.matched
+          ? 'FOLLOWUP_NO_AUTO_REPLY'
+          : !settings.replyEnabled
+            ? 'AUTO_REPLY_DISABLED'
+            : 'NO_REPLY_TEMPLATE';
     await admin.from('activity_log').insert({
       workspace_id: workspaceId,
       actor_type: 'SYSTEM',
@@ -202,7 +240,9 @@ export async function processTelegramInbound(args: {
           ? 'Risposta Telegram non inviata: risposta automatica disattivata'
           : reason === 'FOLLOWUP_NO_AUTO_REPLY'
             ? 'Messaggio Telegram successivo registrato senza risposta automatica'
-            : 'Risposta Telegram non inviata: testo non disponibile',
+            : reason === 'SALES_DRAFT_PENDING'
+              ? 'Bozza Attila AI salvata in Messaggi: nessuna risposta automatica'
+              : 'Risposta Telegram non inviata: testo non disponibile',
       data: { reason, chat_id: message.chatId, provider_message_id: message.providerMessageId },
     });
     return {

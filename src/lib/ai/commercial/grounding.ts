@@ -92,3 +92,41 @@ export function hasInjectionAttempt(text: string): boolean {
     text,
   );
 }
+
+export function criticSalesReply(
+  text: string,
+  facts: string[],
+  flags: { pricingAllowed: boolean; discountAllowed: boolean },
+): OutboundCritique {
+  const ungrounded: string[] = [];
+  const body = text;
+  for (const pattern of FORBIDDEN_CLAIM) {
+    if (pattern.test(body)) ungrounded.push(`contenuto vietato: ${pattern.source}`);
+  }
+  if (/€|euro|prezzo|costa /i.test(body) && !flags.pricingAllowed) {
+    ungrounded.push('prezzo comunicato fuori policy');
+  }
+  if (/sconto|350|scontat/i.test(body) && !flags.discountAllowed) {
+    ungrounded.push('sconto non autorizzato');
+  }
+  if (/garantiamo|sicuro al 100|domani è online/i.test(body)) {
+    ungrounded.push('promessa non supportata');
+  }
+  const corpus = facts.join('\n').toLowerCase();
+  if (/Sales Automation OS/i.test(body)) ungrounded.push('nome interno');
+  void corpus;
+  if (ungrounded.length) {
+    return {
+      verdict: /prezzo|sconto|Sales Automation OS/i.test(body) ? 'HUMAN_REVIEW' : 'REWRITE',
+      reasons: ['La bozza viola policy o fatti'],
+      ungroundedClaims: ungrounded,
+      rewriteHints: ['Usa solo fatti e playbook'],
+    };
+  }
+  return {
+    verdict: 'PASS',
+    reasons: ['Bozza coerente con i fatti e la policy'],
+    ungroundedClaims: [],
+    rewriteHints: [],
+  };
+}

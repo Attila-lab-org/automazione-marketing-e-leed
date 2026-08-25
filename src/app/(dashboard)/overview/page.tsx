@@ -1,6 +1,7 @@
 import PageHeader from "@/components/page-header";
 import ProvidersRuntimeList from "@/components/providers-runtime-list";
 import DashboardStats from "@/components/dashboard-stats";
+import OperatorAlerts from "@/components/operator-alerts";
 
 export default function OverviewPage() {
   return (
@@ -13,6 +14,8 @@ export default function OverviewPage() {
       <section aria-label="KPI principali">
         <DashboardStats />
       </section>
+
+      <OperatorAlerts />
 
       <section aria-label="Stato dei sistemi" className="space-y-3">
         <h2 className="text-sm font-semibold text-stone-800">Stato dei collegamenti</h2>

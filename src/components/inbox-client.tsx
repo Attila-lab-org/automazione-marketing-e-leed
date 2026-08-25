@@ -198,6 +198,11 @@ function InboxRow({
               HUMAN REQUIRED
             </span>
           ) : null}
+          {item.priority === "HOT" ? (
+            <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-800">
+              HOT
+            </span>
+          ) : null}
           {item.needsAttention ? (
             <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
               Da gestire

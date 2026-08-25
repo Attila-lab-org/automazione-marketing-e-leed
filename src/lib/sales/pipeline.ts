@@ -8,9 +8,11 @@ import { getAiCommercialConfig } from '@/lib/ai/config';
 import { mockClassifyInbound, mockDraftReply } from '@/lib/ai/commercial/mock-impl';
 import type { InboundClassification } from '@/lib/ai/commercial/schemas';
 import { getCurrentPlaybook } from './playbook-store';
+import type { ResponseMode } from './playbook';
 import { validateSalesTransition, type SalesState } from './states';
 import { getActiveAutonomy } from './autonomy';
-import type { ResponseMode } from './playbook';
+import { criticSalesReply } from '@/lib/ai/commercial/grounding';
+import { alertKindFromInbound, persistSalesReplyDraft, recordOperatorAlert } from './reply-persist';
 
 export type SalesMemory = {
   business_summary: string | null;
@@ -207,6 +209,8 @@ export async function processSalesInbound(args: {
   });
 
   const humanRequired = resolved.mode === 'HUMAN_ONLY' || state === 'HUMAN_REQUIRED';
+  const hot =
+    classification.discountAsk || classification.angry || classification.intent === 'quote_request';
   await args.admin
     .from('message_threads')
     .update({
@@ -215,6 +219,7 @@ export async function processSalesInbound(args: {
       assigned_mode: humanRequired ? 'HUMAN' : 'AI',
       sentiment: classification.sentiment,
       next_step: classification.summary,
+      priority: hot ? 'HOT' : 'NORMAL',
       human_required_reason: humanRequired
         ? classification.discountAsk
           ? 'Negotiation / pricing'
@@ -272,10 +277,50 @@ export async function processSalesInbound(args: {
     }).text;
   }
 
+  let critic = draftText
+    ? criticSalesReply(draftText, [classification.summary, ...classification.servicesRequested], {
+        pricingAllowed: playbook.pricing.aiMayCommunicate,
+        discountAllowed: playbook.discount.allowed,
+      })
+    : null;
+  let mode = resolved.mode;
+  if (mode === 'AUTO_ALLOWED' && critic && critic.verdict !== 'PASS') {
+    mode = 'APPROVAL_REQUIRED';
+    critic = { ...critic, verdict: 'HUMAN_REVIEW' };
+  }
+  // Inbound email has no Send Guard channel adapter; drafts stay in Messaggi.
+  if (args.channel === 'EMAIL' && mode === 'AUTO_ALLOWED') {
+    mode = 'APPROVAL_REQUIRED';
+  }
+
+  await persistSalesReplyDraft({
+    admin: args.admin,
+    workspaceId: args.workspaceId,
+    threadId: args.threadId,
+    leadId: args.leadId,
+    classification,
+    state,
+    mode,
+    draft: draftText,
+    critic,
+  });
+
+  const alertKind = alertKindFromInbound(classification, mode, critic);
+  if (alertKind) {
+    await recordOperatorAlert({
+      admin: args.admin,
+      workspaceId: args.workspaceId,
+      leadId: args.leadId,
+      threadId: args.threadId,
+      kind: alertKind,
+      message: `Attila: ${alertKind} — ${classification.summary}`,
+    });
+  }
+
   return {
     classification,
     state,
-    mode: resolved.mode,
+    mode,
     draft: draftText,
     humanRequired,
   };

@@ -73,6 +73,31 @@ export default function TelegramConversationDrawer({
 
           {detail ? (
             <>
+              {detail.aiDraft?.text ? (
+                <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                    Bozza Attila AI
+                  </h3>
+                  <p className="text-sm text-stone-800">
+                    <span className="font-semibold">AI understanding:</span> {detail.aiDraft.understanding}
+                  </p>
+                  <p className="whitespace-pre-wrap text-sm text-stone-800">
+                    <span className="font-semibold">AI suggested reply:</span> {detail.aiDraft.text}
+                  </p>
+                  <p className="text-xs text-stone-600">
+                    State: {detail.aiDraft.state} · Mode: {detail.aiDraft.mode}
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <HandoffButton threadId={detail.threadId} action="take_over" label="Prendi in carico" />
+                    <a
+                      href="/inbox"
+                      className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-700"
+                    >
+                      Modifica
+                    </a>
+                  </div>
+                </section>
+              ) : null}
               {detail.humanRequiredReason ? (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                   <p className="font-semibold">HUMAN REQUIRED</p>

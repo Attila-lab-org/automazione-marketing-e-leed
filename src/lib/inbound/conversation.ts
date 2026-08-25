@@ -1,4 +1,5 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
+import { loadLatestSalesDraft, type PersistedSalesDraft } from '@/lib/sales/reply-persist';
 
 export type InboxConversationMessage = {
   id: string;
@@ -52,6 +53,7 @@ export type InboxConversationDetail = {
   nextStep: string | null;
   sentiment: string | null;
   channel: string | null;
+  aiDraft: PersistedSalesDraft | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -84,7 +86,7 @@ export async function getInboxConversation(
   if (threadError) throw new Error(`Conversazione: ${threadError.message}`);
   if (!thread) return null;
 
-  const [{ data: lead }, { data: source }, { data: contacts }, { data: messages }, { data: activity }] =
+  const [{ data: lead }, { data: source }, { data: contacts }, { data: messages }, { data: activity }, aiDraft] =
     await Promise.all([
       admin
         .from('leads')
@@ -123,9 +125,11 @@ export async function getInboxConversation(
           'TELEGRAM_REPLY_SENT',
           'TELEGRAM_REPLY_FAILED',
           'TELEGRAM_REPLY_SKIPPED',
+          'OPERATOR_ALERT',
         ])
         .order('occurred_at', { ascending: false })
         .limit(100),
+    loadLatestSalesDraft(admin, threadId),
     ]);
 
   const snapshot = asRecord(source?.query_snapshot);
@@ -222,5 +226,6 @@ export async function getInboxConversation(
     nextStep: thread.next_step ?? null,
     sentiment: thread.sentiment ?? null,
     channel: thread.channel ?? null,
+    aiDraft,
   };
 }
