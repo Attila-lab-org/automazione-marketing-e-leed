@@ -20,6 +20,8 @@ import {
   type AiRunPublic,
   type IntentClassification,
 } from '../../src/lib/ai/types';
+import { envelopeFromPath } from '../../src/lib/ai/operator/envelope';
+import { emptyEntityRefs } from '../../src/lib/ai/operator/context';
 import { getAIProvider } from '../../src/lib/providers/ai';
 import { getProvidersStatus } from '../../src/lib/providers/status';
 
@@ -191,9 +193,22 @@ describe('mock commercial provider', () => {
     expect(rows[0]?.estimatedCostUsd).toBeGreaterThanOrEqual(0);
   });
 
-  it('lascia i metodi di fasi successive non implementati', async () => {
+  it('implementa answerOperator e lascia summarizeThread non implementato', async () => {
     const provider: AICommercialProvider = new MockAICommercialProvider();
-    await expect(provider.answerOperator({}, { model: 'x' })).rejects.toBeInstanceOf(
+    const planned = await provider.answerOperator(
+      {
+        question: 'dimmi tutto ciò che puoi fare',
+        history: [],
+        refs: emptyEntityRefs(),
+        envelope: envelopeFromPath('/overview'),
+        assistMode: 'ASSISTITO',
+        allowedTools: [],
+        capabilities: [],
+      },
+      { model: 'x' },
+    );
+    expect(planned.output.safetyClass).toBe('HELP');
+    await expect(provider.summarizeThread({}, { model: 'x' })).rejects.toBeInstanceOf(
       AiPhaseNotImplementedError,
     );
   });

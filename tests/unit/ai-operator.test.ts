@@ -222,7 +222,7 @@ describe('AI-1 grounding', () => {
       env: env({ OPENAI_API_KEY: 'sk-test-aaaaaaaaaaaaaaaaaaaaaaaa' }),
     });
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.taskType).toBe('answer_operator_simple');
+    expect(rows[0]?.taskType).toBe('answer_operator');
     expect(result.events.some((e) => e.type === 'tool_start')).toBe(true);
     expect(result.events.some((e) => e.type === 'tool_done' && e.ok)).toBe(true);
     expect(() => assertNoSecrets(result)).not.toThrow();

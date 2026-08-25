@@ -5,7 +5,7 @@ import { classifyOperatorIntent } from '../../src/lib/ai/operator/intent';
 import { suggestOperatorTools } from '../../src/lib/ai/operator/registry';
 import { envelopeFromPath } from '../../src/lib/ai/operator/envelope';
 import { hashPayload } from '../../src/lib/ai/operator/pending';
-import { mergeEntityRefs } from '../../src/lib/ai/operator/context';
+import { emptyEntityRefs, mergeEntityRefs } from '../../src/lib/ai/operator/context';
 import {
   buildOperatorCapabilityReply,
   CAMPAIGN_MUTATION_CAPABILITIES,
@@ -442,7 +442,7 @@ describe('operator conversational router', () => {
       question: HARD_DELETE_FOLLOWUP,
       envelope: envelopeFromPath('/overview'),
       refs: mergeEntityRefs(
-        { lastCampaignId: CAMPAIGN_ID, lastLeadIds: [], lastReviewContext: true },
+        { ...emptyEntityRefs(), lastCampaignId: CAMPAIGN_ID, lastReviewContext: true },
         [],
         [],
       ),
