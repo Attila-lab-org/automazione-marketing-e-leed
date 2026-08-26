@@ -44,7 +44,7 @@ export default function TelegramConversationDrawer({
       <aside
         role="dialog"
         aria-modal="true"
-        aria-label="Dettagli conversazione Telegram"
+        aria-label="Dettagli conversazione"
         className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-stone-200 bg-stone-50 shadow-2xl"
       >
         <header className="flex items-start justify-between gap-4 border-b border-stone-200 bg-white px-5 py-4">
@@ -55,6 +55,14 @@ export default function TelegramConversationDrawer({
             <h2 className="mt-1 text-lg font-semibold text-stone-900">
               {detail?.leadName ?? "Caricamento…"}
             </h2>
+            {detail?.campaignName ? (
+              <a
+                href={`/campaigns/${detail.campaignId}`}
+                className="mt-1 block text-xs font-medium text-sky-700 hover:underline"
+              >
+                Campagna: {detail.campaignName}
+              </a>
+            ) : null}
           </div>
           <button
             type="button"
@@ -75,139 +83,89 @@ export default function TelegramConversationDrawer({
 
           {detail ? (
             <>
-              {detail.aiDraft?.text ? (
-                <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                    Stato commerciale Attila
-                  </h3>
-                  <p className="text-sm text-stone-800">
-                    <span className="font-semibold">Obiettivo attuale:</span> {detail.aiDraft.understanding}
-                  </p>
-                  <p className="whitespace-pre-wrap text-sm text-stone-800">
-                    <span className="font-semibold">Prossima risposta:</span> {detail.aiDraft.text}
-                  </p>
-                  <p className="text-xs text-stone-600">
-                    Stato: {detail.commercialState ?? detail.aiDraft.state}
-                    {detail.nextStep ? ` · Prossimo passo: ${detail.nextStep}` : ""}
-                  </p>
-                </section>
-              ) : null}
-
-              {(detail.appointment || detail.nextDeadline) ? (
-                <section className="rounded-xl border border-sky-200 bg-sky-50 p-4 space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-sky-800">
-                    Calendario collegato
-                  </h3>
-                  {detail.appointment ? (
-                    <p className="text-sm text-stone-800">
-                      <span className="font-semibold">Appuntamento:</span> {detail.appointment.title} ·{" "}
-                      {formatDate(detail.appointment.startsAt)}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-stone-600">Nessun appuntamento fissato.</p>
-                  )}
-                  {detail.nextDeadline ? (
-                    <p className="text-sm text-stone-800">
-                      <span className="font-semibold">Prossima scadenza:</span> {detail.nextDeadline.title} ·{" "}
-                      {formatDate(detail.nextDeadline.dueAt)}
-                    </p>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <a
-                      href={
-                        detail.appointment?.startsAt
-                          ? `/calendar?week=${encodeURIComponent(detail.appointment.startsAt.slice(0, 10))}&focus=${encodeURIComponent(detail.appointment.id)}`
-                          : "/calendar"
-                      }
-                      className="rounded-md border border-sky-300 bg-white px-2 py-1 text-xs font-semibold text-sky-800"
-                    >
-                      Apri nel calendario
-                    </a>
-                    {detail.appointment ? (
-                      <>
-                        <CalendarActionButton
-                          eventId={detail.appointment.id}
-                          leadId={detail.leadId}
-                          threadId={detail.threadId}
-                          action="reschedule"
-                          label="Riprogramma"
-                        />
-                        <CalendarActionButton
-                          eventId={detail.appointment.id}
-                          leadId={detail.leadId}
-                          threadId={detail.threadId}
-                          action="cancel"
-                          label="Annulla"
-                        />
-                      </>
-                    ) : null}
-                  </div>
-                </section>
-              ) : null}
-              {detail.humanRequiredReason ? (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                  <p className="font-semibold">Serve una tua risposta</p>
-                  <p>{detail.humanRequiredReason}</p>
-                </div>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
-                  {detail.commercialState === "CALL_BOOKED"
-                    ? "Appuntamento fissato"
-                    : detail.commercialState === "FOLLOW_UP_LATER"
-                      ? "Da ricontattare"
-                      : detail.commercialState === "HUMAN_REQUIRED"
-                        ? "Serve intervento"
-                        : detail.commercialState ?? "Nuovo"}
-                </span>
-                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
-                  {detail.assignedMode === "HUMAN" ? "Gestione manuale" : "Attila attivo"}
-                </span>
-                {detail.sentiment ? (
-                  <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
-                    {detail.sentiment}
-                  </span>
-                ) : null}
-              </div>
-              <div className="rounded-xl border border-stone-200 bg-white p-4">
-                <p className="text-sm font-semibold text-stone-900">
-                  {detail.assignedMode === "HUMAN"
-                    ? "Attila è fermo su questa conversazione"
-                    : "Attila gestisce questa conversazione"}
+              <section
+                className={
+                  detail.assignedMode === "HUMAN" || detail.humanRequiredReason
+                    ? "rounded-xl border border-amber-300 bg-amber-50 p-4"
+                    : "rounded-xl border border-emerald-200 bg-emerald-50 p-4"
+                }
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-600">
+                  Cosa succede adesso
                 </p>
-                <p className="mt-1 text-xs text-stone-600">
-                  {detail.assignedMode === "HUMAN"
-                    ? "Riattivalo: analizzerà l’ultimo messaggio senza risposta e, se sicuro, risponderà subito."
-                    : "Passa alla gestione manuale solo se vuoi rispondere personalmente al cliente."}
+                <p className="mt-1 text-base font-semibold text-stone-900">
+                  {detail.assignedMode === "HUMAN" || detail.humanRequiredReason
+                    ? "Serve una decisione"
+                    : "Attila sta gestendo la conversazione"}
+                </p>
+                <p className="mt-1 text-sm text-stone-700">
+                  {detail.humanRequiredReason ??
+                    detail.nextStep ??
+                    "Non devi fare nulla. Puoi prendere il controllo quando vuoi."}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {detail.assignedMode === "HUMAN" ? (
                     <HandoffButton
                       threadId={detail.threadId}
                       action="return_to_ai"
-                      label="Attiva Attila e rispondi ora"
+                      label="Fai rispondere Attila"
                       onDone={onChanged}
                     />
                   ) : (
                     <HandoffButton
                       threadId={detail.threadId}
                       action="take_over"
-                      label="Gestisci tu"
+                      label="Rispondo io"
                       onDone={onChanged}
                     />
                   )}
-                  <HandoffButton
-                    threadId={detail.threadId}
-                    action="stop"
-                    label="Chiudi e ferma automazione"
-                    confirmMessage="Vuoi chiudere questa conversazione e fermare ogni automazione sul contatto?"
-                    onDone={onChanged}
-                  />
                 </div>
-              </div>
+              </section>
+
               {detail.channel === "EMAIL" ? (
                 <ManualEmailReply threadId={detail.threadId} />
               ) : null}
+
+              {detail.aiDraft?.text ? (
+                <details className="rounded-xl border border-stone-200 bg-white p-4">
+                  <summary className="cursor-pointer text-sm font-semibold text-stone-900">
+                    Vedi la risposta suggerita da Attila
+                  </summary>
+                  <p className="mt-3 text-sm text-stone-600">{detail.aiDraft.understanding}</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-stone-900">{detail.aiDraft.text}</p>
+                </details>
+              ) : null}
+
+              {(detail.appointment || detail.nextDeadline) ? (
+                <details className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+                  <summary className="cursor-pointer text-sm font-semibold text-sky-900">
+                    Calendario
+                    {detail.appointment ? ` · ${formatDate(detail.appointment.startsAt)}` : ""}
+                  </summary>
+                  <div className="mt-3 space-y-2">
+                    {detail.appointment ? (
+                      <p className="text-sm text-stone-800">{detail.appointment.title}</p>
+                    ) : null}
+                    {detail.nextDeadline ? (
+                      <p className="text-sm text-stone-700">
+                        Prossima scadenza: {detail.nextDeadline.title} · {formatDate(detail.nextDeadline.dueAt)}
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      <a href="/calendar" className="rounded-md border border-sky-300 bg-white px-2 py-1 text-xs font-semibold text-sky-800">
+                        Apri calendario
+                      </a>
+                      {detail.appointment ? (
+                        <>
+                          <CalendarActionButton eventId={detail.appointment.id} leadId={detail.leadId} threadId={detail.threadId} action="reschedule" label="Riprogramma" />
+                          <CalendarActionButton eventId={detail.appointment.id} leadId={detail.leadId} threadId={detail.threadId} action="cancel" label="Annulla" />
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                </details>
+              ) : null}
+              {detail.channel !== "EMAIL" ? (
               <section className="grid gap-3 sm:grid-cols-2">
                 <InfoCard title="Contatto">
                   <p className="font-medium text-stone-900">{detail.contact.displayName}</p>
@@ -243,39 +201,7 @@ export default function TelegramConversationDrawer({
                   ) : null}
                 </InfoCard>
               </section>
-
-              <section className="rounded-xl border border-stone-200 bg-white p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                    Stato risposta automatica
-                  </h3>
-                  <span
-                    className={
-                      detail.replyStatus.state === "SENT"
-                        ? "rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800"
-                        : detail.replyStatus.state === "FAILED"
-                          ? "rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-800"
-                          : "rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800"
-                    }
-                  >
-                    {detail.replyStatus.label}
-                  </span>
-                </div>
-                {detail.replyStatus.detail ? (
-                  <p className="mt-2 text-sm text-stone-700">{detail.replyStatus.detail}</p>
-                ) : null}
-                {detail.replyStatus.occurredAt ? (
-                  <p className="mt-1 text-xs text-stone-400">
-                    {formatDate(detail.replyStatus.occurredAt)}
-                  </p>
-                ) : null}
-                <p className="mt-2 text-xs text-stone-500">
-                  Intento: {detail.intent ?? "—"}
-                  {detail.matchedKeywords.length
-                    ? ` · Parole trovate: ${detail.matchedKeywords.join(", ")}`
-                    : ""}
-                </p>
-              </section>
+              ) : null}
 
               <section className="space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500">
@@ -309,25 +235,29 @@ export default function TelegramConversationDrawer({
                 )}
               </section>
 
-              <section className="space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                  Cronologia operativa
-                </h3>
-                {detail.events.map((event) => (
-                  <div
-                    key={event.id}
-                    className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm"
-                  >
-                    <p className="font-medium text-stone-800">{event.label}</p>
-                    {event.detail ? (
-                      <p className="text-xs text-stone-600">{event.detail}</p>
-                    ) : null}
-                    <p className="mt-1 text-[11px] text-stone-400">
-                      {formatDate(event.occurredAt)}
-                    </p>
+              <details className="rounded-xl border border-stone-200 bg-white p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-stone-800">
+                  Dettagli tecnici e azioni avanzate
+                </summary>
+                <div className="mt-3 space-y-2">
+                  {detail.events.map((event) => (
+                    <div key={event.id} className="rounded-lg bg-stone-50 px-3 py-2 text-sm">
+                      <p className="font-medium text-stone-800">{event.label}</p>
+                      {event.detail ? <p className="text-xs text-stone-600">{event.detail}</p> : null}
+                      <p className="mt-1 text-[11px] text-stone-400">{formatDate(event.occurredAt)}</p>
+                    </div>
+                  ))}
+                  <div className="pt-2">
+                    <HandoffButton
+                      threadId={detail.threadId}
+                      action="stop"
+                      label="Chiudi conversazione e ferma automazione"
+                      confirmMessage="Vuoi chiudere questa conversazione e fermare ogni automazione sul contatto?"
+                      onDone={onChanged}
+                    />
                   </div>
-                ))}
-              </section>
+                </div>
+              </details>
             </>
           ) : null}
         </div>

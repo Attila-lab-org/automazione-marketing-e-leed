@@ -6,7 +6,7 @@ import TelegramConversationDrawer from "@/components/telegram-conversation-drawe
 import type { InboxConversationDetail } from "@/lib/inbound/conversation";
 import type { InboxThreadItem } from "@/lib/inbound/list-inbox";
 
-type InboxView = "all" | "manual" | "ai" | "waiting" | "appointments";
+type InboxView = "all" | "manual" | "ai";
 
 function formatWhen(iso: string | null): string {
   if (!iso) return "—";
@@ -18,13 +18,6 @@ function formatWhen(iso: string | null): string {
   } catch {
     return iso;
   }
-}
-
-function statusLabel(status: string): string {
-  if (status === "NEEDS_REPLY") return "Da gestire";
-  if (status === "OPEN") return "Aperta";
-  if (status === "ARCHIVED") return "Archiviata";
-  return status;
 }
 
 function commercialStateLabel(state: string): string {
@@ -45,7 +38,6 @@ function commercialStateLabel(state: string): string {
 }
 
 function inboxViewFor(item: InboxThreadItem): InboxView {
-  if (item.commercialState === "CALL_BOOKED") return "appointments";
   if (
     item.assignedMode === "HUMAN" ||
     Boolean(item.humanRequiredReason) ||
@@ -54,13 +46,16 @@ function inboxViewFor(item: InboxThreadItem): InboxView {
   ) {
     return "manual";
   }
-  if (
-    item.commercialState === "FOLLOW_UP_LATER" ||
-    (item.nextStepAt && new Date(item.nextStepAt).getTime() > Date.now())
-  ) {
-    return "waiting";
-  }
   return "ai";
+}
+
+function primaryStatus(item: InboxThreadItem): string {
+  if (item.humanRequiredReason || item.assignedMode === "HUMAN") return "Serve una tua risposta";
+  if (item.commercialState === "CALL_BOOKED") return "Appuntamento fissato";
+  if (item.commercialState === "FOLLOW_UP_LATER") return "In attesa";
+  if (item.assignedMode === "AI") return "Attila la sta gestendo";
+  if (item.needsAttention) return "Da controllare";
+  return item.commercialState ? commercialStateLabel(item.commercialState) : "Conversazione aperta";
 }
 
 export default function InboxClient() {
@@ -171,16 +166,6 @@ export default function InboxClient() {
       label: "Gestiti dall’AI",
       description: "Conversazioni sicure che Attila sta portando avanti.",
     },
-    {
-      id: "waiting",
-      label: "In attesa",
-      description: "Clienti da ricontattare più avanti o in attesa del prossimo passo.",
-    },
-    {
-      id: "appointments",
-      label: "Appuntamenti",
-      description: "Conversazioni che hanno già una chiamata fissata.",
-    },
   ];
   const counts = Object.fromEntries(
     views.map((candidate) => [
@@ -196,7 +181,7 @@ export default function InboxClient() {
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <section className="grid gap-3 sm:grid-cols-3">
         {views.map((candidate) => {
           const active = candidate.id === view;
           const count = counts[candidate.id];
@@ -269,66 +254,46 @@ function InboxRow({
   onOpen: () => void;
 }) {
   return (
-    <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium text-stone-900">{item.leadName}</span>
-          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800">
-            {item.channelLabel}
-          </span>
-          {item.commercialState ? (
-            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
-              {commercialStateLabel(item.commercialState)}
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex w-full flex-col gap-3 px-4 py-4 text-left hover:bg-stone-50 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-stone-900">{item.leadName}</span>
+            <span
+              className={
+                item.channel === "telegram"
+                  ? "rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-800"
+                  : "rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800"
+              }
+            >
+              {item.channel === "telegram" ? "Telegram" : "Email"}
             </span>
+            <span
+              className={
+                item.humanRequiredReason || item.assignedMode === "HUMAN"
+                  ? "rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-800"
+                  : "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800"
+              }
+            >
+              {primaryStatus(item)}
+            </span>
+          </div>
+          {item.campaignName ? (
+            <p className="text-xs font-medium text-stone-500">Campagna: {item.campaignName}</p>
           ) : null}
-          {item.assignedMode ? (
-            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">
-              {item.assignedMode === "HUMAN" ? "Risposta manuale" : "Attila attivo"}
-            </span>
-          ) : null}
-          {item.humanRequiredReason ? (
-            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-800">
-              Richiede te
-            </span>
-          ) : null}
-          {item.priority === "HOT" ? (
-            <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-800">
-              HOT
-            </span>
-          ) : null}
-          {item.needsAttention ? (
-            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-              Da gestire
-            </span>
-          ) : (
-            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-600">
-              {statusLabel(item.status)}
-            </span>
-          )}
+          <p className="line-clamp-2 text-sm text-stone-600">
+            {item.preview ?? item.subject ?? "Nessun messaggio"}
+          </p>
         </div>
-        {item.contactHandle ? (
-          <p className="text-xs text-stone-500">{item.contactHandle}</p>
-        ) : null}
-        {item.nextStep ? (
-          <p className="text-xs text-stone-500">Prossimo passo: {item.nextStep}</p>
-        ) : null}
-        {item.preview ? (
-          <p className="line-clamp-2 text-sm text-stone-600">{item.preview}</p>
-        ) : (
-          <p className="text-sm text-stone-400">{item.subject ?? "Nessun anteprima"}</p>
-        )}
-      </div>
-      <div className="shrink-0 text-right text-xs text-stone-500">
-        <p>{formatWhen(item.lastMessageAt)}</p>
-        <button
-          type="button"
-          onClick={onOpen}
-          title="Apri contatto, gruppo, stato risposta e cronologia completa"
-          className="mt-1 inline-block font-medium text-stone-800 underline-offset-2 hover:underline"
-        >
-          Apri conversazione →
-        </button>
-      </div>
+        <div className="shrink-0 text-xs text-stone-500 sm:text-right">
+          <p>{formatWhen(item.lastMessageAt)}</p>
+          <p className="mt-1 font-semibold text-stone-800">Vedi tutto →</p>
+        </div>
+      </button>
     </li>
   );
 }

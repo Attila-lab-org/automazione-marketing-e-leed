@@ -28,6 +28,8 @@ export type InboxConversationDetail = {
   leadName: string;
   businessStatus: string;
   subject: string | null;
+  campaignId: string | null;
+  campaignName: string | null;
   contact: {
     displayName: string;
     username: string | null;
@@ -92,14 +94,14 @@ export async function getInboxConversation(
 ): Promise<InboxConversationDetail | null> {
   const { data: thread, error: threadError } = await admin
     .from('message_threads')
-    .select('id, lead_id, subject, status, unread_count, last_message_at, channel, commercial_state, assigned_mode, human_required_reason, next_step, sentiment')
+    .select('id, lead_id, campaign_id, subject, status, unread_count, last_message_at, channel, commercial_state, assigned_mode, human_required_reason, next_step, sentiment')
     .eq('workspace_id', workspaceId)
     .eq('id', threadId)
     .maybeSingle();
   if (threadError) throw new Error(`Conversazione: ${threadError.message}`);
   if (!thread) return null;
 
-  const [{ data: lead }, { data: source }, { data: contacts }, { data: messages }, { data: activity }, aiDraft, appointment, nextDeadline] =
+  const [{ data: lead }, { data: campaign }, { data: source }, { data: contacts }, { data: messages }, { data: activity }, aiDraft, appointment, nextDeadline] =
     await Promise.all([
       admin
         .from('leads')
@@ -107,6 +109,14 @@ export async function getInboxConversation(
         .eq('workspace_id', workspaceId)
         .eq('id', thread.lead_id)
         .single(),
+      thread.campaign_id
+        ? admin
+            .from('campaigns')
+            .select('id, name')
+            .eq('workspace_id', workspaceId)
+            .eq('id', thread.campaign_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
       admin
         .from('lead_sources')
         .select('query_snapshot')
@@ -123,7 +133,7 @@ export async function getInboxConversation(
       admin
         .from('messages')
         .select(
-          'id, direction, body_snapshot, sent_at, created_at, provider_message_id, subject',
+          'id, direction, provider, body_snapshot, sent_at, created_at, provider_message_id, subject',
         )
         .eq('workspace_id', workspaceId)
         .eq('thread_id', threadId)
@@ -199,6 +209,8 @@ export async function getInboxConversation(
     leadName: lead?.name ?? 'Contatto Telegram',
     businessStatus: lead?.business_status ?? 'NEW',
     subject: thread.subject,
+    campaignId: campaign?.id ?? null,
+    campaignName: campaign?.name ?? null,
     contact: {
       displayName: asString(snapshot.author_display_name) ?? lead?.name ?? 'Contatto',
       username: authorUsername,
@@ -223,7 +235,9 @@ export async function getInboxConversation(
       sentAt: message.sent_at ?? message.created_at,
       providerMessageId: message.provider_message_id,
       deliveryLabel:
-        message.direction === 'OUTBOUND' ? 'Inviato da Telegram' : 'Ricevuto',
+        message.direction === 'OUTBOUND'
+          ? `Inviato via ${message.provider === 'telegram' ? 'Telegram' : 'Email'}`
+          : `Ricevuto via ${message.provider === 'telegram' ? 'Telegram' : 'Email'}`,
       contextLabel: message.subject,
     })),
     events: (activity ?? []).map((event) => {

@@ -14,11 +14,11 @@ export default async function LeadsPage({
     <div className="mx-auto max-w-6xl space-y-6">
       <SectionSubnav items={[...LEAD_SUBNAV]} />
       <PageHeader
-        title={opportunita ? "Opportunità" : "Attività"}
+        title={opportunita ? "Contatti consigliati" : "Possibili clienti"}
         description={
           opportunita
-            ? "Qui trovi le attività più interessanti. Puoi controllarle e creare un’anteprima senza inviare email."
-            : "Cerca nuove attività, controlla i dati e crea un’anteprima del loro possibile sito."
+            ? "Qui trovi i contatti più interessanti. Selezionali per creare una campagna."
+            : "1. Cerca su Google. 2. Seleziona i contatti. 3. Crea la campagna. Puoi eliminare quelli che non vuoi usare."
         }
       />
       <LeadsBrowser view={opportunita ? "opportunita" : "tutti"} />

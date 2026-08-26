@@ -21,6 +21,8 @@ export type InboxThreadItem = {
   nextStep: string | null;
   nextStepAt: string | null;
   humanRequiredReason: string | null;
+  campaignId: string | null;
+  campaignName: string | null;
 };
 
 /**
@@ -47,7 +49,8 @@ export async function listInboxThreads(
   const threadIds = threads.map((t) => t.id);
   const leadIds = [...new Set(threads.map((t) => t.lead_id))];
 
-  const [{ data: messages }, { data: sources }, { data: contacts }] = await Promise.all([
+  const campaignIds = [...new Set(threads.map((t) => t.campaign_id).filter(Boolean))] as string[];
+  const [{ data: messages }, { data: sources }, { data: contacts }, { data: campaigns }] = await Promise.all([
     admin
       .from('messages')
       .select('thread_id, provider, body_snapshot, direction, sent_at, created_at')
@@ -70,6 +73,13 @@ export async function listInboxThreads(
       .eq('workspace_id', workspaceId)
       .in('lead_id', leadIds)
       .eq('is_primary', true),
+    campaignIds.length
+      ? admin
+          .from('campaigns')
+          .select('id, name')
+          .eq('workspace_id', workspaceId)
+          .in('id', campaignIds)
+      : Promise.resolve({ data: [] }),
   ]);
 
   const latestByThread = new Map<
@@ -88,6 +98,7 @@ export async function listInboxThreads(
 
   const sourceByLead = new Map((sources ?? []).map((s) => [s.lead_id, s.source_type]));
   const contactByLead = new Map((contacts ?? []).map((c) => [c.lead_id, c.value]));
+  const campaignById = new Map((campaigns ?? []).map((campaign) => [campaign.id, campaign.name]));
 
   return threads.map((t) => {
     const lead = Array.isArray(t.leads) ? t.leads[0] : t.leads;
@@ -137,6 +148,8 @@ export async function listInboxThreads(
       nextStep: t.next_step ?? null,
       nextStepAt: t.next_step_at ?? null,
       humanRequiredReason: t.human_required_reason ?? null,
+      campaignId: t.campaign_id ?? null,
+      campaignName: t.campaign_id ? campaignById.get(t.campaign_id) ?? null : null,
     };
   });
 }

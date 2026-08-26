@@ -44,8 +44,8 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/leads",
-    label: "Attività",
-    description: "Cerca attività e scegli quelle da contattare.",
+    label: "Contatti",
+    description: "Cerca possibili clienti, selezionali o eliminali.",
     match: ["/leads", "/segments"],
     icon: navIcon(
       "M16 19c0-2.2-1.8-4-4-4s-4 1.8-4 4M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7 8c0-1.7-.9-3.2-2.3-3.8M17 8.5a2.5 2.5 0 0 1-1.5 2.3M5 19c0-1.7.9-3.2 2.3-3.8M7 8.5a2.5 2.5 0 0 0 1.5 2.3",
@@ -94,7 +94,7 @@ const NAV_ITEMS: NavItem[] = [
 
 const SECTION_LABELS: Record<string, string> = {
   overview: "Controllo",
-  leads: "Attività",
+  leads: "Contatti",
   segments: "Filtri salvati",
   campaigns: "Campagne",
   telegram: "Telegram",

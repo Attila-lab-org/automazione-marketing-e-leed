@@ -29,11 +29,6 @@ const CAMPAIGN_MODE: Record<string, string> = {
 
 export default function CampaignsClient() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [leadIds, setLeadIds] = useState("");
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [devOpen, setDevOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/campaigns")
@@ -41,90 +36,21 @@ export default function CampaignsClient() {
       .then((data) => setCampaigns(data.campaigns ?? []));
   }, []);
 
-  async function createCampaign() {
-    const ids = leadIds
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (!name.trim() || !ids.length) {
-      setMessage("Inserisci il nome della campagna e almeno un’attività.");
-      return;
-    }
-    setBusy(true);
-    setMessage(null);
-    try {
-      const res = await fetch("/api/campaigns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), leadIds: ids, prepare: true }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Errore creazione");
-      setMessage(`Campagna creata con ${data.leadCount} attività. Preparazione avviata.`);
-      setName("");
-      setLeadIds("");
-      const list = await fetch("/api/campaigns").then((r) => r.json());
-      setCampaigns(list.campaigns ?? []);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Errore");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-stone-200 bg-white p-5">
-        <p className="text-sm text-stone-600">
-          Seleziona le attività dalla pagina{" "}
-          <Link href="/leads" className="font-medium text-amber-700 hover:underline">
-            Attività
-          </Link>{" "}
-          e scegli «Crea campagna». Qui trovi tutte le campagne già create.
-        </p>
-
-        <button
-          type="button"
-          title="Apre gli strumenti tecnici per creare una campagna usando gli identificativi interni."
-          onClick={() => setDevOpen((v) => !v)}
-          className="mt-4 text-xs font-medium text-stone-400 hover:text-stone-600"
+      <section className="flex flex-col gap-4 rounded-xl border border-amber-200 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-semibold text-stone-900">Vuoi creare una nuova campagna?</h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Cerca i possibili clienti, seleziona quelli giusti e premi “Crea campagna”.
+          </p>
+        </div>
+        <Link
+          href="/leads"
+          className="shrink-0 rounded-lg bg-stone-900 px-4 py-2 text-center text-sm font-semibold text-white hover:bg-stone-800"
         >
-          {devOpen ? "▾" : "▸"} Strumenti tecnici
-        </button>
-
-        {devOpen ? (
-          <div className="mt-3 rounded-lg border border-dashed border-stone-200 bg-stone-50 p-4">
-            <h2 className="text-sm font-semibold text-stone-800">Crea campagna (UUID)</h2>
-            <p className="mt-1 text-xs text-stone-500">
-              Solo per assistenza tecnica: incolla gli identificativi delle attività separati da virgola.
-            </p>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <input
-                className="rounded-lg border border-stone-200 px-3 py-2 text-sm"
-                placeholder="Nome campagna"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-              <textarea
-                className="rounded-lg border border-stone-200 px-3 py-2 text-sm md:col-span-2"
-                placeholder="Lead IDs (uuid1, uuid2, …)"
-                rows={3}
-                value={leadIds}
-                onChange={(e) => setLeadIds(e.target.value)}
-              />
-            </div>
-            <button
-              type="button"
-              title="Crea la campagna e prepara automaticamente anteprime e messaggi. Non invia email."
-              disabled={busy}
-              onClick={createCampaign}
-              className="mt-3 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
-            >
-              {busy ? "Creazione…" : "Crea e prepara campagna"}
-            </button>
-            {message ? <p className="mt-2 text-sm text-stone-600">{message}</p> : null}
-          </div>
-        ) : null}
+          Cerca e seleziona contatti
+        </Link>
       </section>
 
       {campaigns.length ? (

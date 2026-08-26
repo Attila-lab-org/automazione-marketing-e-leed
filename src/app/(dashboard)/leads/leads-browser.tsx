@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import LeadQuickDrawer, {
   type LeadQuickDrawerLead,
 } from "@/components/lead-quick-drawer";
+import DangerZoneModal from "@/components/danger-zone-modal";
 import ScoreBadge from "@/components/score-badge";
 import SmartDataTable, {
   type SmartDataTableColumn,
@@ -204,6 +205,8 @@ export default function LeadsBrowser({
     city: "",
   });
   const [creatingCampaign, setCreatingCampaign] = useState(false);
+  const [deleteLeads, setDeleteLeads] = useState<LeadView[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   // Filters
   const [minScore, setMinScore] = useState(0);
@@ -531,6 +534,30 @@ export default function LeadsBrowser({
     }
   }
 
+  async function onDeleteLeads() {
+    if (!deleteLeads.length) return;
+    setDeleting(true);
+    setResultBanner(null);
+    try {
+      const response = await fetch("/api/leads/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadIds: deleteLeads.map((lead) => lead.id) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Eliminazione non riuscita");
+      setResultBanner(data.message ?? "Contatti eliminati");
+      setDeleteLeads([]);
+      setSelectedLead(null);
+      setLoading(true);
+      setReloadToken((value) => value + 1);
+    } catch (reason) {
+      setResultBanner(reason instanceof Error ? reason.message : "Eliminazione non riuscita");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -700,8 +727,13 @@ export default function LeadsBrowser({
           onRowClick={(lead) => setSelectedLead(lead)}
           bulkActions={[
             {
-              label: "Crea campagna",
+              label: "Crea campagna con i selezionati",
               onApply: (rows) => openCampaignModal(rows),
+            },
+            {
+              label: "Elimina contatti",
+              variant: "danger",
+              onApply: (selected) => setDeleteLeads(selected),
             },
           ]}
         />
@@ -1048,6 +1080,18 @@ export default function LeadsBrowser({
           </form>
         </div>
       ) : null}
+
+      <DangerZoneModal
+        open={deleteLeads.length > 0}
+        title="Eliminare i contatti selezionati?"
+        description="Eliminerò soltanto i contatti mai usati. Quelli già collegati a campagne o conversazioni saranno conservati per non perdere la cronologia."
+        affectedCount={deleteLeads.length}
+        affectedLabel="contatti selezionati"
+        confirmPhrase="ELIMINA"
+        confirmLabel={deleting ? "Eliminazione…" : "Elimina contatti"}
+        onConfirm={() => void onDeleteLeads()}
+        onCancel={() => !deleting && setDeleteLeads([])}
+      />
     </>
   );
 }

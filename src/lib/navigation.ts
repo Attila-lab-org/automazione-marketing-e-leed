@@ -1,7 +1,6 @@
 export const LEAD_SUBNAV = [
-  { href: "/leads", label: "Trova attività", description: "Cerca nuove attività e aggiungile alla lista." },
-  { href: "/leads?view=opportunita", label: "Opportunità", description: "Vedi le attività più interessanti da contattare." },
-  { href: "/segments", label: "Filtri salvati", description: "Raggruppa le attività usando criteri ricorrenti." },
+  { href: "/leads", label: "Possibili clienti", description: "Cerca, seleziona, elimina o crea una campagna." },
+  { href: "/leads?view=opportunita", label: "Consigliati", description: "Vedi i contatti più interessanti." },
 ] as const;
 
 export const CAMPAIGN_SUBNAV = [
@@ -12,8 +11,8 @@ export const CAMPAIGN_SUBNAV = [
 ] as const;
 
 export const MESSAGE_SUBNAV = [
-  { href: "/inbox", label: "Posta in arrivo", description: "Leggi le risposte ricevute dai potenziali clienti." },
-  { href: "/telegram", label: "Telegram", description: "Avvia il bot e controlla come risponde Attila." },
+  { href: "/inbox", label: "Conversazioni", description: "Email e Telegram, raggruppati per cliente." },
+  { href: "/telegram", label: "Configura Telegram", description: "Collega o controlla il bot Telegram." },
   { href: "/calendar", label: "Calendario", description: "Appuntamenti, scadenze e slot disponibili." },
 ] as const;
 
