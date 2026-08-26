@@ -5,6 +5,7 @@ function extractEmail(value: string | undefined): string | null {
 
 export type EmailReplyPathReadiness = {
   ready: boolean;
+  fromAddress: string | null;
   replyTo: string | null;
   inboundDomain: string | null;
   missing: string[];
@@ -19,19 +20,25 @@ export function getEmailReplyPathReadiness(
   env: NodeJS.ProcessEnv = process.env,
 ): EmailReplyPathReadiness {
   const missing: string[] = [];
+  const fromAddress = extractEmail(env.RESEND_FROM);
   const replyTo = extractEmail(env.RESEND_REPLY_TO);
   const inboundDomain = env.RESEND_INBOUND_DOMAIN?.trim().toLowerCase() || null;
   const inboundEnabled = env.RESEND_INBOUND_ENABLED?.trim().toLowerCase() === 'true';
 
+  if (!fromAddress) missing.push('RESEND_FROM');
   if (!replyTo) missing.push('RESEND_REPLY_TO');
   if (!inboundDomain) missing.push('RESEND_INBOUND_DOMAIN');
   if (!inboundEnabled) missing.push('RESEND_INBOUND_ENABLED=true');
   if (replyTo && inboundDomain && !replyTo.endsWith(`@${inboundDomain}`)) {
     missing.push('RESEND_REPLY_TO deve appartenere a RESEND_INBOUND_DOMAIN');
   }
+  if (fromAddress && inboundDomain && !fromAddress.endsWith(`@${inboundDomain}`)) {
+    missing.push('RESEND_FROM deve appartenere a RESEND_INBOUND_DOMAIN');
+  }
 
   return {
     ready: missing.length === 0,
+    fromAddress,
     replyTo,
     inboundDomain,
     missing,

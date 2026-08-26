@@ -20,6 +20,7 @@ describe('email reply path readiness', () => {
   it('accetta solo un Reply-To esplicito sul dominio inbound attivo', () => {
     const env = {
       ...process.env,
+      RESEND_FROM: 'Attila Lab <hello@outreach.attila-lab.net>',
       RESEND_REPLY_TO: 'replies@outreach.attila-lab.net',
       RESEND_INBOUND_DOMAIN: 'outreach.attila-lab.net',
       RESEND_INBOUND_ENABLED: 'true',
@@ -29,6 +30,20 @@ describe('email reply path readiness', () => {
       replyTo: 'replies@outreach.attila-lab.net',
     });
     expect(requireEmailReplyPath(env)).toBe('replies@outreach.attila-lab.net');
+  });
+
+  it('blocca un mittente rimasto sul dominio precedente', () => {
+    const readiness = getEmailReplyPathReadiness({
+      ...process.env,
+      RESEND_FROM: 'Attila Lab <noreply@outreach.attila-lab.com>',
+      RESEND_REPLY_TO: 'replies@outreach.attila-lab.net',
+      RESEND_INBOUND_DOMAIN: 'outreach.attila-lab.net',
+      RESEND_INBOUND_ENABLED: 'true',
+    });
+    expect(readiness.ready).toBe(false);
+    expect(readiness.missing).toContain(
+      'RESEND_FROM deve appartenere a RESEND_INBOUND_DOMAIN',
+    );
   });
 });
 

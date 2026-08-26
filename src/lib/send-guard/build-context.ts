@@ -231,6 +231,7 @@ export async function buildSendGuardContext(
     draft?.status === 'READY' || draft?.status === 'APPROVED' ? 'APPROVED' : 'DRAFT';
 
   return {
+    deliveryMode: isTest ? 'TEST' : 'PRODUCTION',
     recipient: {
       email: recipientEmail,
       emailValid,

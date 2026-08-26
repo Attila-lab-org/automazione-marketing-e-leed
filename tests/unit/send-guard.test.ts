@@ -77,6 +77,18 @@ describe('runSendGuard (§11.2 — 7 check)', () => {
     expect(check?.reasons.some((r) => r.includes('reply'))).toBe(true);
   });
 
+  it('in TEST consente la prova allowlisted anche se il lead ha già risposto', () => {
+    const result = runSendGuard(
+      passingContext({
+        deliveryMode: 'TEST',
+        recipient: { email: 'test@example.com', emailValid: true, suppressed: false },
+        lead: { businessStatus: 'INTERESTED', hasBlockingReply: true },
+      }),
+    );
+    expect(result.allowed).toBe(true);
+    expect(result.checks.find((check) => check.name === 'lead')?.passed).toBe(true);
+  });
+
   it('consente la risposta conversazionale ma mantiene suppression e kill switch', () => {
     const conversational = runSendGuard(
       passingContext({

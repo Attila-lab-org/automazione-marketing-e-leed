@@ -23,6 +23,8 @@ import type {
 export interface SendGuardContext {
   /** Cold outreach oppure risposta dentro una conversazione già avviata. */
   sendKind?: 'OUTREACH' | 'CONVERSATION';
+  /** TEST consegna esclusivamente all'indirizzo allowlisted, mai al prospect. */
+  deliveryMode?: 'PRODUCTION' | 'TEST';
   recipient: {
     email: string | null;
     emailValid: boolean;
@@ -100,7 +102,7 @@ function checkRecipient(ctx: SendGuardContext): SendGuardCheck {
 
 function checkLead(ctx: SendGuardContext): SendGuardCheck {
   const reasons: string[] = [];
-  if (ctx.sendKind !== 'CONVERSATION') {
+  if (ctx.sendKind !== 'CONVERSATION' && ctx.deliveryMode !== 'TEST') {
     if (!SENDABLE_BUSINESS_STATUSES.includes(ctx.lead.businessStatus)) {
       reasons.push(`business_status ${ctx.lead.businessStatus} non compatibile con il send`);
     }
