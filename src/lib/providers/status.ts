@@ -29,6 +29,8 @@ export type CommercialConfigItem = {
     | 'owner_show_bridge'
     | 'resend_test_allowlist'
     | 'test_campaign_safety'
+    | 'resend_reply_path'
+    | 'resend_webhook'
     | 'app_url';
   name: string;
   /** READY / MISSING / INVALID — never include secret values. */
@@ -190,6 +192,7 @@ function commercialConfig(env: NodeJS.ProcessEnv): CommercialConfigItem[] {
   const st = getOwnerCommercialStatus(env);
   const test = getTestDeliveryStatus(env);
   const appUrl = getAppUrlStatus(env);
+  const replyPath = getEmailReplyPathReadiness(env);
   return [
     {
       id: 'owner_whatsapp',
@@ -242,6 +245,22 @@ function commercialConfig(env: NodeJS.ProcessEnv): CommercialConfigItem[] {
         test.safety === 'READY'
           ? 'allowlist attiva · BLOCKED_TEST_RECIPIENT enforced'
           : 'configura RESEND_TEST_RECIPIENT_ALLOWLIST',
+    },
+    {
+      id: 'resend_reply_path',
+      name: 'RESEND_REPLY_PATH',
+      status: replyPath.ready ? 'READY' : 'MISSING',
+      detail: replyPath.ready
+        ? `Reply-To e ricezione configurati su ${replyPath.inboundDomain}`
+        : `mancante: ${replyPath.missing.join(', ')}`,
+    },
+    {
+      id: 'resend_webhook',
+      name: 'RESEND_WEBHOOK_SECRET',
+      status: env.RESEND_WEBHOOK_SECRET?.trim() ? 'READY' : 'MISSING',
+      detail: env.RESEND_WEBHOOK_SECRET?.trim()
+        ? 'firma webhook inbound configurata'
+        : 'mancante — le email ricevute non possono essere verificate',
     },
   ];
 }

@@ -8,15 +8,16 @@ export default function OverviewPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
-        title="Riepilogo"
-        description="Qui vedi quante attività hai trovato, quante anteprime sono pronte e quali invii richiedono attenzione."
+        title="Centro di controllo commerciale"
+        description="Definisci il risultato. Attila pianifica, prepara e verifica il lavoro entro la modalità che scegli."
       />
 
+      <CommercialInsightsCard />
+
       <section aria-label="KPI principali">
+        <h2 className="mb-3 text-sm font-semibold text-stone-800">Numeri operativi</h2>
         <DashboardStats />
       </section>
-
-      <CommercialInsightsCard />
 
       <OperatorAlerts />
 

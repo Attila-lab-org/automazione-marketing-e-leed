@@ -46,6 +46,8 @@ const COMMERCIAL_NAMES: Record<string, string> = {
   resend_test_allowlist: "Indirizzi autorizzati per le prove",
   test_campaign_safety: "Protezione campagne di prova",
   app_url: "Indirizzo pubblico dell’app",
+  resend_reply_path: "Risposte email (Reply-To)",
+  resend_webhook: "Webhook email ricevute",
 };
 
 const CONFIG_STATUS: Record<CommercialItem["status"], string> = {
@@ -57,14 +59,12 @@ const CONFIG_STATUS: Record<CommercialItem["status"], string> = {
 function providerDetail(item: ProviderItem): string {
   if (item.status === "ready") return "Collegato e pronto all’uso.";
   if (item.status === "mock") return "Funziona in modalità prova: non usa il servizio reale.";
-  if (item.status === "not_configured") return "Da configurare prima dell’uso.";
-  return "Il collegamento ha un problema. Controlla la configurazione.";
+  if (item.status === "not_configured") return item.detail;
+  return item.detail || "Il collegamento ha un problema. Controlla la configurazione.";
 }
 
 function commercialDetail(item: CommercialItem): string {
-  if (item.status === "READY") return "Configurazione presente e pronta.";
-  if (item.status === "INVALID") return "Il valore inserito non è valido.";
-  return "Configurazione mancante.";
+  return item.detail;
 }
 
 export default function ProvidersRuntimeList({

@@ -4,7 +4,7 @@ import { getCommercialLearningSnapshot } from '@/lib/sales/learning';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 import { getDailyCommercialBriefing } from '@/lib/sales/daily-briefing';
-import { getActiveCommercialGoal, getActiveGoalPlan } from '@/lib/sales/goals/store';
+import { getActiveGoalPlan, getLatestCommercialGoal } from '@/lib/sales/goals/store';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +19,7 @@ export const GET = withAdmin(async (request: Request) => {
   const [insights, briefing, goal] = await Promise.all([
     getCommercialLearningSnapshot(admin, workspace.id, windowDays),
     getDailyCommercialBriefing(admin, workspace.id),
-    getActiveCommercialGoal(admin, workspace.id),
+    getLatestCommercialGoal(admin, workspace.id),
   ]);
   const goalPlan = goal ? await getActiveGoalPlan(admin, goal.id) : null;
   return NextResponse.json({ insights, briefing, goal, goalPlan });

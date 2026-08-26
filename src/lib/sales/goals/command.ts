@@ -144,10 +144,17 @@ export async function executeCommercialGoalCommand(input: {
       data: { goalId: goal.id },
     };
   }
-  if (active && /\b(?:modalit[àa]\s*)?(ask|do|autopilot)\b/i.test(q)) {
-    const requested = q.match(/\b(ask|do|autopilot)\b/i)?.[1]?.toUpperCase() as
-      | CommercialGoalMode
-      | undefined;
+  if (
+    active &&
+    /\b(?:ask|do|autopilot|modalit[àa]\s+(?:autonom|assistit|equilibrat)|modo\s+(?:autonom|assistit|equilibrat)|fai tu)\b/i.test(
+      q,
+    )
+  ) {
+    const explicit = q.match(/\b(ask|do|autopilot)\b/i)?.[1]?.toUpperCase();
+    const requested = (
+      explicit ??
+      (/autonom|fai tu/i.test(q) ? 'AUTOPILOT' : /assistit/i.test(q) ? 'ASK' : 'DO')
+    ) as CommercialGoalMode;
     if (requested) {
       const { data, error } = await input.admin
         .from('commercial_goals')

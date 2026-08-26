@@ -9,7 +9,7 @@ describe('email reply path readiness', () => {
   it('non considera il mittente una mailbox inbound', () => {
     const env = {
       ...process.env,
-      RESEND_FROM: 'Attila <noreply@outreach.attila-lab.com>',
+      RESEND_FROM: 'Attila <noreply@outreach.attila-lab.net>',
     };
     const readiness = getEmailReplyPathReadiness(env);
     expect(readiness.ready).toBe(false);
@@ -20,15 +20,15 @@ describe('email reply path readiness', () => {
   it('accetta solo un Reply-To esplicito sul dominio inbound attivo', () => {
     const env = {
       ...process.env,
-      RESEND_REPLY_TO: 'replies@outreach.attila-lab.com',
-      RESEND_INBOUND_DOMAIN: 'outreach.attila-lab.com',
+      RESEND_REPLY_TO: 'replies@outreach.attila-lab.net',
+      RESEND_INBOUND_DOMAIN: 'outreach.attila-lab.net',
       RESEND_INBOUND_ENABLED: 'true',
     };
     expect(getEmailReplyPathReadiness(env)).toMatchObject({
       ready: true,
-      replyTo: 'replies@outreach.attila-lab.com',
+      replyTo: 'replies@outreach.attila-lab.net',
     });
-    expect(requireEmailReplyPath(env)).toBe('replies@outreach.attila-lab.com');
+    expect(requireEmailReplyPath(env)).toBe('replies@outreach.attila-lab.net');
   });
 });
 
@@ -40,7 +40,7 @@ describe('Resend received email normalization', () => {
       data: {
         email_id: 'received-1',
         from: 'prospect@example.com',
-        to: ['replies@outreach.attila-lab.com'],
+        to: ['replies@outreach.attila-lab.net'],
         subject: 'Re: proposta',
         text: 'Ok mi interessa',
         message_id: '<reply-1@example.com>',

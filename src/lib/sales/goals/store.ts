@@ -27,6 +27,23 @@ export async function getActiveCommercialGoal(
   return data;
 }
 
+export async function getLatestCommercialGoal(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+): Promise<CommercialGoalRow | null> {
+  const active = await getActiveCommercialGoal(admin, workspaceId);
+  if (active) return active;
+  const { data, error } = await admin
+    .from('commercial_goals')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`Ultimo goal: ${error.message}`);
+  return data;
+}
+
 export async function getCommercialGoal(
   admin: AppSupabaseClient,
   workspaceId: string,

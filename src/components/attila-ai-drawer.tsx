@@ -14,6 +14,15 @@ type ChatMessage = {
 };
 
 type ToolStatus = { id: string; label: string; done: boolean; ok: boolean };
+type DrawerGoal = {
+  id: string;
+  title: string;
+  mode: "ASK" | "DO" | "AUTOPILOT";
+  status: string;
+  current_value: number;
+  target_value: number;
+  progress_snapshot?: { pace?: string };
+};
 
 const SUGGESTIONS = [
   "Cosa mi consigli oggi?",
@@ -130,6 +139,7 @@ export default function AttilaAiDrawer() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [dailyBriefing, setDailyBriefing] = useState<string | null>(null);
   const [goalSummary, setGoalSummary] = useState<string | null>(null);
+  const [goal, setGoal] = useState<DrawerGoal | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const briefingLoadedRef = useRef(false);
 
@@ -226,6 +236,7 @@ export default function AttilaAiDrawer() {
       .then((data) => {
         const goal = data?.goal;
         if (!goal?.id) return;
+        setGoal(goal);
         const progress = goal.progress_snapshot ?? {};
         setModeLabel(goal.mode ?? "DO");
         setGoalSummary(
@@ -296,6 +307,38 @@ export default function AttilaAiDrawer() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Errore Attila AI");
     } finally {
+      void fetch("/api/ai/goals", { cache: "no-store" })
+        .then((response) => response.json())
+        .then((data) => {
+          const refreshed = data?.goal as DrawerGoal | undefined;
+          if (!refreshed?.id) return;
+          setGoal(refreshed);
+          setModeLabel(refreshed.mode);
+          setGoalSummary(
+            `${refreshed.title} · ${refreshed.current_value}/${refreshed.target_value} · ${refreshed.progress_snapshot?.pace ?? "IN OSSERVAZIONE"}`,
+          );
+        })
+        .catch(() => undefined);
+      setBusy(false);
+    }
+  }
+
+  async function changeGoalMode(mode: DrawerGoal["mode"]) {
+    if (!goal || busy) return;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/ai/goals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goalId: goal.id, mode }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Modalità non aggiornata");
+      setGoal(data.goal);
+      setModeLabel(data.goal.mode);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Modalità non aggiornata");
+    } finally {
       setBusy(false);
     }
   }
@@ -356,6 +399,48 @@ export default function AttilaAiDrawer() {
                 Chiudi
               </button>
             </header>
+
+            <div className="border-b border-stone-100 bg-stone-50 px-4 py-2.5">
+              {goal ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex gap-1">
+                    {(["ASK", "DO", "AUTOPILOT"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        disabled={busy || goal.mode === mode}
+                        onClick={() => void changeGoalMode(mode)}
+                        className={`rounded-md px-2 py-1 text-[11px] font-bold ${
+                          goal.mode === mode
+                            ? "bg-amber-200 text-amber-950"
+                            : "border border-stone-200 bg-white text-stone-600"
+                        } disabled:opacity-60`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                  <Link
+                    href="/overview"
+                    onClick={() => setOpen(false)}
+                    className="text-xs font-semibold text-amber-800"
+                  >
+                    Gestisci goal
+                  </Link>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-stone-600">Nessun obiettivo attivo.</p>
+                  <Link
+                    href="/overview"
+                    onClick={() => setOpen(false)}
+                    className="text-xs font-semibold text-amber-800"
+                  >
+                    Configura
+                  </Link>
+                </div>
+              )}
+            </div>
 
             <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
               {messages.length === 0 ? (
