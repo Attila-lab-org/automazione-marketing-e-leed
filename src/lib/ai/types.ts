@@ -15,6 +15,7 @@ import type {
   SalesThreadMemorySnapshot,
   SalesThreadTurn,
   WebsiteAnalysis,
+  GoalStrategyPlanOutput,
 } from './commercial/schemas';
 import type {
   BusinessAnalysisInput,
@@ -39,7 +40,8 @@ export type AiTaskType =
   | 'draft_reply'
   | 'summarize_thread'
   | 'answer_operator'
-  | 'answer_operator_simple';
+  | 'answer_operator_simple'
+  | 'plan_commercial_goal';
 
 export type ModelTier = 'luna' | 'terra' | 'sol';
 
@@ -164,6 +166,15 @@ export interface AICommercialProvider {
     input: OperatorComposeInput,
     ctx: AICommercialCallContext,
   ): Promise<AICommercialResult<OperatorFinalReply>>;
+  planGoalStrategy?(
+    input: {
+      goal: Record<string, unknown>;
+      observation: Record<string, unknown>;
+      playbook: Record<string, unknown> | null;
+      previousPlan: Record<string, unknown> | null;
+    },
+    ctx: AICommercialCallContext,
+  ): Promise<AICommercialResult<GoalStrategyPlanOutput>>;
 }
 
 export type AiRunInsertInput = {

@@ -58,8 +58,38 @@ export const TOOL_CONTRACTS: Record<string, ToolContract> = {
   list_calendar_events: { name: 'list_calendar_events', tier: 'READ', label: 'eventi calendario' },
   list_available_slots: { name: 'list_available_slots', tier: 'READ', label: 'slot disponibili' },
   get_calendar_summary: { name: 'get_calendar_summary', tier: 'READ', label: 'riepilogo calendario' },
+  get_active_commercial_goal: {
+    name: 'get_active_commercial_goal',
+    tier: 'READ',
+    label: 'obiettivo commerciale attivo',
+  },
+  get_commercial_goal_plan: {
+    name: 'get_commercial_goal_plan',
+    tier: 'READ',
+    label: 'piano dell’obiettivo commerciale',
+  },
 
   create_campaign: { name: 'create_campaign', tier: 'INTERNAL', label: 'crea campagna' },
+  create_commercial_goal: {
+    name: 'create_commercial_goal',
+    tier: 'INTERNAL',
+    label: 'crea obiettivo commerciale',
+  },
+  update_commercial_goal: {
+    name: 'update_commercial_goal',
+    tier: 'INTERNAL',
+    label: 'aggiorna obiettivo commerciale',
+  },
+  pause_commercial_goal: {
+    name: 'pause_commercial_goal',
+    tier: 'INTERNAL',
+    label: 'metti in pausa obiettivo commerciale',
+  },
+  resume_commercial_goal: {
+    name: 'resume_commercial_goal',
+    tier: 'INTERNAL',
+    label: 'riprendi obiettivo commerciale',
+  },
   prepare_campaign: { name: 'prepare_campaign', tier: 'INTERNAL', label: 'prepara campagna' },
   resume_campaign: { name: 'resume_campaign', tier: 'INTERNAL', label: 'riprendi campagna' },
   personalize_demo: { name: 'personalize_demo', tier: 'INTERNAL', label: 'personalizza demo' },
@@ -158,4 +188,39 @@ export function isConfirmTier(tier: ExecutionTier): boolean {
 
 export function contractsByTier(...tiers: ExecutionTier[]): ToolContract[] {
   return Object.values(TOOL_CONTRACTS).filter((c) => tiers.includes(c.tier));
+}
+
+export type GoalExecutionDecision = {
+  decision: 'ALLOW' | 'SHADOW' | 'CONFIRM' | 'DENY';
+  reason: string;
+};
+
+export function resolveGoalScopedExecution(input: {
+  mode: 'ASK' | 'DO' | 'AUTOPILOT';
+  tier: ExecutionTier;
+  autonomyActive: boolean;
+  sendGuardReady: boolean;
+  withinDailyLimit: boolean;
+  shadowMode: boolean;
+  escalation: boolean;
+}): GoalExecutionDecision {
+  if (input.tier === 'DENIED' || input.escalation) {
+    return { decision: 'DENY', reason: input.escalation ? 'HUMAN_ESCALATION' : 'TOOL_DENIED' };
+  }
+  if (input.mode === 'ASK') {
+    return input.tier === 'READ'
+      ? { decision: 'ALLOW', reason: 'ASK_READ' }
+      : { decision: 'SHADOW', reason: 'ASK_NO_WRITES' };
+  }
+  if (input.tier === 'READ' || input.tier === 'INTERNAL') {
+    return input.shadowMode
+      ? { decision: 'SHADOW', reason: 'SHADOW_MODE' }
+      : { decision: 'ALLOW', reason: 'INTERNAL_ALLOWED' };
+  }
+  if (input.mode === 'DO') return { decision: 'CONFIRM', reason: 'DO_EXTERNAL_CONFIRMATION' };
+  if (input.shadowMode) return { decision: 'SHADOW', reason: 'SHADOW_MODE' };
+  if (!input.autonomyActive) return { decision: 'CONFIRM', reason: 'AUTONOMY_NOT_ACTIVE' };
+  if (!input.sendGuardReady) return { decision: 'DENY', reason: 'SEND_GUARD_NOT_READY' };
+  if (!input.withinDailyLimit) return { decision: 'DENY', reason: 'DAILY_LIMIT_REACHED' };
+  return { decision: 'ALLOW', reason: 'AUTOPILOT_POLICY_GREEN' };
 }

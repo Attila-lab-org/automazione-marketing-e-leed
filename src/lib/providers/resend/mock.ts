@@ -8,7 +8,13 @@
 
 import { stableHash } from '../google-places/mock';
 import type { MessageEventType } from '../../types/domain';
-import type { OutboundEmail, ResendProvider, ResendWebhookEvent, SendResult } from './types';
+import type {
+  OutboundEmail,
+  ReceivedEmail,
+  ResendProvider,
+  ResendWebhookEvent,
+  SendResult,
+} from './types';
 
 export class ResendMock implements ResendProvider {
   /** Registro dei send simulati (mai rete). */
@@ -34,6 +40,19 @@ export class ResendMock implements ResendProvider {
     const record = { ...message, providerMessageId, sentAt: new Date().toISOString() };
     this.sentMessages.push(record);
     return { providerMessageId, sentAt: record.sentAt };
+  }
+
+  async retrieveReceivedEmail(id: string): Promise<ReceivedEmail> {
+    return {
+      id,
+      from: 'prospect@example.com',
+      to: ['replies@example.com'],
+      subject: 'Re: proposta',
+      text: 'Mock inbound reply',
+      html: null,
+      headers: {},
+      messageId: `<${id}@example.com>`,
+    };
   }
 
   /** Simula un evento webhook (delivery/open/bounce/reply…) per test e demo. */

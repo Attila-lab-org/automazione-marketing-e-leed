@@ -1,4 +1,6 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
+import { getActiveCommercialGoal } from '@/lib/sales/goals/store';
+import type { GoalProgressSnapshot } from '@/lib/sales/goals/types';
 import { europeRomeDayRange, europeRomeLocalToIso, europeRomeYmd, formatEuropeRome } from '@/lib/ai/operator/time';
 
 export type BriefingChannel = 'EMAIL' | 'TELEGRAM';
@@ -255,7 +257,7 @@ export async function getDailyCommercialBriefing(
     (bookedThreads ?? []).map((thread) => [thread.id, thread.channel]),
   );
 
-  return buildDailyCommercialBriefing({
+  const briefing = buildDailyCommercialBriefing({
     now,
     messages: messagesResult.data ?? [],
     bookedThreadIds,
@@ -265,4 +267,22 @@ export async function getDailyCommercialBriefing(
     followUpsDue: dueResult.count ?? 0,
     readyLeads: leadsResult.data ?? [],
   });
+  const goal = await getActiveCommercialGoal(admin, workspaceId);
+  if (!goal) return briefing;
+  const progress = goal.progress_snapshot as unknown as Partial<GoalProgressSnapshot>;
+  const pace =
+    progress.pace === 'BEHIND'
+      ? 'Siamo indietro sul ritmo necessario.'
+      : progress.pace === 'AHEAD'
+        ? 'Siamo avanti rispetto al ritmo necessario.'
+        : 'Siamo in linea con il ritmo necessario.';
+  const blocker = progress.blockers?.[0];
+  return {
+    ...briefing,
+    actions: [
+      ...(blocker ? [`Risolvi il blocker del goal: ${blocker}.`] : []),
+      ...briefing.actions,
+    ].slice(0, 4),
+    summary: `Obiettivo “${goal.title}”: ${Number(goal.current_value)}/${Number(goal.target_value)}. ${pace} ${briefing.summary}`,
+  };
 }

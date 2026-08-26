@@ -174,6 +174,35 @@ export type SalesReplyDraftInput = {
   appointmentLabel?: string | null;
 };
 
+export const GOAL_ACTION_VALUES = [
+  'RESEARCH_SEGMENT',
+  'PREPARE_DEMOS',
+  'START_CAMPAIGN',
+  'FOLLOW_UP',
+  'PAUSE_SEGMENT',
+  'REQUEST_HUMAN',
+  'WAIT',
+] as const;
+
+export const goalActionPlanSchema = z.object({
+  id: z.string().min(1).max(80),
+  type: z.enum(GOAL_ACTION_VALUES),
+  priority: z.number().int().min(1).max(100),
+  rationale: z.string().min(1).max(500),
+  params: z.record(z.string(), z.unknown()),
+  verification: z.string().min(1).max(300),
+  safety: z.enum(['INTERNAL', 'EXTERNAL', 'HUMAN']),
+});
+
+export const goalStrategyPlanSchema = z.object({
+  rationale: z.string().min(1).max(1200),
+  hypotheses: z.array(z.string().min(1).max(300)).max(10),
+  actions: z.array(goalActionPlanSchema).min(1).max(8),
+  successCriteria: z.array(z.string().min(1).max(300)).min(1).max(8),
+});
+
+export type GoalStrategyPlanOutput = z.infer<typeof goalStrategyPlanSchema>;
+
 export const PROMPT_VERSIONS = {
   websiteAnalysis: 'website-analysis-v1',
   businessOpportunity: 'business-opportunity-v1',
@@ -182,6 +211,7 @@ export const PROMPT_VERSIONS = {
   demo: 'demo-personalization-v1',
   inbound: 'inbound-classify-v2',
   reply: 'sales-reply-v2',
+  goalPlanner: 'goal-planner-v1',
 } as const;
 
 function objectSchema(
@@ -444,4 +474,28 @@ export const SALES_REPLY_JSON_SCHEMA = objectSchema(
     humanRequiredReason: { type: ['string', 'null'] },
   },
   ['text', 'claimsUsed', 'recommendedState', 'nextStep', 'confidence', 'humanRequiredReason'],
+);
+
+export const GOAL_STRATEGY_PLAN_JSON_SCHEMA = objectSchema(
+  {
+    rationale: { type: 'string' },
+    hypotheses: { type: 'array', items: { type: 'string' } },
+    actions: {
+      type: 'array',
+      items: objectSchema(
+        {
+          id: { type: 'string' },
+          type: { type: 'string', enum: [...GOAL_ACTION_VALUES] },
+          priority: { type: 'integer' },
+          rationale: { type: 'string' },
+          params: { type: 'object', additionalProperties: true },
+          verification: { type: 'string' },
+          safety: { type: 'string', enum: ['INTERNAL', 'EXTERNAL', 'HUMAN'] },
+        },
+        ['id', 'type', 'priority', 'rationale', 'params', 'verification', 'safety'],
+      ),
+    },
+    successCriteria: { type: 'array', items: { type: 'string' } },
+  },
+  ['rationale', 'hypotheses', 'actions', 'successCriteria'],
 );

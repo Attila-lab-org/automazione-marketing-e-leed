@@ -70,6 +70,7 @@ export type OperatorWriteHooks = {
   }) => Promise<WriteResult[]>;
   replyTelegram?: () => Promise<WriteResult>;
   runOps?: (action: Exclude<import('./ops-writes').OperatorOpsAction, 'none'>) => Promise<WriteResult>;
+  goalCommand?: (question: string) => Promise<WriteResult | null>;
 };
 
 export type OperatorTurnInput = {
@@ -129,6 +130,33 @@ export async function* runOperatorTurn(
     prevRefs = { ...prevRefs, lastEventId: input.envelope.entityId };
   }
   const envelope = resolveOperatorEnvelope(input.question, input.envelope, prevRefs, fallbackIntent);
+
+  if (input.writes?.goalCommand) {
+    const goalWrite = await input.writes.goalCommand(input.question);
+    if (goalWrite) {
+      yield {
+        type: 'tool_start',
+        name: goalWrite.tool,
+        label: 'Sto configurando l’obiettivo commerciale…',
+      };
+      yield {
+        type: 'tool_done',
+        name: goalWrite.tool,
+        ok: goalWrite.ok,
+        label: goalWrite.summary,
+      };
+      yield { type: 'delta', text: goalWrite.summary };
+      yield {
+        type: 'done',
+        reply: goalWrite.summary,
+        actions: [],
+        run: null,
+        persisted: false,
+        refs: prevRefs,
+      };
+      return;
+    }
+  }
 
   const traces: Array<{ name: OperatorToolName; result: unknown; ok: boolean }> = [];
   const writes: WriteResult[] = [];

@@ -4,7 +4,13 @@
 
 import { Resend } from 'resend';
 import { Webhook } from 'svix';
-import type { OutboundEmail, ResendProvider, ResendWebhookEvent, SendResult } from './types';
+import type {
+  OutboundEmail,
+  ReceivedEmail,
+  ResendProvider,
+  ResendWebhookEvent,
+  SendResult,
+} from './types';
 
 export interface ResendLiveConfig {
   apiKey: string;
@@ -18,6 +24,7 @@ const EVENT_MAP: Record<string, ResendWebhookEvent['type']> = {
   'email.complained': 'COMPLAINED',
   'email.opened': 'OPENED',
   'email.clicked': 'CLICKED',
+  'email.received': 'REPLIED',
 };
 
 export class ResendLive implements ResendProvider {
@@ -73,6 +80,26 @@ export class ResendLive implements ResendProvider {
     };
   }
 
+  async retrieveReceivedEmail(id: string): Promise<ReceivedEmail> {
+    const result = await this.client.emails.receiving.get(id);
+    if (result.error || !result.data) {
+      throw new Error(
+        `ResendLive.retrieveReceivedEmail: ${result.error?.message ?? 'contenuto non disponibile'}`,
+      );
+    }
+    const data = result.data;
+    return {
+      id: data.id,
+      from: data.from,
+      to: data.to,
+      subject: data.subject ?? null,
+      text: data.text ?? null,
+      html: data.html ?? null,
+      headers: (data.headers ?? {}) as Record<string, string>,
+      messageId: data.message_id ?? null,
+    };
+  }
+
   parseWebhookEvent(rawBody: string, signature: string | null): ResendWebhookEvent {
     if (!this.config.webhookSecret) {
       throw new Error('ResendLive.parseWebhookEvent: RESEND_WEBHOOK_SECRET mancante');
@@ -91,7 +118,13 @@ export class ResendLive implements ResendProvider {
     const wh = new Webhook(this.config.webhookSecret);
     const payload = wh.verify(rawBody, headers) as {
       type?: string;
-      data?: { email_id?: string; to?: string[]; created_at?: string };
+      data?: {
+        email_id?: string;
+        to?: string[];
+        from?: string;
+        subject?: string;
+        created_at?: string;
+      };
       created_at?: string;
     };
 

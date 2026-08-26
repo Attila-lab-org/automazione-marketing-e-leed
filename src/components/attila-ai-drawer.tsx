@@ -17,6 +17,7 @@ type ToolStatus = { id: string; label: string; done: boolean; ok: boolean };
 
 const SUGGESTIONS = [
   "Cosa mi consigli oggi?",
+  "Questo mese voglio 10 clienti per siti web",
   "Imposta modalità autonoma",
   "Quanti appuntamenti ho?",
   "Aggiungi disponibilità domani alle 15:00",
@@ -115,7 +116,11 @@ export default function AttilaAiDrawer() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : window.sessionStorage.getItem("attila-operator-session"),
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -124,6 +129,7 @@ export default function AttilaAiDrawer() {
   const [modeLabel, setModeLabel] = useState("ASSISTITO");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [dailyBriefing, setDailyBriefing] = useState<string | null>(null);
+  const [goalSummary, setGoalSummary] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const briefingLoadedRef = useRef(false);
 
@@ -152,7 +158,6 @@ export default function AttilaAiDrawer() {
     try {
       const saved = window.sessionStorage.getItem("attila-operator-session");
       if (saved) {
-        setSessionId(saved);
         void fetch(`/api/ai/operator/sessions?sessionId=${encodeURIComponent(saved)}`)
           .then((r) => r.json())
           .then((data) => {
@@ -195,6 +200,14 @@ export default function AttilaAiDrawer() {
       .then((response) => response.json())
       .then((data) => {
         const briefing = data?.briefing;
+        const goal = data?.goal;
+        if (goal?.id) {
+          setModeLabel(goal.mode ?? "DO");
+          const progress = goal.progress_snapshot ?? {};
+          setGoalSummary(
+            `${goal.title} · ${goal.current_value}/${goal.target_value} · ${progress.pace ?? "IN OSSERVAZIONE"}`,
+          );
+        }
         if (!briefing?.summary) return;
         const actions = Array.isArray(briefing.actions)
           ? briefing.actions.slice(0, 3)
@@ -205,6 +218,22 @@ export default function AttilaAiDrawer() {
       })
       .catch(() => undefined);
   }, [open, messages.length]);
+
+  useEffect(() => {
+    if (!open) return;
+    void fetch("/api/ai/goals", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => {
+        const goal = data?.goal;
+        if (!goal?.id) return;
+        const progress = goal.progress_snapshot ?? {};
+        setModeLabel(goal.mode ?? "DO");
+        setGoalSummary(
+          `${goal.title} · ${goal.current_value}/${goal.target_value} · ${progress.pace ?? "IN OSSERVAZIONE"}`,
+        );
+      })
+      .catch(() => undefined);
+  }, [open]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -300,6 +329,11 @@ export default function AttilaAiDrawer() {
                 <p className="text-[11px] font-bold uppercase tracking-wide text-amber-800">
                   {modeLabel}
                 </p>
+                {goalSummary ? (
+                  <p className="max-w-[280px] truncate text-xs font-medium text-stone-700">
+                    {goalSummary}
+                  </p>
+                ) : null}
                 <p className="text-xs text-stone-500">
                   {pathname.startsWith("/campaigns")
                     ? "Contesto: campagna"

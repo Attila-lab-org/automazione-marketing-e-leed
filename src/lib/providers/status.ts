@@ -7,6 +7,7 @@ import { getAppUrlStatus } from '@/lib/app-url';
 import { getPublicAiReadiness } from '@/lib/ai/readiness';
 import { getGooglePlacesProvider } from '@/lib/providers/google-places';
 import { getTelegramCredentialStatus } from '@/lib/providers/telegram/webhook';
+import { getEmailReplyPathReadiness } from '@/lib/inbound/email-readiness';
 import { getOwnerCommercialStatus } from '@/lib/templates/owner-commercial';
 import { getTestDeliveryStatus } from '@/lib/campaigns/test-delivery';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
@@ -256,12 +257,21 @@ function probeResend(env: NodeJS.ProcessEnv): ProviderStatusItem {
     };
   }
   if (mode === 'live') {
-    if (!env.RESEND_API_KEY?.trim() || !env.RESEND_FROM?.trim()) {
+    const replyPath = getEmailReplyPathReadiness(env);
+    if (!env.RESEND_API_KEY?.trim() || !env.RESEND_FROM?.trim() || !replyPath.ready) {
       return {
         id: 'resend',
         name: 'Resend',
         status: 'not_configured',
-        detail: 'live senza RESEND_API_KEY / RESEND_FROM',
+        detail: `live incompleto: ${
+          [
+            !env.RESEND_API_KEY?.trim() ? 'RESEND_API_KEY' : null,
+            !env.RESEND_FROM?.trim() ? 'RESEND_FROM' : null,
+            ...replyPath.missing,
+          ]
+            .filter(Boolean)
+            .join(', ')
+        }`,
       };
     }
     return {
@@ -307,11 +317,12 @@ export function getResendRuntimeBadge(env: NodeJS.ProcessEnv = process.env): {
     };
   }
   if (mode === 'live') {
-    if (!env.RESEND_API_KEY?.trim() || !env.RESEND_FROM?.trim()) {
+    const replyPath = getEmailReplyPathReadiness(env);
+    if (!env.RESEND_API_KEY?.trim() || !env.RESEND_FROM?.trim() || !replyPath.ready) {
       return {
         label: 'RESEND ERROR',
         mode: 'error',
-        detail: 'mode=live ma key/from mancanti',
+        detail: `mode=live ma configurazione incompleta: ${replyPath.missing.join(', ')}`,
       };
     }
     return {

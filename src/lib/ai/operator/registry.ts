@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { OperatorEnvelope } from './envelope';
 import { classifyOperatorIntent, type OperatorIntent } from './intent';
 import type { DailyCommercialBriefing } from '@/lib/sales/daily-briefing';
+import type { CommercialGoalRow, CommercialGoalPlanRow } from '@/lib/types/database';
 
 export const OPERATOR_TOOL_NAMES = [
   'get_dashboard_summary',
@@ -25,6 +26,8 @@ export const OPERATOR_TOOL_NAMES = [
   'list_calendar_events',
   'list_available_slots',
   'get_calendar_summary',
+  'get_active_commercial_goal',
+  'get_commercial_goal_plan',
 ] as const;
 
 export type OperatorToolName = (typeof OPERATOR_TOOL_NAMES)[number];
@@ -40,6 +43,10 @@ export const WRITE_TOOL_NAMES = [
   'update_draft',
   'personalize_demo',
   'apply_demo_personalization',
+  'create_commercial_goal',
+  'update_commercial_goal',
+  'pause_commercial_goal',
+  'resume_commercial_goal',
   'delete_lead',
   'sql_query',
   'fetch_url',
@@ -207,6 +214,8 @@ export type OperatorDataSource = {
   }): Promise<CalendarEventHit[]>;
   listAvailableSlots(input?: { fromIso?: string; limit?: number }): Promise<CalendarSlotHit[]>;
   getCalendarSummary(input?: { daysAhead?: number }): Promise<CalendarSummary>;
+  getActiveCommercialGoal(): Promise<CommercialGoalRow | null>;
+  getCommercialGoalPlan(goalId?: string): Promise<CommercialGoalPlanRow | null>;
 };
 
 export function plannedFromOrchestratorCall(
@@ -292,6 +301,8 @@ export const TOOL_INPUT_SCHEMAS: Record<OperatorToolName, z.ZodType> = {
   list_calendar_events: calendarEventsInput,
   list_available_slots: calendarSlotsInput,
   get_calendar_summary: calendarSummaryInput,
+  get_active_commercial_goal: optionalId,
+  get_commercial_goal_plan: z.object({ goalId: z.string().uuid().optional() }).strict(),
 };
 
 export const TOOL_LABELS: Record<OperatorToolName, { start: string; done: string }> = {
@@ -325,6 +336,14 @@ export const TOOL_LABELS: Record<OperatorToolName, { start: string; done: string
   list_calendar_events: { start: 'Sto leggendo il calendario…', done: 'Eventi calendario caricati' },
   list_available_slots: { start: 'Sto leggendo le disponibilità…', done: 'Slot caricati' },
   get_calendar_summary: { start: 'Sto contando gli appuntamenti…', done: 'Riepilogo calendario pronto' },
+  get_active_commercial_goal: {
+    start: 'Sto leggendo l’obiettivo attivo…',
+    done: 'Obiettivo commerciale caricato',
+  },
+  get_commercial_goal_plan: {
+    start: 'Sto leggendo il piano corrente…',
+    done: 'Piano commerciale caricato',
+  },
 };
 
 export function isOperatorToolName(name: string): name is OperatorToolName {
@@ -475,6 +494,16 @@ export async function executeOperatorTool(
           daysAhead: typeof args.daysAhead === 'number' ? args.daysAhead : 14,
         }),
       };
+    case 'get_active_commercial_goal':
+      return { ok: true, name, result: await data.getActiveCommercialGoal() };
+    case 'get_commercial_goal_plan':
+      return {
+        ok: true,
+        name,
+        result: await data.getCommercialGoalPlan(
+          typeof args.goalId === 'string' ? args.goalId : undefined,
+        ),
+      };
   }
 }
 
@@ -579,10 +608,16 @@ export function suggestOperatorTools(
     calls.push({ name: 'get_dashboard_summary', args: {} });
   }
   if (/consigl|impar|miglior|conversion|strateg|proattiv/.test(q)) {
+    calls.push({ name: 'get_active_commercial_goal', args: {} });
+    calls.push({ name: 'get_commercial_goal_plan', args: {} });
     calls.push({ name: 'get_daily_briefing', args: {} });
     if (/impar|miglior|conversion|strateg/.test(q)) {
       calls.push({ name: 'get_commercial_insights', args: { windowDays: 30 } });
     }
+  }
+  if (/obiettiv|goal|target|autopilot|ritmo|piano commerciale|siamo in linea/.test(q)) {
+    calls.push({ name: 'get_active_commercial_goal', args: {} });
+    calls.push({ name: 'get_commercial_goal_plan', args: {} });
   }
   return calls;
 }

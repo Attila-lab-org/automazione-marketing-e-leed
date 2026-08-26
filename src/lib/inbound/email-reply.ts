@@ -4,6 +4,7 @@ import type { Json } from '@/lib/types/database';
 import { isValidEmailShape, normalizeEmailAddress } from '@/lib/campaigns/test-delivery';
 import { emailHtmlToText } from '@/lib/messaging/html-to-text';
 import { getResendProvider } from '@/lib/providers/resend';
+import { requireEmailReplyPath } from '@/lib/inbound/email-readiness';
 import { runSendGuard } from '@/lib/send-guard';
 import { getOutreachPausedAll } from '@/lib/settings/outreach-pause';
 
@@ -189,7 +190,14 @@ export async function sendEmailConversationReply(args: {
   const reference =
     args.inboundMessageHeaderId?.trim() || args.previousProviderMessageId?.trim() || null;
   const headers: Record<string, string> = {};
-  headers['Reply-To'] = env.RESEND_REPLY_TO?.trim() || from;
+  try {
+    headers['Reply-To'] = requireEmailReplyPath(env);
+  } catch (error) {
+    return {
+      sent: false,
+      reason: error instanceof Error ? error.message : 'EMAIL_REPLY_PATH_NOT_READY',
+    };
+  }
   if (reference) {
     headers['In-Reply-To'] = reference;
     headers.References = reference;

@@ -126,7 +126,9 @@ export type JobType =
   | 'SEND_MESSAGE'
   | 'FOLLOWUP_STEP'
   | 'WEBHOOK_PROCESSING'
-  | 'CALENDAR_REMINDER';
+  | 'CALENDAR_REMINDER'
+  | 'SALES_PROACTIVE_STEP'
+  | 'COMMERCIAL_GOAL_TICK';
 
 /** 0007 — check constraint su automation_job_events.event_type */
 export type AutomationJobEventType =
@@ -259,6 +261,7 @@ export interface LeadRow {
   discovery_confidence: number | null;
   qualification_status: QualificationStatus;
   offer_candidate: string | null;
+  primary_thread_id: string | null;
   qualification_reasons: Json;
   qualification_algorithm_version: string | null;
   qualified_at: string | null;
@@ -297,6 +300,7 @@ export interface LeadInsert {
   discovery_confidence?: number | null;
   qualification_status?: QualificationStatus;
   offer_candidate?: string | null;
+  primary_thread_id?: string | null;
   qualification_reasons?: Json;
   qualification_algorithm_version?: string | null;
   qualified_at?: string | null;
@@ -889,6 +893,10 @@ export interface MessageThreadRow {
   next_step_at: string | null;
   human_required_reason: string | null;
   playbook_version: number | null;
+  closed_at: string | null;
+  close_reason_code: string | null;
+  close_notes: string | null;
+  closed_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -911,6 +919,10 @@ export interface MessageThreadInsert {
   next_step_at?: string | null;
   human_required_reason?: string | null;
   playbook_version?: number | null;
+  closed_at?: string | null;
+  close_reason_code?: string | null;
+  close_notes?: string | null;
+  closed_by?: string | null;
 }
 
 /** messages è IMMUTABILE (trigger forbid_mutation): esiste solo Insert. */
@@ -1501,6 +1513,139 @@ export interface PendingAiActionInsert {
   created_at?: string;
 }
 
+export type CommercialGoalMode = 'ASK' | 'DO' | 'AUTOPILOT';
+export type CommercialGoalStatus =
+  | 'DRAFT'
+  | 'ACTIVE'
+  | 'PAUSED'
+  | 'BLOCKED'
+  | 'COMPLETED'
+  | 'CANCELLED';
+export type CommercialGoalMetric =
+  | 'DEALS_WON'
+  | 'APPOINTMENTS_BOOKED'
+  | 'POSITIVE_REPLIES'
+  | 'QUALIFIED_LEADS';
+
+export interface CommercialGoalRow {
+  id: string;
+  workspace_id: string;
+  title: string;
+  outcome_type: 'ACQUIRE_CUSTOMERS' | 'BOOK_APPOINTMENTS' | 'GENERATE_REPLIES' | 'BUILD_PIPELINE';
+  offer_key: string;
+  target_metric: CommercialGoalMetric;
+  target_value: number;
+  current_value: number;
+  starts_at: string;
+  deadline: string;
+  market: Json;
+  mode: CommercialGoalMode;
+  status: CommercialGoalStatus;
+  strategy: Json;
+  constraints: Json;
+  progress_snapshot: Json;
+  last_observed_at: string | null;
+  next_tick_at: string | null;
+  lock_version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommercialGoalInsert {
+  id?: string;
+  workspace_id: string;
+  title: string;
+  outcome_type?: CommercialGoalRow['outcome_type'];
+  offer_key: string;
+  target_metric: CommercialGoalMetric;
+  target_value: number;
+  current_value?: number;
+  starts_at?: string;
+  deadline: string;
+  market?: Json;
+  mode?: CommercialGoalMode;
+  status?: CommercialGoalStatus;
+  strategy?: Json;
+  constraints?: Json;
+  progress_snapshot?: Json;
+  last_observed_at?: string | null;
+  next_tick_at?: string | null;
+  lock_version?: number;
+}
+
+export interface CommercialGoalPlanRow {
+  id: string;
+  workspace_id: string;
+  goal_id: string;
+  version: number;
+  status: 'DRAFT' | 'ACTIVE' | 'SUPERSEDED' | 'COMPLETED' | 'FAILED';
+  rationale: string;
+  hypotheses: Json;
+  actions: Json;
+  success_criteria: Json;
+  observation_hash: string;
+  replan_reason: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface CommercialGoalPlanInsert {
+  id?: string;
+  workspace_id: string;
+  goal_id: string;
+  version: number;
+  status?: CommercialGoalPlanRow['status'];
+  rationale: string;
+  hypotheses?: Json;
+  actions?: Json;
+  success_criteria?: Json;
+  observation_hash: string;
+  replan_reason?: string | null;
+  completed_at?: string | null;
+}
+
+export interface CommercialGoalEventRow {
+  id: string;
+  workspace_id: string;
+  goal_id: string;
+  plan_id: string | null;
+  actor: 'AI' | 'HUMAN' | 'SYSTEM';
+  event_type: string;
+  payload: Json;
+  ai_run_id: string | null;
+  created_at: string;
+}
+
+export interface CommercialGoalEventInsert {
+  id?: string;
+  workspace_id: string;
+  goal_id: string;
+  plan_id?: string | null;
+  actor: CommercialGoalEventRow['actor'];
+  event_type: string;
+  payload?: Json;
+  ai_run_id?: string | null;
+}
+
+export interface CommercialGoalLinkRow {
+  id: string;
+  workspace_id: string;
+  goal_id: string;
+  entity_type: 'campaign' | 'lead' | 'demo' | 'thread' | 'calendar_event' | 'automation_job';
+  entity_id: string;
+  role: string;
+  created_at: string;
+}
+
+export interface CommercialGoalLinkInsert {
+  id?: string;
+  workspace_id: string;
+  goal_id: string;
+  entity_type: CommercialGoalLinkRow['entity_type'];
+  entity_id: string;
+  role?: string;
+}
+
 export interface AiActionAuditRow {
   id: string;
   workspace_id: string;
@@ -1681,6 +1826,10 @@ export interface Tables {
   sales_thread_memory: SalesThreadMemoryRow;
   sales_thread_events: SalesThreadEventRow;
   pending_ai_actions: PendingAiActionRow;
+  commercial_goals: CommercialGoalRow;
+  commercial_goal_plans: CommercialGoalPlanRow;
+  commercial_goal_events: CommercialGoalEventRow;
+  commercial_goal_links: CommercialGoalLinkRow;
   ai_action_audit: AiActionAuditRow;
   ai_autonomy_policies: AiAutonomyPolicyRow;
   calendar_availability_slots: CalendarAvailabilitySlotRow;

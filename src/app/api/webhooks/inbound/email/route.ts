@@ -31,22 +31,64 @@ export async function POST(request: Request) {
   }
   const rawBody = await request.text();
   let payload: Record<string, unknown> = {};
+  const provider = getResendProvider(process.env);
   try {
-    const provider = getResendProvider(process.env);
-    try {
-      const event = provider.parseWebhookEvent(rawBody, svixHeaders(request));
-      payload = { type: `email.${event.type.toLowerCase()}`, data: event.payload, created_at: event.occurredAt };
-    } catch {
-      payload = JSON.parse(rawBody) as Record<string, unknown>;
-      if (!process.env.RESEND_WEBHOOK_SECRET?.trim()) {
-        return NextResponse.json(
-          { error: 'RESEND_WEBHOOK_SECRET mancante', readiness: getEmailInboundReadiness() },
-          { status: 401 },
-        );
-      }
+    const event = provider.parseWebhookEvent(rawBody, svixHeaders(request));
+    payload =
+      event.payload && typeof event.payload.type === 'string'
+        ? event.payload
+        : {
+            type: event.type === 'REPLIED' ? 'email.received' : `email.${event.type.toLowerCase()}`,
+            data: {
+              email_id: event.providerMessageId,
+              to: event.recipient ? [event.recipient] : [],
+            },
+            created_at: event.occurredAt,
+          };
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: 'Firma webhook non valida',
+        detail: error instanceof Error ? error.message : 'WEBHOOK_VERIFICATION_FAILED',
+      },
+      { status: 401 },
+    );
+  }
+
+  if (payload.type === 'email.received') {
+    const metadata =
+      payload.data && typeof payload.data === 'object'
+        ? (payload.data as Record<string, unknown>)
+        : {};
+    const emailId = typeof metadata.email_id === 'string' ? metadata.email_id : null;
+    if (!emailId) {
+      return NextResponse.json({ error: 'email_id inbound mancante' }, { status: 400 });
     }
-  } catch {
-    return NextResponse.json({ error: 'Payload non valido' }, { status: 400 });
+    try {
+      const received = await provider.retrieveReceivedEmail(emailId);
+      payload = {
+        ...payload,
+        data: {
+          ...metadata,
+          email_id: received.id,
+          from: received.from,
+          to: received.to,
+          subject: received.subject,
+          text: received.text,
+          html: received.html,
+          headers: received.headers,
+          message_id: received.messageId,
+        },
+      };
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: 'Contenuto email inbound non recuperabile',
+          detail: error instanceof Error ? error.message : 'INBOUND_RETRIEVE_FAILED',
+        },
+        { status: 502 },
+      );
+    }
   }
 
   const inbound = normalizeResendInboundPayload(payload);

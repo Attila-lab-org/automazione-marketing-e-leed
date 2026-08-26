@@ -246,10 +246,31 @@ export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
         'cosa sta funzionando',
       ]),
       tools: [
+        call('get_active_commercial_goal'),
+        call('get_commercial_goal_plan'),
         call('get_daily_briefing'),
         call('get_commercial_insights'),
       ],
       goal: 'Imparare dagli eventi e proporre la prossima azione commerciale',
+      prepareKind: 'none',
+    },
+    {
+      id: 'commercial-goal',
+      class: 'READ',
+      score: scoreCues(q, [
+        'obiettivo',
+        'goal',
+        'target',
+        'autopilot',
+        'siamo in linea',
+        'ritmo',
+        'piano commerciale',
+      ]),
+      tools: [
+        call('get_active_commercial_goal'),
+        call('get_commercial_goal_plan'),
+      ],
+      goal: 'Leggere avanzamento, piano e prossima verifica dell’obiettivo commerciale',
       prepareKind: 'none',
     },
     {

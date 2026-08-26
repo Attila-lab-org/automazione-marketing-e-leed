@@ -7,6 +7,7 @@ import { getGooglePlacesProvider } from '@/lib/providers/google-places';
 import type { DiscoveredPlace, DiscoveryQuery } from '@/lib/providers/google-places/types';
 import { createAdminSupabaseClient } from '@/lib/supabase/client';
 import type { LeadRow } from '@/lib/types/database';
+import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 import { discoveredPlaceToLeadInsert } from './normalize';
 import {
@@ -84,6 +85,7 @@ function isFixturePlace(place: DiscoveredPlace): boolean {
 export async function runLeadDiscovery(
   input: DiscoveryInput,
   env: NodeJS.ProcessEnv = process.env,
+  context?: { admin: AppSupabaseClient; workspaceId: string },
 ): Promise<DiscoveryResult> {
   const query: DiscoveryQuery = {
     category: input.category,
@@ -91,8 +93,10 @@ export async function runLeadDiscovery(
     maxResults: input.maxResults ?? 5,
   };
 
-  const admin = createAdminSupabaseClient(env);
-  const workspace = await ensureDefaultWorkspace(admin);
+  const admin = context?.admin ?? createAdminSupabaseClient(env);
+  const workspace = context
+    ? { id: context.workspaceId }
+    : await ensureDefaultWorkspace(admin);
   const provider = getGooglePlacesProvider(env);
   const mode = (env.GOOGLE_PLACES_PROVIDER_MODE ?? 'mock').toLowerCase();
   let places = await provider.searchMinimal(query);

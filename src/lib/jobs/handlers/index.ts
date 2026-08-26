@@ -4,6 +4,7 @@ import { createDemoFromLead } from '@/lib/demos/create';
 import { enrichLeadEmail } from '@/lib/enrichment/enrich-lead-email';
 import { enrichLeadFromGoogleIfNeeded } from '@/lib/leads/google-enrich';
 import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
+import { requireEmailReplyPath } from '@/lib/inbound/email-readiness';
 import { RESTAURANT_PREMIUM_V2_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v2';
 import { RESTAURANT_PREMIUM_V3_RENDERER_KEY } from '@/lib/templates/restaurant-premium-v3';
 import { pickCompatibleTemplateKey } from '@/lib/templates/match';
@@ -85,9 +86,25 @@ export async function handleJob(
       return handleCalendarReminder(admin, job);
     case 'SALES_PROACTIVE_STEP':
       return handleSalesProactiveStep(admin, job);
+    case 'COMMERCIAL_GOAL_TICK':
+      return handleCommercialGoalTick(admin, job, env);
     default:
       return { skipped: true, reason: `Unsupported job type ${job.jobType}` };
   }
+}
+
+async function handleCommercialGoalTick(
+  admin: SupabaseClient,
+  job: { workspaceId: string; entityId: string; inputSnapshot: Record<string, unknown> },
+  env: NodeJS.ProcessEnv,
+) {
+  const { runCommercialGoalTick } = await import('@/lib/sales/goals/tick');
+  return runCommercialGoalTick({
+    admin: admin as AppSupabaseClient,
+    workspaceId: job.workspaceId,
+    goalId: String(job.inputSnapshot.goalId ?? job.entityId),
+    env,
+  }) as unknown as Record<string, unknown>;
 }
 
 async function handleSalesProactiveStep(
@@ -535,6 +552,10 @@ async function handleSendMessage(
   if (providerMode === 'live' && !fromAddress) {
     throw new Error('Invio live bloccato: mittente RESEND_FROM non configurato');
   }
+  const replyTo =
+    providerMode === 'live'
+      ? requireEmailReplyPath(env)
+      : env.RESEND_REPLY_TO?.trim() || fromAddress || 'onboarding@resend.dev';
   const resend = getResendProvider(env);
   const idempotencyKey = `SEND_MESSAGE:campaign_lead:${cl.id}:step:${sequenceStep}`;
   const sendResult = await resend.send({
@@ -545,7 +566,7 @@ async function handleSendMessage(
     text: emailHtmlToText(draft!.body!),
     idempotencyKey,
     headers: {
-      'Reply-To': env.RESEND_REPLY_TO?.trim() || fromAddress || 'onboarding@resend.dev',
+      'Reply-To': replyTo,
     },
   });
 

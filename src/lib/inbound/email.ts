@@ -11,6 +11,7 @@ import {
   findEmailConversationThread,
   sendEmailConversationReply,
 } from '@/lib/inbound/email-reply';
+import { getEmailReplyPathReadiness } from '@/lib/inbound/email-readiness';
 
 export type NormalizedEmailInbound = {
   kind: 'delivery' | 'reply';
@@ -43,10 +44,10 @@ export function getEmailInboundReadiness(env: NodeJS.ProcessEnv = process.env): 
   const missing: string[] = [];
   const verification = env.RESEND_WEBHOOK_SECRET?.trim() ? 'READY' : 'MISSING';
   if (verification === 'MISSING') missing.push('RESEND_WEBHOOK_SECRET');
-  const receiving =
-    env.RESEND_INBOUND_DOMAIN?.trim() || env.RESEND_INBOUND_ENABLED === 'true' ? 'READY' : 'MISSING';
+  const replyPath = getEmailReplyPathReadiness(env);
+  const receiving = replyPath.ready ? 'READY' : 'MISSING';
   if (receiving === 'MISSING') {
-    missing.push('RESEND_INBOUND_DOMAIN oppure inbound receiving su Resend');
+    missing.push(...replyPath.missing);
   }
   return { endpoint: 'READY', verification, receiving, missing };
 }

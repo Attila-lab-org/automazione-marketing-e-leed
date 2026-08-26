@@ -1,5 +1,5 @@
 /**
- * Supabase Database contract — aligned to migrations 0001..0025.
+ * Supabase Database contract — aligned to migrations 0001..0028.
  * Used as createClient<Database>() so invalid column selects fail at compile time.
  *
  * Note: mapped `AsRecord` converts interfaces → closed object types so they
@@ -38,6 +38,14 @@ import type {
   ClaimJobArgs,
   CommercialPlaybookInsert,
   CommercialPlaybookRow,
+  CommercialGoalInsert,
+  CommercialGoalRow,
+  CommercialGoalPlanInsert,
+  CommercialGoalPlanRow,
+  CommercialGoalEventInsert,
+  CommercialGoalEventRow,
+  CommercialGoalLinkInsert,
+  CommercialGoalLinkRow,
   CostEventInsert,
   CostEventRow,
   DemoAssetInsert,
@@ -167,6 +175,10 @@ export type Database = {
       sales_thread_memory: Tbl<SalesThreadMemoryRow, SalesThreadMemoryInsert>;
       sales_thread_events: Tbl<SalesThreadEventRow, SalesThreadEventInsert>;
       pending_ai_actions: Tbl<PendingAiActionRow, PendingAiActionInsert>;
+      commercial_goals: Tbl<CommercialGoalRow, CommercialGoalInsert>;
+      commercial_goal_plans: Tbl<CommercialGoalPlanRow, CommercialGoalPlanInsert>;
+      commercial_goal_events: Tbl<CommercialGoalEventRow, CommercialGoalEventInsert>;
+      commercial_goal_links: Tbl<CommercialGoalLinkRow, CommercialGoalLinkInsert>;
       ai_action_audit: Tbl<AiActionAuditRow, AiActionAuditInsert>;
       ai_autonomy_policies: Tbl<AiAutonomyPolicyRow, AiAutonomyPolicyInsert>;
       calendar_availability_slots: Tbl<

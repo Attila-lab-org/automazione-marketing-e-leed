@@ -11,6 +11,7 @@ import { getTelegramInboundSettings } from '@/lib/inbound/telegram-settings';
 import { listAvailableSlots, listCalendarEvents } from '@/lib/calendar';
 import { getCommercialLearningSnapshot } from '@/lib/sales/learning';
 import { getDailyCommercialBriefing } from '@/lib/sales/daily-briefing';
+import { getActiveCommercialGoal, getActiveGoalPlan } from '@/lib/sales/goals/store';
 import type {
   BlockerItem,
   CalendarEventHit,
@@ -384,6 +385,17 @@ export function createSupabaseOperatorData(
       return getDailyCommercialBriefing(admin, workspaceId);
     },
 
+    async getActiveCommercialGoal() {
+      return getActiveCommercialGoal(admin, workspaceId);
+    },
+
+    async getCommercialGoalPlan(goalId) {
+      const goal = goalId
+        ? { id: goalId }
+        : await getActiveCommercialGoal(admin, workspaceId);
+      return goal ? getActiveGoalPlan(admin, goal.id) : null;
+    },
+
     async getCommercialInsights(windowDays = 30): Promise<CommercialInsights> {
       return getCommercialLearningSnapshot(admin, workspaceId, windowDays);
     },
@@ -727,6 +739,14 @@ export function createMemoryOperatorData(seed?: {
         summary:
           'Ciao Attilio, oggi hai 1 appuntamento. Per oggi ti consiglio email: sta rendendo meglio. Per le nuove email partirei da Milano.',
       };
+    },
+
+    async getActiveCommercialGoal() {
+      return null;
+    },
+
+    async getCommercialGoalPlan() {
+      return null;
     },
     async getCommercialInsights(windowDays = 30) {
       return {

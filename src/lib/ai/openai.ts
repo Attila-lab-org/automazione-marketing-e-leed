@@ -9,6 +9,7 @@ import {
   OUTBOUND_CRITIQUE_JSON_SCHEMA,
   OUTBOUND_DRAFT_JSON_SCHEMA,
   SALES_REPLY_JSON_SCHEMA,
+  GOAL_STRATEGY_PLAN_JSON_SCHEMA,
   WEBSITE_ANALYSIS_JSON_SCHEMA,
   businessOpportunitySchema,
   demoPersonalizationSchema,
@@ -16,6 +17,7 @@ import {
   outboundCritiqueSchema,
   outboundDraftSchema,
   salesReplyDraftSchema,
+  goalStrategyPlanSchema,
   websiteAnalysisSchema,
   type OutboundDraft,
 } from './commercial/schemas';
@@ -391,6 +393,31 @@ export class OpenAICommercialProvider implements AICommercialProvider {
         allowedTools: input.allowedTools,
         capabilities: input.capabilities,
       }),
+    });
+  }
+
+  async planGoalStrategy(
+    input: {
+      goal: Record<string, unknown>;
+      observation: Record<string, unknown>;
+      playbook: Record<string, unknown> | null;
+      previousPlan: Record<string, unknown> | null;
+    },
+    ctx: AICommercialCallContext,
+  ) {
+    return this.completeJson({
+      model: ctx.model,
+      schemaName: 'commercial_goal_strategy',
+      jsonSchema: GOAL_STRATEGY_PLAN_JSON_SCHEMA,
+      zodSchema: goalStrategyPlanSchema,
+      system: [
+        'Sei il planner strategico grounded di Attila.',
+        'Proponi soltanto azioni dalla enum fornita e usa esclusivamente i numeri osservati.',
+        'Sii selettivo: non contattare lead se manca una motivazione forte.',
+        'Le azioni esterne devono dichiarare safety EXTERNAL; prezzi, rischi, blocker o ambiguità richiedono REQUEST_HUMAN.',
+        'Se non serve agire usa WAIT. Non inventare campagne, lead, conversioni o capacità.',
+      ].join(' '),
+      user: JSON.stringify(input),
     });
   }
 

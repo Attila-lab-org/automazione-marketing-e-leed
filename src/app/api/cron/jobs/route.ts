@@ -3,6 +3,7 @@ import { runJobBatch } from '@/lib/jobs/handlers';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 import { runCommercialLearningCycle } from '@/lib/sales/learning';
+import { enqueueDueCommercialGoalTicks } from '@/lib/sales/goals/tick';
 
 export const runtime = 'nodejs';
 
@@ -27,6 +28,11 @@ async function run(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { limit?: number; workerId?: string };
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
+  const goalTicks = await enqueueDueCommercialGoalTicks(admin, workspace.id).catch((error) => ({
+    enqueued: 0,
+    deduplicated: 0,
+    error: error instanceof Error ? error.message : 'goal_tick_scan_failed',
+  }));
   const results = await runJobBatch(
     admin,
     workspace.id,
@@ -38,7 +44,7 @@ async function run(request: Request) {
     created: false,
     error: error instanceof Error ? error.message : 'learning_cycle_failed',
   }));
-  return NextResponse.json({ results, processed: results.length, learning });
+  return NextResponse.json({ results, processed: results.length, learning, goalTicks });
 }
 
 export const GET = run;

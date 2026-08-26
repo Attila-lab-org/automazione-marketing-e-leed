@@ -24,6 +24,17 @@ export interface SendResult {
   sentAt: string;
 }
 
+export interface ReceivedEmail {
+  id: string;
+  from: string;
+  to: string[];
+  subject: string | null;
+  text: string | null;
+  html: string | null;
+  headers: Record<string, string>;
+  messageId: string | null;
+}
+
 export interface ResendWebhookEvent {
   /** id univoco evento provider → idempotenza webhook §18 */
   providerEventId: string;
@@ -36,6 +47,7 @@ export interface ResendWebhookEvent {
 
 export interface ResendProvider {
   send(message: OutboundEmail): Promise<SendResult>;
+  retrieveReceivedEmail(id: string): Promise<ReceivedEmail>;
   /** Verifica firma e normalizza l'evento; lancia errore se firma invalida. */
   parseWebhookEvent(rawBody: string, signature: string | null): ResendWebhookEvent;
 }

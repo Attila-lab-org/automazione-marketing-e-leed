@@ -2,6 +2,8 @@ import { buildOperatorCapabilityReply } from './capabilities';
 import type { OperatorComposeInput } from './orchestrator-input';
 import type { OperatorFinalReply } from './orchestrator-schema';
 import type { DailyCommercialBriefing } from '@/lib/sales/daily-briefing';
+import type { CommercialGoalPlanRow, CommercialGoalRow } from '@/lib/types/database';
+import type { GoalProgressSnapshot } from '@/lib/sales/goals/types';
 import type {
   BlockerItem,
   CalendarEventHit,
@@ -32,6 +34,27 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
 
   const parts: string[] = [];
   if (input.writeSummaries.length) parts.push(input.writeSummaries.join(' '));
+
+  const commercialGoal = succeeded<CommercialGoalRow>(input, 'get_active_commercial_goal');
+  const goalPlan = succeeded<CommercialGoalPlanRow>(input, 'get_commercial_goal_plan');
+  if (commercialGoal) {
+    const progress = commercialGoal.progress_snapshot as unknown as Partial<GoalProgressSnapshot>;
+    parts.push(
+      `Obiettivo attivo: ${commercialGoal.title}. ${Number(commercialGoal.current_value)}/${Number(commercialGoal.target_value)} ${commercialGoal.target_metric.toLowerCase().replaceAll('_', ' ')}, modalità ${commercialGoal.mode}.`,
+    );
+    if (progress.pace) {
+      parts.push(
+        `Ritmo ${progress.pace}: ${progress.progressPct ?? 0}% del target, ${progress.elapsedPct ?? 0}% del tempo trascorso.${progress.blockers?.length ? ` Blocker: ${progress.blockers.join(', ')}.` : ''}`,
+      );
+    }
+    if (goalPlan) {
+      parts.push(
+        `Piano v${goalPlan.version}: ${goalPlan.rationale} Prossima verifica: ${commercialGoal.next_tick_at ? new Date(commercialGoal.next_tick_at).toLocaleString('it-IT') : 'non programmata'}.`,
+      );
+    }
+  } else if (input.traces.some((trace) => trace.name === 'get_active_commercial_goal')) {
+    parts.push('Non c’è ancora un obiettivo commerciale attivo.');
+  }
 
   const briefing = succeeded<DailyCommercialBriefing>(input, 'get_daily_briefing');
   if (briefing) {

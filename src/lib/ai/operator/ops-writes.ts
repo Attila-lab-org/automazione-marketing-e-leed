@@ -365,7 +365,7 @@ export function applyPlaybookCommand(
 ): { playbook: CommercialPlaybook; changes: string[] } {
   const q = norm(question);
   const changes: string[] = [];
-  let next = structuredClone(current);
+  const next = structuredClone(current);
 
   const setModes = (defaultMode: ResponseMode, firstReplyMode: ResponseMode, simpleFaqMode: ResponseMode) => {
     next.autonomy = { defaultMode, firstReplyMode, simpleFaqMode };

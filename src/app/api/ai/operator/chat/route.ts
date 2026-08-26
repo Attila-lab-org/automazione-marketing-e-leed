@@ -21,6 +21,7 @@ import { replyLatestPendingTelegram } from '@/lib/inbound/telegram-resume';
 import { proposeOrExecuteOps } from '@/lib/ai/operator/ops-writes';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
+import { executeCommercialGoalCommand } from '@/lib/sales/goals/command';
 
 export const runtime = 'nodejs';
 
@@ -96,6 +97,12 @@ export const POST = withAdmin(async (request: Request) => {
           data: createSupabaseOperatorData(admin, workspace.id),
           persist: createSupabaseAiRunStore(admin),
           writes: {
+            goalCommand: (question) =>
+              executeCommercialGoalCommand({
+                admin,
+                workspaceId: workspace.id,
+                question,
+              }),
             prepare: ({ leads, campaignId, verb }) =>
               executePreparePlan({
                 admin,
