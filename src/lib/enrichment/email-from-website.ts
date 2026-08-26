@@ -22,6 +22,8 @@ export interface EmailEnrichmentResult {
   candidates: string[];
   candidateEvidence: EmailCandidateEvidence[];
   confidence: number;
+  /** Prima pagina HTML valida, riusata immediatamente dalla website analysis. */
+  retrievedPage?: { url: string; html: string };
 }
 
 export interface EmailEnrichmentProvider {
@@ -29,7 +31,7 @@ export interface EmailEnrichmentProvider {
 }
 
 const EMAIL_REGEX = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
-const FETCH_TIMEOUT_MS = 8000;
+const FETCH_TIMEOUT_MS = 5000;
 const MAX_BYTES = 512_000;
 const MAX_REDIRECTS = 3;
 
@@ -156,9 +158,9 @@ function confidenceFor(
 }
 
 export async function fetchHtmlSafe(startUrl: string): Promise<string | null> {
-  let current = (await assertSafePublicUrlResolved(startUrl)).toString();
+  let current = startUrl;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    await assertSafePublicUrlResolved(current);
+    current = (await assertSafePublicUrlResolved(current)).toString();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
@@ -236,19 +238,27 @@ export class HttpEmailEnrichmentProvider implements EmailEnrichmentProvider {
       string,
       { sourceUrl: string; sourceType: EmailSourceType }
     >();
+    let retrievedPage: EmailEnrichmentResult['retrievedPage'];
 
-    for (const url of candidatePaths(base)) {
-      const html = await fetchHtmlSafe(url);
-      if (!html) continue;
-      const extracted = extractEmails(html);
-      for (const e of extracted.mailto) mailtoSet.add(e);
-      for (const e of extracted.emails) {
-        candidates.add(e);
-        if (!evidenceByEmail.has(e)) {
-          evidenceByEmail.set(e, {
-            sourceUrl: url,
-            sourceType: extracted.mailto.includes(e) ? 'mailto' : 'page_text',
-          });
+    const paths = candidatePaths(base);
+    const waves = [[paths[0]!], paths.slice(1, 4), paths.slice(4)];
+    for (const wave of waves) {
+      const pages = await Promise.all(
+        wave.map(async (url) => ({ url, html: await fetchHtmlSafe(url) })),
+      );
+      for (const { url, html } of pages) {
+        if (!html) continue;
+        retrievedPage ??= { url, html };
+        const extracted = extractEmails(html);
+        for (const e of extracted.mailto) mailtoSet.add(e);
+        for (const e of extracted.emails) {
+          candidates.add(e);
+          if (!evidenceByEmail.has(e)) {
+            evidenceByEmail.set(e, {
+              sourceUrl: url,
+              sourceType: extracted.mailto.includes(e) ? 'mailto' : 'page_text',
+            });
+          }
         }
       }
       if (candidates.size > 0 && mailtoSet.size > 0) break;
@@ -277,6 +287,7 @@ export class HttpEmailEnrichmentProvider implements EmailEnrichmentProvider {
         ...emptyResult('NOT_FOUND'),
         candidates: ranked,
         candidateEvidence,
+        retrievedPage,
       };
     }
 
@@ -293,6 +304,7 @@ export class HttpEmailEnrichmentProvider implements EmailEnrichmentProvider {
       candidates: ranked,
       candidateEvidence,
       confidence,
+      retrievedPage,
     };
   }
 }

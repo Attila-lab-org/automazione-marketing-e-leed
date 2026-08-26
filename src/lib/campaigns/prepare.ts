@@ -16,10 +16,8 @@ export async function enqueueCampaignPreparation(
   if (error) throw new Error(`Prepare: lettura campaign_leads fallita — ${error.message}`);
 
   const queue = new SupabaseJobQueue(admin);
-  let enqueued = 0;
-
-  for (const cl of leads ?? []) {
-    await queue.enqueue({
+  const batch = await queue.enqueueMany(
+    (leads ?? []).map((cl) => ({
       workspaceId,
       jobType: 'LEAD_ENRICHMENT',
       entityType: 'campaign_lead',
@@ -27,11 +25,10 @@ export async function enqueueCampaignPreparation(
       idempotencyKey: `LEAD_ENRICHMENT:campaign_lead:${cl.id}`,
       inputSnapshot: { campaignId, leadId: cl.lead_id },
       priority: 50,
-    });
-    enqueued += 1;
-  }
+    })),
+  );
 
   await admin.from('campaigns').update({ status: 'ACTIVE' }).eq('id', campaignId);
 
-  return { enqueued };
+  return { enqueued: batch.inserted, deduplicated: batch.deduplicated };
 }

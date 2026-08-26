@@ -3,6 +3,7 @@ import ProvidersRuntimeList from "@/components/providers-runtime-list";
 import DashboardStats from "@/components/dashboard-stats";
 import OperatorAlerts from "@/components/operator-alerts";
 import CommercialInsightsCard from "@/components/commercial-insights-card";
+import RecentCommunicationsCard from "@/components/recent-communications-card";
 
 export default function OverviewPage() {
   return (
@@ -13,6 +14,8 @@ export default function OverviewPage() {
       />
 
       <CommercialInsightsCard />
+
+      <RecentCommunicationsCard />
 
       <section aria-label="KPI principali">
         <h2 className="mb-3 text-sm font-semibold text-stone-800">Numeri operativi</h2>

@@ -5,7 +5,6 @@ import { enqueueCampaignPreparation } from '@/lib/campaigns/prepare';
 import { resumeCampaign } from '@/lib/campaigns/resume';
 import { parseTestRecipientAllowlist } from '@/lib/campaigns/test-delivery';
 import { analyzeLeadWebsite } from '@/lib/intelligence/analyze';
-import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
 import { createPendingAction } from './pending';
 import { CAMPAIGN_MUTATION_CAPABILITIES } from './capabilities';
 import type { OperatorIntent } from './intent';
@@ -196,6 +195,7 @@ export async function executePreparePlan(args: {
 
   const city = args.intent.city ?? 'selezione';
   const name = `${deliveryMode} · ${city} · ${selected.length} attività`;
+  const campaignCreateStartedAt = Date.now();
   const created = await createCampaignWithLeads(args.admin, args.workspaceId, {
     name,
     leadIds: selected.map((l) => l.id),
@@ -203,6 +203,7 @@ export async function executePreparePlan(args: {
     testRecipient: deliveryMode === 'TEST' ? allowlist[0] : null,
     mode: 'MANUAL',
   });
+  const campaignCreateMs = Date.now() - campaignCreateStartedAt;
   await recordAiAudit(args.admin, {
     workspaceId: args.workspaceId,
     actor: 'AI',
@@ -216,22 +217,19 @@ export async function executePreparePlan(args: {
     tool: 'create_campaign',
     ok: true,
     summary: `Campagna creata con ${selected.length} lead. Nessun messaggio inviato.`,
-    data: { campaignId: created.campaignId, leadCount: selected.length, deliveryMode, eligible: created.eligible, skipped: created.skipped },
+    data: {
+      campaignId: created.campaignId,
+      leadCount: selected.length,
+      deliveryMode,
+      eligible: created.eligible,
+      skipped: created.skipped,
+      campaignCreateMs,
+    },
   });
 
+  const enqueueStartedAt = Date.now();
   const prepared = await enqueueCampaignPreparation(args.admin, args.workspaceId, created.campaignId);
-  const queue = new SupabaseJobQueue(args.admin);
-  for (const lead of selected.slice(0, 30)) {
-    await queue.enqueue({
-      workspaceId: args.workspaceId,
-      jobType: 'WEBSITE_ANALYSIS',
-      entityType: 'lead',
-      entityId: lead.id,
-      idempotencyKey: `WEBSITE_ANALYSIS:lead:${lead.id}:v1`,
-      inputSnapshot: { leadId: lead.id, campaignId: created.campaignId },
-      priority: 80,
-    });
-  }
+  const enqueueMs = Date.now() - enqueueStartedAt;
   await recordAiAudit(args.admin, {
     workspaceId: args.workspaceId,
     actor: 'AI',
@@ -249,6 +247,8 @@ export async function executePreparePlan(args: {
       campaignId: created.campaignId,
       enqueued: prepared.enqueued,
       selected: selected.length,
+      campaignCreateMs,
+      enqueueMs,
     },
   });
   return results;

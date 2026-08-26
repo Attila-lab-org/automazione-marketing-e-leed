@@ -27,7 +27,7 @@ export interface CreateCampaignInput {
 const DEFAULT_POLICY_ACTIONS = {
   discovery: 'OFF',
   enrichment: 'AUTO',
-  website_analysis: 'OFF',
+  website_analysis: 'AUTO',
   demo_generation: 'AUTO',
   screenshot: 'OFF',
   message_generation: 'AUTO',
@@ -45,61 +45,47 @@ export async function createCampaignWithLeads(
   await ensureRestaurantPremiumV3(admin, workspaceId);
   const published = await listPublishedTemplates(admin, workspaceId);
   const layoutKey = input.landingLayoutKey ?? RESTAURANT_PREMIUM_V3_RENDERER_KEY;
-
-  const { data: templateVersion, error: tvError } = await admin
-    .from('website_template_versions')
-    .select('id, template_id, layout_key')
-    .eq('workspace_id', workspaceId)
-    .eq('layout_key', layoutKey)
-    .eq('is_published', true)
-    .order('version', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (tvError || !templateVersion) {
+  const template = published.find((candidate) => candidate.layoutKey === layoutKey);
+  if (!template) {
     throw new Error(`Template ${layoutKey} non pubblicato`);
   }
 
-  const { data: templateMeta } = await admin
-    .from('website_templates')
-    .select('id, key, vertical')
-    .eq('id', templateVersion.template_id)
-    .single();
-
   // Explicit visual-intro + Standard 0-3-7 (not "latest global")
-  const { data: msgTemplate } = await admin
-    .from('message_templates')
-    .select('id')
-    .eq('workspace_id', workspaceId)
-    .eq('key', 'visual-intro-v1')
-    .maybeSingle();
+  const [{ data: msgTemplate }, { data: seq }] = await Promise.all([
+    admin
+      .from('message_templates')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('key', 'visual-intro-v1')
+      .maybeSingle(),
+    admin
+      .from('followup_sequences')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('name', 'Standard 0-3-7')
+      .maybeSingle(),
+  ]);
 
-  const { data: msgVersion } = msgTemplate
-    ? await admin
-        .from('message_template_versions')
-        .select('id, template_id')
-        .eq('template_id', msgTemplate.id)
-        .order('version', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    : { data: null };
-
-  const { data: seq } = await admin
-    .from('followup_sequences')
-    .select('id')
-    .eq('workspace_id', workspaceId)
-    .eq('name', 'Standard 0-3-7')
-    .maybeSingle();
-
-  const { data: seqVersion } = seq
-    ? await admin
-        .from('followup_sequence_versions')
-        .select('id, sequence_id')
-        .eq('sequence_id', seq.id)
-        .order('version', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    : { data: null };
+  const [{ data: msgVersion }, { data: seqVersion }] = await Promise.all([
+    msgTemplate
+      ? admin
+          .from('message_template_versions')
+          .select('id, template_id')
+          .eq('template_id', msgTemplate.id)
+          .order('version', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    seq
+      ? admin
+          .from('followup_sequence_versions')
+          .select('id, sequence_id')
+          .eq('sequence_id', seq.id)
+          .order('version', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   const deliveryMode = input.deliveryMode === 'TEST' ? 'TEST' : 'PRODUCTION';
   let testRecipient: string | null = null;
@@ -121,8 +107,8 @@ export async function createCampaignWithLeads(
     .insert({
       workspace_id: workspaceId,
       name: input.name.trim(),
-      landing_template_id: templateVersion.template_id,
-      landing_template_version_id: templateVersion.id,
+      landing_template_id: template.templateId,
+      landing_template_version_id: template.versionId,
       message_template_id: msgVersion?.template_id ?? null,
       message_template_version_id: msgVersion?.id ?? null,
       followup_sequence_id: seqVersion?.sequence_id ?? null,
@@ -194,15 +180,15 @@ export async function createCampaignWithLeads(
     const matched = pickCompatibleTemplateKey(lead?.category, candidates);
     const compatible =
       matched != null &&
-      matched === (templateMeta?.key ?? matched) &&
-      (templateMeta?.vertical == null ||
+      matched === template.templateKey &&
+      (template.vertical == null ||
         pickCompatibleTemplateKey(lead?.category, [
           {
-            key: templateMeta.key,
-            vertical: templateMeta.vertical,
+            key: template.templateKey,
+            vertical: template.vertical,
             published: true,
           },
-        ]) === templateMeta.key);
+        ]) === template.templateKey);
 
     if (!compatible) {
       return {

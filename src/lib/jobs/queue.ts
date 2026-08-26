@@ -36,6 +36,12 @@ export interface EnqueueResult {
   deduplicated: boolean;
 }
 
+export interface EnqueueManyResult {
+  inserted: number;
+  deduplicated: number;
+  jobs: AutomationJob[];
+}
+
 export interface ClaimOptions {
   workerId: string;
   jobTypes?: readonly JobType[];
@@ -60,6 +66,7 @@ export interface DeferOptions {
 
 export interface JobQueue {
   enqueue(input: EnqueueJobInput): Promise<EnqueueResult>;
+  enqueueMany(inputs: readonly EnqueueJobInput[]): Promise<EnqueueManyResult>;
   claim(options: ClaimOptions): Promise<AutomationJob | null>;
   complete(jobId: string, result: Record<string, unknown>, workerId?: string): Promise<AutomationJob>;
   fail(jobId: string, options: FailOptions): Promise<AutomationJob>;
@@ -148,6 +155,19 @@ export class InMemoryJobQueue implements JobQueue {
     this.jobs.set(job.id, job);
     this.idempotencyIndex.set(job.idempotencyKey, job.id);
     return { job: { ...job }, deduplicated: false };
+  }
+
+  async enqueueMany(inputs: readonly EnqueueJobInput[]): Promise<EnqueueManyResult> {
+    const jobs: AutomationJob[] = [];
+    let inserted = 0;
+    let deduplicated = 0;
+    for (const input of inputs) {
+      const result = await this.enqueue(input);
+      jobs.push(result.job);
+      if (result.deduplicated) deduplicated += 1;
+      else inserted += 1;
+    }
+    return { inserted, deduplicated, jobs };
   }
 
   async claim(options: ClaimOptions): Promise<AutomationJob | null> {

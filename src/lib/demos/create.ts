@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateShortId, makePublicSlug } from '@/lib/demos/slug';
 import { ensureRestaurantPremiumV2 } from '@/lib/demos/ensure-template-v2';
 import { ensureRestaurantPremiumV3 } from '@/lib/demos/ensure-template-v3';
-import { listPublishedTemplates } from '@/lib/demos/ensure-template';
+import { listPublishedTemplates, type PublishedTemplate } from '@/lib/demos/ensure-template';
 import { pickCompatibleTemplateKey } from '@/lib/templates/match';
 import { prefillFromLead, normalizeDemoData } from '@/lib/templates/merge';
 import { prefillFromLeadV2, normalizeDemoDataV2 } from '@/lib/templates/merge-v2';
@@ -20,6 +20,7 @@ export interface CreateDemoInput {
   leadId: string;
   templateKey?: string;
   layoutKey?: string;
+  templateVersionId?: string;
 }
 
 export interface CreatedDemo {
@@ -92,31 +93,63 @@ export async function createDemoFromLead(
     throw new Error('Demo: lead rejected, creazione non consentita');
   }
 
-  await ensureRestaurantPremiumV2(admin, workspaceId);
-  await ensureRestaurantPremiumV3(admin, workspaceId);
-  const published = await listPublishedTemplates(admin, workspaceId);
-
-  let template = input.layoutKey
-    ? published.find((t) => t.layoutKey === input.layoutKey)
-    : undefined;
-
-  if (!template && input.templateKey) {
-    template = published.find((t) => t.templateKey === input.templateKey);
+  let template: PublishedTemplate | undefined;
+  if (input.templateVersionId) {
+    const { data: version, error: versionError } = await admin
+      .from('website_template_versions')
+      .select('id, template_id, version, layout_key, default_content, schema, is_published')
+      .eq('workspace_id', workspaceId)
+      .eq('id', input.templateVersionId)
+      .eq('is_published', true)
+      .maybeSingle();
+    if (versionError) throw new Error(`Demo: lettura template version fallita — ${versionError.message}`);
+    const { data: meta } = version
+      ? await admin
+          .from('website_templates')
+          .select('id, key, name, category, vertical')
+          .eq('workspace_id', workspaceId)
+          .eq('id', version.template_id)
+          .maybeSingle()
+      : { data: null };
+    if (version && meta) {
+      template = {
+        templateId: meta.id,
+        templateKey: meta.key,
+        templateName: meta.name ?? meta.key,
+        vertical: meta.vertical ?? meta.category,
+        versionId: version.id,
+        version: version.version,
+        layoutKey: version.layout_key,
+        defaultContent: version.default_content,
+        schema: version.schema,
+      };
+    }
   }
 
   if (!template) {
+    await ensureRestaurantPremiumV2(admin, workspaceId);
+    await ensureRestaurantPremiumV3(admin, workspaceId);
+    const published = await listPublishedTemplates(admin, workspaceId);
+    template = input.layoutKey
+      ? published.find((t) => t.layoutKey === input.layoutKey)
+      : undefined;
+    if (!template && input.templateKey) {
+      template = published.find((t) => t.templateKey === input.templateKey);
+    }
     const key = pickCompatibleTemplateKey(
       typedLead.category,
       published.map((t) => ({ key: t.templateKey, vertical: t.vertical, published: true })),
     );
-    if (!key) {
+    if (!template && !key) {
       throw new Error('Demo: nessun template compatibile col verticale del lead');
     }
-    template =
-      published.find((t) => t.templateKey === key && t.layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) ??
-      published.find((t) => t.templateKey === key && t.layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY) ??
-      published.find((t) => t.templateKey === key && t.layoutKey === RESTAURANT_PREMIUM_RENDERER_KEY) ??
-      published.find((t) => t.templateKey === key);
+    if (!template) {
+      template =
+        published.find((t) => t.templateKey === key && t.layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) ??
+        published.find((t) => t.templateKey === key && t.layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY) ??
+        published.find((t) => t.templateKey === key && t.layoutKey === RESTAURANT_PREMIUM_RENDERER_KEY) ??
+        published.find((t) => t.templateKey === key);
+    }
   }
 
   if (!template) {

@@ -42,8 +42,11 @@ export default function OperatorAlerts() {
                 {row.humanRequiredReason ?? row.commercialState ?? row.priority}
               </p>
             </div>
-            <Link href="/inbox" className="text-xs font-semibold text-amber-800 hover:underline">
-              Apri Messaggi
+            <Link
+              href={`/inbox?thread=${encodeURIComponent(row.threadId)}`}
+              className="text-xs font-semibold text-amber-800 hover:underline"
+            >
+              Apri conversazione
             </Link>
           </li>
         ))}

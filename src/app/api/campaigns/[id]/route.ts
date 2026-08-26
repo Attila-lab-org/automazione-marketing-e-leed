@@ -11,6 +11,7 @@ import {
 } from '@/lib/campaigns/test-delivery';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
+import { emailHtmlToText } from '@/lib/messaging/html-to-text';
 
 export const runtime = 'nodejs';
 
@@ -72,6 +73,50 @@ export const GET = withAdmin(async (_request: Request, ctx?: unknown) => {
   ]);
   const leadById = new Map((leadRows ?? []).map((row) => [row.id, row]));
   const repliedLeadIds = new Set((inboundRows ?? []).map((row) => row.lead_id));
+  const campaignLeadIds = (leads ?? []).map((row) => row.id);
+  const { data: outboundRows } = campaignLeadIds.length
+    ? await admin
+        .from('messages')
+        .select(
+          'id, thread_id, lead_id, campaign_lead_id, provider, provider_message_id, to_address, subject, body_snapshot, sequence_step, sent_at, created_at',
+        )
+        .eq('workspace_id', workspace.id)
+        .eq('direction', 'OUTBOUND')
+        .in('campaign_lead_id', campaignLeadIds)
+        .order('created_at', { ascending: false })
+        .limit(100)
+    : { data: [] };
+  const messageIds = (outboundRows ?? []).map((row) => row.id);
+  const { data: eventRows } = messageIds.length
+    ? await admin
+        .from('message_events')
+        .select('message_id, event_type, occurred_at')
+        .eq('workspace_id', workspace.id)
+        .in('message_id', messageIds)
+        .order('occurred_at', { ascending: false })
+    : { data: [] };
+  const eventsByMessage = new Map<string, Array<{ event_type: string; occurred_at: string }>>();
+  for (const event of eventRows ?? []) {
+    const events = eventsByMessage.get(event.message_id) ?? [];
+    events.push(event);
+    eventsByMessage.set(event.message_id, events);
+  }
+  const sentMessages = (outboundRows ?? []).map((message) => ({
+    id: message.id,
+    threadId: message.thread_id,
+    campaignLeadId: message.campaign_lead_id,
+    leadId: message.lead_id,
+    leadName: leadById.get(message.lead_id)?.name ?? 'Attività',
+    intendedRecipient: leadById.get(message.lead_id)?.email ?? null,
+    actualRecipient: message.to_address,
+    subject: message.subject,
+    bodyText: emailHtmlToText(message.body_snapshot).slice(0, 5_000),
+    sequenceStep: message.sequence_step,
+    provider: message.provider,
+    providerMessageId: message.provider_message_id,
+    sentAt: message.sent_at ?? message.created_at,
+    events: eventsByMessage.get(message.id) ?? [],
+  }));
   const manualFollowups = (leads ?? [])
     .filter(
       (row) =>
@@ -95,6 +140,7 @@ export const GET = withAdmin(async (_request: Request, ctx?: unknown) => {
     campaign,
     counts,
     manualFollowups,
+    sentMessages,
     totals: {
       leads: leads?.length ?? 0,
       review: counts.REVIEW ?? 0,

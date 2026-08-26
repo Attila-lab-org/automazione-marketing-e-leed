@@ -9,8 +9,8 @@ export default function InboxPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <SectionSubnav items={[...MESSAGE_SUBNAV]} />
       <PageHeader
-        title="Conversazioni"
-        description="Controlla subito ciò che richiede una tua risposta e lascia ad Attila le conversazioni sicure fino all’appuntamento."
+        title="Comunicazioni"
+        description="Un solo posto per vedere chi è stato contattato, cosa è stato inviato, le risposte e il prossimo passo."
       />
       <TelegramInboxStatus />
       <InboxClient />

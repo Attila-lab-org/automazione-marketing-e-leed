@@ -36,6 +36,7 @@ export async function analyzeLeadWebsite(args: {
   workspaceId: string;
   leadId: string;
   env?: NodeJS.ProcessEnv;
+  snapshot?: WebsiteSnapshot;
 }): Promise<{ analysis: WebsiteAnalysis; snapshot: WebsiteSnapshot; opportunity: BusinessOpportunity }> {
   const env = args.env ?? process.env;
   const { data: lead, error } = await args.admin
@@ -48,7 +49,7 @@ export async function analyzeLeadWebsite(args: {
     .maybeSingle();
   if (error || !lead) throw new Error(error?.message ?? 'Lead non trovato');
 
-  const snapshot = await retrieveLeadWebsiteSnapshot(lead.website_url);
+  const snapshot = args.snapshot ?? await retrieveLeadWebsiteSnapshot(lead.website_url);
   const provider = getAICommercialProvider(env);
   const route = resolveModel('analyze_website', env);
   const persist = createSupabaseAiRunStore(args.admin);

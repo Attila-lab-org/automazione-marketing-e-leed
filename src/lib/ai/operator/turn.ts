@@ -115,6 +115,11 @@ function clampElevation(
 export async function* runOperatorTurn(
   input: OperatorTurnInput,
 ): AsyncGenerator<OperatorStreamEvent> {
+  const turnStartedAt = Date.now();
+  let planningMs = 0;
+  let toolsMs = 0;
+  let writesMs = 0;
+  let composeMs = 0;
   yield { type: 'session', sessionId: input.sessionId };
   const env = input.env ?? process.env;
   const config = getAiCommercialConfig(env);
@@ -170,6 +175,7 @@ export async function* runOperatorTurn(
   let modelName = resolveModel('answer_operator', env).model;
   let requestId: string | null = null;
 
+  const planningStartedAt = Date.now();
   try {
     const provider = getAICommercialProvider(env);
     const route = resolveModel('answer_operator', env);
@@ -209,6 +215,7 @@ export async function* runOperatorTurn(
       throw new Error('Orchestratore mock non disponibile');
     }
   }
+  planningMs = Date.now() - planningStartedAt;
 
   plan.safetyClass = clampElevation(plan.safetyClass, mapIntentToSafety(fallbackIntent.kind));
   const naturalDemoBatch =
@@ -232,6 +239,7 @@ export async function* runOperatorTurn(
     ? []
     : plan.toolCalls.slice(0, maxCalls).map(plannedFromOrchestratorCall);
 
+  const toolsStartedAt = Date.now();
   for (const call of plannedCalls) {
     const labels = TOOL_LABELS[call.name];
     yield { type: 'tool_start', name: call.name, label: labels.start };
@@ -251,7 +259,9 @@ export async function* runOperatorTurn(
       count,
     };
   }
+  toolsMs = Date.now() - toolsStartedAt;
 
+  const writesStartedAt = Date.now();
   if (opsAction !== 'none' && input.writes?.runOps) {
     const labels: Record<string, string> = {
       reply_telegram: 'Sto rispondendo su Telegram…',
@@ -459,13 +469,30 @@ export async function* runOperatorTurn(
     const proposed = await input.writes.proposePolicy(input.question);
     writes.push(proposed);
   }
+  writesMs = Date.now() - writesStartedAt;
 
   const composeTraces = traces.filter((t) => t.ok).map((t) => ({ name: t.name, result: t.result }));
+  const mappedIntent = {
+    ...fallbackIntent,
+    kind: plan.safetyClass === 'UNKNOWN' ? fallbackIntent.kind : plan.safetyClass,
+  };
+  const deterministic = composeOperatorReply(
+    input.question,
+    envelope,
+    composeTraces,
+    writes,
+    mappedIntent,
+    assistMode,
+  );
   let replyText: string;
   let actions: OperatorAction[] = [];
+  const deterministicWriteFastPath = writes.length > 0 && Boolean(deterministic.reply.trim());
+  const composeStartedAt = Date.now();
   try {
     if (aiUnavailable) {
       replyText = plan.clarification ?? 'Modalità AI temporaneamente non disponibile.';
+    } else if (deterministicWriteFastPath) {
+      replyText = deterministic.reply;
     } else {
       const provider = getAICommercialProvider(env);
       const composeRoute = resolveModel('answer_operator_simple', env);
@@ -505,19 +532,7 @@ export async function* runOperatorTurn(
       assistMode,
     }).reply;
   }
-
-  const mappedIntent = {
-    ...fallbackIntent,
-    kind: plan.safetyClass === 'UNKNOWN' ? fallbackIntent.kind : plan.safetyClass,
-  };
-  const deterministic = composeOperatorReply(
-    input.question,
-    envelope,
-    composeTraces,
-    writes,
-    mappedIntent,
-    assistMode,
-  );
+  composeMs = Date.now() - composeStartedAt;
   actions = deterministic.actions;
   const demoBatchRequested =
     /demo|anteprim|propost[ae] visiv|siti? dimostrativ/i.test(input.question) &&
@@ -561,7 +576,7 @@ export async function* runOperatorTurn(
     taskType: 'answer_operator',
     usage,
     estimatedCostUsd: Math.min(estimated, cap),
-    latencyMs: 0,
+    latencyMs: Date.now() - turnStartedAt,
     status: aiUnavailable ? 'error' : 'ok',
     requestId,
     meta: {
@@ -571,6 +586,23 @@ export async function* runOperatorTurn(
       writes: writes.map((w) => w.tool),
       safetyClass: plan.safetyClass,
       budgetCapUsd: cap,
+      latency: {
+        planningMs,
+        toolsMs,
+        writesMs,
+        composeMs,
+        fastPath: deterministicWriteFastPath,
+      },
+      operationTimings: writes
+        .map((write) => ({
+          tool: write.tool,
+          campaignCreateMs:
+            typeof write.data.campaignCreateMs === 'number'
+              ? write.data.campaignCreateMs
+              : undefined,
+          enqueueMs: typeof write.data.enqueueMs === 'number' ? write.data.enqueueMs : undefined,
+        }))
+        .filter((timing) => timing.campaignCreateMs != null || timing.enqueueMs != null),
     },
   });
 

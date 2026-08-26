@@ -27,6 +27,16 @@ describe('InMemoryJobQueue (§15.1)', () => {
     expect(second.job.id).toBe(first.job.id);
   });
 
+  it('enqueueMany inserisce il batch e deduplica per idempotency key', async () => {
+    const q = setupQueue();
+    const inputs = [
+      { ...baseEnqueue, entityId: 'cl-1', idempotencyKey: 'batch-1' },
+      { ...baseEnqueue, entityId: 'cl-2', idempotencyKey: 'batch-2' },
+    ];
+    expect(await q.enqueueMany(inputs)).toMatchObject({ inserted: 2, deduplicated: 0 });
+    expect(await q.enqueueMany(inputs)).toMatchObject({ inserted: 0, deduplicated: 2 });
+  });
+
   it('claim assegna lease e impedisce doppio claim concorrente', async () => {
     const q = setupQueue();
     await q.enqueue({ ...baseEnqueue, idempotencyKey: 'k1' });

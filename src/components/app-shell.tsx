@@ -37,8 +37,8 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   {
     href: "/overview",
-    label: "Riepilogo",
-    description: "Vedi subito cosa sta succedendo e cosa richiede attenzione.",
+    label: "Controllo",
+    description: "Obiettivo, priorità e stato operativo in un solo posto.",
     match: ["/overview"],
     icon: navIcon("M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10"),
   },
@@ -62,17 +62,10 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/inbox",
-    label: "Messaggi",
-    description: "Leggi le risposte e controlla i messaggi inviati.",
-    match: ["/inbox"],
+    label: "Comunicazioni",
+    description: "Controlla destinatari, invii, risposte e stato delle conversazioni.",
+    match: ["/inbox", "/telegram"],
     icon: navIcon("M4 6h16v12H4zM4 7l8 6 8-6"),
-  },
-  {
-    href: "/telegram",
-    label: "Telegram",
-    description: "Avvia il bot e controlla le conversazioni automatiche.",
-    match: ["/telegram"],
-    icon: navIcon("M21 4 3 11l7 2 2 7 4-5 4 3 1-14Zm-11 9 6-5"),
   },
   {
     href: "/calendar",
@@ -100,7 +93,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const SECTION_LABELS: Record<string, string> = {
-  overview: "Riepilogo",
+  overview: "Controllo",
   leads: "Attività",
   segments: "Filtri salvati",
   campaigns: "Campagne",
@@ -108,7 +101,7 @@ const SECTION_LABELS: Record<string, string> = {
   "review-queue": "Da controllare",
   demos: "Anteprime",
   templates: "Modelli",
-  inbox: "Messaggi",
+  inbox: "Comunicazioni",
   calendar: "Calendario",
   automations: "Automazioni",
   analytics: "Statistiche",

@@ -29,6 +29,7 @@ import {
 } from '@/lib/campaigns/test-delivery';
 import { applyAiOutboundIfAllowed } from '@/lib/messaging/ai-outbound';
 import { analyzeLeadWebsite } from '@/lib/intelligence/analyze';
+import { extractWebsiteSnapshot, type WebsiteSnapshot } from '@/lib/intelligence/extract';
 import { ensureMessageThread } from '@/lib/messaging/persist';
 
 type JobRef = {
@@ -135,23 +136,25 @@ async function handleWebsiteAnalysis(
   env: NodeJS.ProcessEnv,
 ) {
   const leadId = String(job.inputSnapshot.leadId ?? job.entityId);
-  try {
-    const result = await analyzeLeadWebsite({
-      admin: admin as AppSupabaseClient,
-      workspaceId: job.workspaceId,
-      leadId,
-      env,
-    });
-    return {
-      opportunityScore: result.opportunity.aiOpportunityScore,
-      retrieved: result.snapshot.retrieved,
-    };
-  } catch (err) {
-    return {
-      deferred: true,
-      reason: err instanceof Error ? err.message : 'website_analysis_failed',
-    };
-  }
+  const rawSnapshot = job.inputSnapshot.websiteSnapshot;
+  const cachedSnapshot =
+    rawSnapshot &&
+    typeof rawSnapshot === 'object' &&
+    typeof (rawSnapshot as Record<string, unknown>).url === 'string' &&
+    typeof (rawSnapshot as Record<string, unknown>).retrieved === 'boolean'
+      ? (rawSnapshot as WebsiteSnapshot)
+      : undefined;
+  const result = await analyzeLeadWebsite({
+    admin: admin as AppSupabaseClient,
+    workspaceId: job.workspaceId,
+    leadId,
+    env,
+    snapshot: cachedSnapshot,
+  });
+  return {
+    opportunityScore: result.opportunity.aiOpportunityScore,
+    retrieved: result.snapshot.retrieved,
+  };
 }
 
 async function handleLeadEnrichment(
@@ -171,7 +174,7 @@ async function handleLeadEnrichment(
   const { data: campaign } = clRow?.campaign_id
     ? await admin
         .from('campaigns')
-        .select('delivery_mode')
+        .select('delivery_mode, landing_template_version_id')
         .eq('id', clRow.campaign_id)
         .maybeSingle()
     : { data: null };
@@ -218,13 +221,16 @@ async function handleLeadEnrichment(
     .in('business_status', ['NEW', 'QUALIFIED', 'CAMPAIGN_READY']);
 
   const queue = new SupabaseJobQueue(admin);
+  const websiteSnapshot = email.retrievedPage
+    ? extractWebsiteSnapshot(email.retrievedPage.url, email.retrievedPage.html)
+    : undefined;
   const analysisJob = await queue.enqueue({
     workspaceId: job.workspaceId,
     jobType: 'WEBSITE_ANALYSIS',
     entityType: 'lead',
     entityId: leadId,
     idempotencyKey: `WEBSITE_ANALYSIS:lead:${leadId}:v1`,
-    inputSnapshot: { leadId, campaignLeadId: job.entityId },
+    inputSnapshot: { leadId, campaignLeadId: job.entityId, websiteSnapshot },
     priority: 50,
   });
   await queue.enqueue({
@@ -233,7 +239,10 @@ async function handleLeadEnrichment(
     entityType: 'campaign_lead',
     entityId: job.entityId,
     idempotencyKey: `DEMO_GENERATION:campaign_lead:${job.entityId}`,
-    inputSnapshot: { leadId },
+    inputSnapshot: {
+      leadId,
+      templateVersionId: campaign?.landing_template_version_id ?? null,
+    },
     priority: 60,
     dependsOnJobId: analysisJob.job.id,
   });
@@ -250,50 +259,55 @@ async function handleDemoGeneration(
   job: { workspaceId: string; entityId: string; inputSnapshot: Record<string, unknown> },
 ) {
   const leadId = String(job.inputSnapshot.leadId ?? '');
-  const { data: lead } = await admin.from('leads').select('category').eq('id', leadId).single();
-  await ensureRestaurantPremiumV3(admin, job.workspaceId);
-  const published = await listPublishedTemplates(admin, job.workspaceId);
-  const matched = pickCompatibleTemplateKey(
-    lead?.category,
-    published.map((t) => ({ key: t.templateKey, vertical: t.vertical, published: true })),
-  );
+  const templateVersionId =
+    typeof job.inputSnapshot.templateVersionId === 'string'
+      ? job.inputSnapshot.templateVersionId
+      : undefined;
+  let templateMatch: string | null = null;
+  let layoutKey: string | undefined;
 
-  if (!matched) {
-    await updateCampaignLead(
-      admin,
-      job.entityId,
-      { status: 'SKIPPED' },
-      { blockers: ['TEMPLATE_NOT_COMPATIBLE'], templateMatch: null },
+  if (!templateVersionId) {
+    const { data: lead } = await admin.from('leads').select('category').eq('id', leadId).single();
+    await ensureRestaurantPremiumV3(admin, job.workspaceId);
+    const published = await listPublishedTemplates(admin, job.workspaceId);
+    templateMatch = pickCompatibleTemplateKey(
+      lead?.category,
+      published.map((t) => ({ key: t.templateKey, vertical: t.vertical, published: true })),
     );
-    return { skipped: true, reason: 'TEMPLATE_NOT_COMPATIBLE' };
-  }
-
-  const v3 = published.find(
-    (t) => t.templateKey === matched && t.layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY,
-  );
-  const v2 = published.find(
-    (t) => t.templateKey === matched && t.layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY,
-  );
-  const chosen = v3 ?? v2 ?? published.find((t) => t.templateKey === matched);
-
-  if (
-    !chosen ||
-    (chosen.layoutKey !== RESTAURANT_PREMIUM_V3_RENDERER_KEY &&
-      chosen.layoutKey !== RESTAURANT_PREMIUM_V2_RENDERER_KEY)
-  ) {
-    await updateCampaignLead(
-      admin,
-      job.entityId,
-      { status: 'SKIPPED' },
-      { blockers: ['TEMPLATE_NOT_COMPATIBLE'], templateMatch: matched },
-    );
-    return { skipped: true, reason: 'TEMPLATE_NOT_COMPATIBLE' };
+    const chosen = templateMatch
+      ? published.find(
+          (t) =>
+            t.templateKey === templateMatch &&
+            t.layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY,
+        ) ??
+        published.find(
+          (t) =>
+            t.templateKey === templateMatch &&
+            t.layoutKey === RESTAURANT_PREMIUM_V2_RENDERER_KEY,
+        ) ??
+        published.find((t) => t.templateKey === templateMatch)
+      : undefined;
+    if (
+      !chosen ||
+      (chosen.layoutKey !== RESTAURANT_PREMIUM_V3_RENDERER_KEY &&
+        chosen.layoutKey !== RESTAURANT_PREMIUM_V2_RENDERER_KEY)
+    ) {
+      await updateCampaignLead(
+        admin,
+        job.entityId,
+        { status: 'SKIPPED' },
+        { blockers: ['TEMPLATE_NOT_COMPATIBLE'], templateMatch },
+      );
+      return { skipped: true, reason: 'TEMPLATE_NOT_COMPATIBLE' };
+    }
+    layoutKey = chosen.layoutKey;
   }
 
   const demo = await createDemoFromLead(admin, job.workspaceId, {
     leadId,
-    layoutKey: chosen.layoutKey,
-    templateKey: matched,
+    templateVersionId,
+    layoutKey,
+    templateKey: templateMatch ?? undefined,
   });
 
   await updateCampaignLead(
@@ -665,48 +679,77 @@ export async function runJobBatch(
 ) {
   const queue = new SupabaseJobQueue(admin);
   await queue.recoverStuckJobs();
-  const results: Array<{ jobId: string; ok: boolean; deferred?: boolean; error?: string }> = [];
+  const results: Array<{
+    jobId: string;
+    jobType: JobRef['jobType'];
+    ok: boolean;
+    durationMs: number;
+    deferred?: boolean;
+    error?: string;
+  }> = [];
+  const configuredConcurrency = Number(env.JOB_WORKER_CONCURRENCY ?? 4);
+  const concurrency = Math.max(
+    1,
+    Math.min(limit, Number.isFinite(configuredConcurrency) ? Math.floor(configuredConcurrency) : 4, 8),
+  );
+  let claimed = 0;
 
-  for (let i = 0; i < limit; i += 1) {
-    const job = await queue.claim({ workerId, workspaceId });
-    if (!job) break;
-    try {
-      const result = await handleJob(
-        admin,
-        {
-          id: job.id,
-          jobType: job.jobType,
-          workspaceId: job.workspaceId,
-          entityType: job.entityType,
-          entityId: job.entityId,
-          inputSnapshot: job.inputSnapshot,
-        },
-        env,
-      );
-      await queue.complete(job.id, result);
-      results.push({ jobId: job.id, ok: true });
-    } catch (err) {
-      if (err instanceof SendDeferredError) {
-        await queue.defer(job.id, {
-          notBefore: err.defer.notBefore,
-          reason: `${err.defer.reason}: ${err.defer.detail}`,
-          workerId,
-        });
+  async function work(slot: number): Promise<void> {
+    const slotWorkerId = `${workerId}:${slot}`;
+    while (claimed < limit) {
+      claimed += 1;
+      const job = await queue.claim({ workerId: slotWorkerId, workspaceId });
+      if (!job) return;
+      const jobStartedAt = Date.now();
+      try {
+        const result = await handleJob(
+          admin,
+          {
+            id: job.id,
+            jobType: job.jobType,
+            workspaceId: job.workspaceId,
+            entityType: job.entityType,
+            entityId: job.entityId,
+            inputSnapshot: job.inputSnapshot,
+          },
+          env,
+        );
+        const durationMs = Date.now() - jobStartedAt;
+        await queue.complete(job.id, { ...result, durationMs });
+        results.push({ jobId: job.id, jobType: job.jobType, ok: true, durationMs });
+      } catch (err) {
+        if (err instanceof SendDeferredError) {
+          await queue.defer(job.id, {
+            notBefore: err.defer.notBefore,
+            reason: `${err.defer.reason}: ${err.defer.detail}`,
+            workerId: slotWorkerId,
+          });
+          results.push({
+            jobId: job.id,
+            jobType: job.jobType,
+            ok: true,
+            durationMs: Date.now() - jobStartedAt,
+            deferred: true,
+            error: `DEFERRED:${err.defer.reason}`,
+          });
+          continue;
+        }
+        const message = err instanceof Error ? err.message : 'job failed';
+        const errorCode =
+          err instanceof BlockedTestRecipientError ? 'BLOCKED_TEST_RECIPIENT' : 'JOB_FAILED';
+        await queue.fail(job.id, { errorCode, errorDetail: message, workerId: slotWorkerId });
         results.push({
           jobId: job.id,
-          ok: true,
-          deferred: true,
-          error: `DEFERRED:${err.defer.reason}`,
+          jobType: job.jobType,
+          ok: false,
+          durationMs: Date.now() - jobStartedAt,
+          error: message,
         });
-        continue;
       }
-      const message = err instanceof Error ? err.message : 'job failed';
-      const errorCode =
-        err instanceof BlockedTestRecipientError ? 'BLOCKED_TEST_RECIPIENT' : 'JOB_FAILED';
-      await queue.fail(job.id, { errorCode, errorDetail: message, workerId });
-      results.push({ jobId: job.id, ok: false, error: message });
     }
   }
+
+  await Promise.all(Array.from({ length: concurrency }, (_, slot) => work(slot + 1)));
 
   return results;
 }

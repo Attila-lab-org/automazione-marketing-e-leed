@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { EnqueueJobInput, JobQueue } from '@/lib/jobs/queue';
+import type { EnqueueJobInput, EnqueueManyResult, JobQueue } from '@/lib/jobs/queue';
 import type { AutomationJob, JobType } from '@/lib/types/domain';
 
 function mapRow(row: Record<string, unknown>): AutomationJob {
@@ -34,17 +34,9 @@ export class SupabaseJobQueue implements JobQueue {
   constructor(private readonly admin: SupabaseClient) {}
 
   async enqueue(input: EnqueueJobInput): Promise<{ job: AutomationJob; deduplicated: boolean }> {
-    const { data: existing } = await this.admin
-      .from('automation_jobs')
-      .select('*')
-      .eq('idempotency_key', input.idempotencyKey)
-      .maybeSingle();
-
-    if (existing) return { job: mapRow(existing as Record<string, unknown>), deduplicated: true };
-
     const { data, error } = await this.admin
       .from('automation_jobs')
-      .insert({
+      .upsert({
         workspace_id: input.workspaceId,
         job_type: input.jobType,
         entity_type: input.entityType,
@@ -55,12 +47,50 @@ export class SupabaseJobQueue implements JobQueue {
         input_snapshot: input.inputSnapshot ?? {},
         depends_on_job_id: input.dependsOnJobId ?? null,
         next_retry_at: input.notBefore?.toISOString() ?? null,
-      })
+      }, { onConflict: 'idempotency_key', ignoreDuplicates: true })
       .select('*')
-      .single();
+      .maybeSingle();
 
-    if (error || !data) throw new Error(`Job enqueue fallito — ${error?.message ?? ''}`);
+    if (error) throw new Error(`Job enqueue fallito — ${error.message}`);
+    if (!data) {
+      const { data: existing, error: readError } = await this.admin
+        .from('automation_jobs')
+        .select('*')
+        .eq('idempotency_key', input.idempotencyKey)
+        .single();
+      if (readError || !existing) {
+        throw new Error(`Job enqueue deduplicato ma non rileggibile — ${readError?.message ?? ''}`);
+      }
+      return { job: mapRow(existing as Record<string, unknown>), deduplicated: true };
+    }
     return { job: mapRow(data as Record<string, unknown>), deduplicated: false };
+  }
+
+  async enqueueMany(inputs: readonly EnqueueJobInput[]): Promise<EnqueueManyResult> {
+    if (inputs.length === 0) return { inserted: 0, deduplicated: 0, jobs: [] };
+    const rows = inputs.map((input) => ({
+      workspace_id: input.workspaceId,
+      job_type: input.jobType,
+      entity_type: input.entityType,
+      entity_id: input.entityId,
+      idempotency_key: input.idempotencyKey,
+      priority: input.priority ?? 100,
+      max_attempts: input.maxAttempts ?? 5,
+      input_snapshot: input.inputSnapshot ?? {},
+      depends_on_job_id: input.dependsOnJobId ?? null,
+      next_retry_at: input.notBefore?.toISOString() ?? null,
+    }));
+    const { data, error } = await this.admin
+      .from('automation_jobs')
+      .upsert(rows, { onConflict: 'idempotency_key', ignoreDuplicates: true })
+      .select('*');
+    if (error) throw new Error(`Job batch enqueue fallito — ${error.message}`);
+    const jobs = (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
+    return {
+      inserted: jobs.length,
+      deduplicated: inputs.length - jobs.length,
+      jobs,
+    };
   }
 
   async claim(options: {

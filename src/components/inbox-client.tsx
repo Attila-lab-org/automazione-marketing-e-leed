@@ -6,7 +6,7 @@ import TelegramConversationDrawer from "@/components/telegram-conversation-drawe
 import type { InboxConversationDetail } from "@/lib/inbound/conversation";
 import type { InboxThreadItem } from "@/lib/inbound/list-inbox";
 
-type InboxView = "manual" | "ai" | "waiting" | "appointments";
+type InboxView = "all" | "manual" | "ai" | "waiting" | "appointments";
 
 function formatWhen(iso: string | null): string {
   if (!iso) return "—";
@@ -71,7 +71,7 @@ export default function InboxClient() {
   const [conversation, setConversation] = useState<InboxConversationDetail | null>(null);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
-  const [view, setView] = useState<InboxView>("manual");
+  const [view, setView] = useState<InboxView>("all");
 
   async function refreshThreads() {
     const response = await fetch("/api/inbox", { cache: "no-store" });
@@ -157,6 +157,11 @@ export default function InboxClient() {
 
   const views: Array<{ id: InboxView; label: string; description: string }> = [
     {
+      id: "all",
+      label: "Tutte",
+      description: "Tutte le conversazioni email e Telegram, incluse quelle già gestite.",
+    },
+    {
       id: "manual",
       label: "Da rispondere",
       description: "Richiedono una tua decisione o il takeover manuale.",
@@ -180,15 +185,18 @@ export default function InboxClient() {
   const counts = Object.fromEntries(
     views.map((candidate) => [
       candidate.id,
-      threads.filter((thread) => inboxViewFor(thread) === candidate.id).length,
+      candidate.id === "all"
+        ? threads.length
+        : threads.filter((thread) => inboxViewFor(thread) === candidate.id).length,
     ]),
   ) as Record<InboxView, number>;
-  const visible = threads.filter((thread) => inboxViewFor(thread) === view);
+  const visible =
+    view === "all" ? threads : threads.filter((thread) => inboxViewFor(thread) === view);
   const activeView = views.find((candidate) => candidate.id === view)!;
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {views.map((candidate) => {
           const active = candidate.id === view;
           const count = counts[candidate.id];

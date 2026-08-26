@@ -40,6 +40,19 @@ type ManualFollowup = {
   due: boolean;
 };
 
+type SentMessage = {
+  id: string;
+  threadId: string;
+  leadName: string;
+  intendedRecipient: string | null;
+  actualRecipient: string;
+  subject: string | null;
+  bodyText: string;
+  sequenceStep: number;
+  sentAt: string;
+  events: Array<{ event_type: string; occurred_at: string }>;
+};
+
 const CAMPAIGN_STATUS: Record<string, string> = {
   DRAFT: "Bozza",
   ACTIVE: "Attiva",
@@ -67,6 +80,17 @@ const ACTIVITY_STATUS: Record<string, string> = {
   PAUSED: "In pausa",
 };
 
+const MESSAGE_STATUS: Record<string, string> = {
+  SENT: "Inviata",
+  DELIVERED: "Consegnata",
+  OPENED: "Aperta",
+  CLICKED: "Cliccata",
+  BOUNCED: "Respinta",
+  COMPLAINED: "Segnalata",
+  UNSUBSCRIBED: "Disiscritta",
+  REPLIED: "Ha risposto",
+};
+
 type NextAction =
   | { kind: "prepare"; label: string }
   | { kind: "review"; label: string }
@@ -85,6 +109,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
   const [deliveryMode, setDeliveryMode] = useState<"PRODUCTION" | "TEST">("PRODUCTION");
   const [testRecipient, setTestRecipient] = useState("");
   const [manualFollowups, setManualFollowups] = useState<ManualFollowup[]>([]);
+  const [sentMessages, setSentMessages] = useState<SentMessage[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,6 +123,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
         setCounts(data.counts ?? {});
         setTotals(data.totals ?? null);
         setManualFollowups(data.manualFollowups ?? []);
+        setSentMessages(data.sentMessages ?? []);
         setDeliveryMode(data.campaign.delivery_mode === "TEST" ? "TEST" : "PRODUCTION");
         setTestRecipient(data.campaign.test_recipient ?? "");
       } catch (err: unknown) {
@@ -117,6 +143,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
     setCounts(data.counts ?? {});
     setTotals(data.totals ?? null);
     setManualFollowups(data.manualFollowups ?? []);
+    setSentMessages(data.sentMessages ?? []);
     setDeliveryMode(data.campaign.delivery_mode === "TEST" ? "TEST" : "PRODUCTION");
     setTestRecipient(data.campaign.test_recipient ?? "");
   }, [campaignId]);
@@ -451,6 +478,91 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
             <p className="mt-1 text-xs text-stone-500">{stat.note}</p>
           </div>
         ))}
+      </section>
+
+      <section className="rounded-xl border border-stone-200 bg-white p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-stone-900">Email inviate</h3>
+            <p className="mt-1 text-sm text-stone-600">
+              Qui vedi chi è stato contattato, il testo realmente inviato e gli eventi di consegna.
+            </p>
+          </div>
+          <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-700">
+            {sentMessages.length} messaggi
+          </span>
+        </div>
+        {sentMessages.length ? (
+          <div className="mt-4 space-y-3">
+            {sentMessages.map((item) => {
+              const latestEvent = item.events[0]?.event_type ?? "SENT";
+              const isProblem = latestEvent === "BOUNCED" || latestEvent === "COMPLAINED";
+              const isTestDelivery =
+                Boolean(item.intendedRecipient) &&
+                item.actualRecipient.toLowerCase() !== item.intendedRecipient?.toLowerCase();
+              return (
+                <details key={item.id} className="rounded-lg border border-stone-200">
+                  <summary className="cursor-pointer list-none p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="font-semibold text-stone-900">{item.leadName}</p>
+                        <p className="text-xs text-stone-500">
+                          A: {item.actualRecipient}
+                          {isTestDelivery ? ` · lead: ${item.intendedRecipient}` : ""}
+                          {" · "}
+                          {new Date(item.sentAt).toLocaleString("it-IT")}
+                        </p>
+                        <p className="mt-1 text-sm text-stone-700">
+                          {item.subject ?? "Senza oggetto"}
+                        </p>
+                      </div>
+                      <span
+                        className={`w-fit rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                          isProblem
+                            ? "bg-red-100 text-red-800"
+                            : latestEvent === "REPLIED"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-blue-50 text-blue-800"
+                        }`}
+                      >
+                        {MESSAGE_STATUS[latestEvent] ?? latestEvent}
+                      </span>
+                    </div>
+                  </summary>
+                  <div className="border-t border-stone-100 px-4 py-3">
+                    <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-stone-700">
+                      {item.bodyText}
+                    </pre>
+                    <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-stone-100 pt-3">
+                      <Link
+                        href={`/inbox?thread=${encodeURIComponent(item.threadId)}`}
+                        className="text-xs font-semibold text-amber-800"
+                      >
+                        Apri conversazione
+                      </Link>
+                      <span className="text-xs text-stone-500">
+                        Sequenza {item.sequenceStep}
+                      </span>
+                      {item.events.length ? (
+                        <span className="text-xs text-stone-500">
+                          Cronologia:{" "}
+                          {[...item.events]
+                            .reverse()
+                            .map((event) => MESSAGE_STATUS[event.event_type] ?? event.event_type)
+                            .join(" → ")}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-lg bg-stone-50 px-4 py-4 text-sm text-stone-600">
+            Nessuna email è stata ancora inviata da questa campagna.
+          </div>
+        )}
       </section>
 
       <section className="rounded-xl border border-stone-200 bg-white p-5">
