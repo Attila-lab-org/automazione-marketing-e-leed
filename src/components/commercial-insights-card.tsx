@@ -44,16 +44,9 @@ type Goal = {
   };
 };
 
-type GoalPlan = {
-  version: number;
-  rationale: string;
-  actions: Array<{ id: string; type: string; rationale: string }>;
-};
-
 export default function CommercialInsightsCard() {
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
-  const [goalPlan, setGoalPlan] = useState<GoalPlan | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +67,6 @@ export default function CommercialInsightsCard() {
         if (!response.ok) throw new Error(data.error ?? "Insights non disponibili");
         setBriefing(data.briefing);
         setGoal(data.goal ?? null);
-        setGoalPlan(data.goalPlan ?? null);
       })
       .catch((reason) =>
         setError(reason instanceof Error ? reason.message : "Centro commerciale non disponibile"),
@@ -122,7 +114,6 @@ export default function CommercialInsightsCard() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Creazione obiettivo non riuscita");
       setGoal(data.goal);
-      setGoalPlan(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Creazione obiettivo non riuscita");
     } finally {
@@ -247,147 +238,52 @@ export default function CommercialInsightsCard() {
     );
   }
 
-  const metrics = [
-    ["Call oggi", briefing?.today.appointments ?? 0],
-    ["Email reply", `${Math.round((briefing?.channels.EMAIL.replyRate ?? 0) * 100)}%`],
-    ["Telegram reply", `${Math.round((briefing?.channels.TELEGRAM.replyRate ?? 0) * 100)}%`],
-  ] as const;
-
   return (
     <section
       aria-label="Consigli di Attila"
-      className="overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white"
+      className="rounded-2xl border border-amber-200 bg-amber-50 p-5"
     >
-      <div className="grid gap-6 p-5 lg:grid-cols-[1fr_260px]">
+      <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Obiettivo attuale</p>
+      <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-800">
-            Outcome commerciale · modalità {goal.mode}
+          <h2 className="text-lg font-semibold text-stone-950">{goal.title}</h2>
+          <p className="mt-1 text-sm text-stone-700">
+            <strong>{goal.current_value} di {goal.target_value}</strong> · scadenza{" "}
+            {new Date(goal.deadline).toLocaleDateString("it-IT")}
           </p>
-          <h2 className="mt-2 text-lg font-semibold text-stone-950">
-            {goal.title}
-          </h2>
-          {goal ? (
-            <>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-amber-100">
-                <div
-                  className="h-full rounded-full bg-amber-500 transition-all"
-                  style={{ width: `${Math.min(100, goal.progress_snapshot.progressPct ?? 0)}%` }}
-                />
-              </div>
-              <p className="mt-2 text-sm text-stone-700">
-                {goal.current_value}/{goal.target_value} {goal.target_metric.toLowerCase().replaceAll("_", " ")}
-                {" · "}
-                ritmo {goal.progress_snapshot.pace ?? "in osservazione"}
-                {" · "}
-                scadenza {new Date(goal.deadline).toLocaleDateString("it-IT")}
-              </p>
-              {goal.progress_snapshot.blockers?.length ? (
-                <p className="mt-2 text-sm font-medium text-red-700">
-                  Blocker: {goal.progress_snapshot.blockers.join(", ")}
-                </p>
-              ) : null}
-              {goalPlan ? (
-                <details className="mt-3 rounded-xl border border-amber-100 bg-white/70 p-3 text-sm">
-                  <summary className="cursor-pointer font-semibold text-stone-800">
-                    Piano v{goalPlan.version}
-                  </summary>
-                  <p className="mt-2 text-stone-600">{goalPlan.rationale}</p>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-stone-600">
-                    {(Array.isArray(goalPlan.actions) ? goalPlan.actions : []).slice(0, 4).map((action) => (
-                      <li key={action.id}>{action.rationale}</li>
-                    ))}
-                  </ul>
-                </details>
-              ) : null}
-            </>
-          ) : null}
-          {briefing ? (
-            <>
-              <p className="mt-2 text-sm font-medium text-amber-900">
-                Canale consigliato:{" "}
-                {briefing.recommendation.channel === "BALANCED"
-                  ? "Email + Telegram"
-                  : briefing.recommendation.channel}
-                {briefing.recommendation.city
-                  ? ` · Nuove email: ${briefing.recommendation.city}`
-                  : ""}
-              </p>
-              <ol className="mt-3 space-y-2">
-                {briefing.actions.slice(0, 3).map((recommendation, index) => (
-                  <li key={recommendation} className="flex gap-3 text-sm leading-6 text-stone-700">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-200 text-xs font-bold text-amber-950">
-                      {index + 1}
-                    </span>
-                    {recommendation}
-                  </li>
-                ))}
-              </ol>
-            </>
-          ) : null}
-          {error ? <p className="mt-3 text-sm font-medium text-red-700">{error}</p> : null}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {goal ? (
-              <>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => updateGoal({ action: "tick" })}
-                  className="rounded-lg bg-stone-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                >
-                  Procedi
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    updateGoal({ action: goal.status === "PAUSED" ? "resume" : "pause" })
-                  }
-                  className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700 disabled:opacity-50"
-                >
-                  {goal.status === "PAUSED" ? "Riprendi" : "Pausa"}
-                </button>
-                {(["ASK", "DO", "AUTOPILOT"] as const).map((mode) => (
-                  <button
-                    type="button"
-                    key={mode}
-                    disabled={busy || goal.mode === mode}
-                    onClick={() => updateGoal({ mode })}
-                    className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50"
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </>
-            ) : null}
-            <Link
-              href="/inbox"
-              className="rounded-lg bg-stone-950 px-3 py-2 text-xs font-semibold text-white"
-            >
-              Gestisci priorità
-            </Link>
-            <Link
-              href="/settings/playbook"
-              className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700"
-            >
-              Modifica regole
-            </Link>
-          </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
-          {(goal
-            ? [
-                ["Target", goal.target_value],
-                ["Actual", goal.current_value],
-                ["Progresso", `${goal.progress_snapshot.progressPct ?? 0}%`],
-              ]
-            : metrics
-          ).map(([label, value]) => (
-            <div key={label} className="rounded-xl border border-amber-100 bg-white/80 p-3">
-              <p className="text-xs text-stone-500">{label}</p>
-              <p className="mt-1 text-xl font-semibold text-stone-950">{value}</p>
-            </div>
-          ))}
-        </div>
+        <p className="text-2xl font-semibold text-stone-950">
+          {Math.round(goal.progress_snapshot.progressPct ?? 0)}%
+        </p>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-amber-100">
+        <div className="h-full rounded-full bg-amber-500" style={{ width: `${Math.min(100, goal.progress_snapshot.progressPct ?? 0)}%` }} />
+      </div>
+      {briefing?.actions[0] ? (
+        <p className="mt-4 rounded-lg bg-white px-3 py-2 text-sm text-stone-700">
+          <strong>Attila consiglia:</strong> {briefing.actions[0]}
+        </p>
+      ) : null}
+      {goal.progress_snapshot.blockers?.[0] ? (
+        <p className="mt-2 text-sm font-medium text-red-700">{goal.progress_snapshot.blockers[0]}</p>
+      ) : null}
+      {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button type="button" disabled={busy} onClick={() => updateGoal({ action: "tick" })} className="rounded-lg bg-stone-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+          Procedi
+        </button>
+        {([
+          ["ASK", "Consiglia"],
+          ["DO", "Prepara"],
+          ["AUTOPILOT", "Autonomo"],
+        ] as const).map(([value, label]) => (
+          <button type="button" key={value} disabled={busy || goal.mode === value} onClick={() => updateGoal({ mode: value })} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700 disabled:bg-amber-200">
+            {label}
+          </button>
+        ))}
+        <Link href="/inbox" className="ml-auto text-xs font-semibold text-amber-900 hover:underline">
+          Apri conversazioni →
+        </Link>
       </div>
     </section>
   );

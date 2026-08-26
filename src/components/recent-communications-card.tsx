@@ -65,7 +65,7 @@ export default function RecentCommunicationsCard() {
       ) : null}
       {items.length ? (
         <ul className="mt-4 divide-y divide-stone-100">
-          {items.slice(0, 8).map((item) => (
+          {items.slice(0, 4).map((item) => (
             <li key={item.id} className="py-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">

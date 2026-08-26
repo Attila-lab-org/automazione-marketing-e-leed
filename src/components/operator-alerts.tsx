@@ -22,7 +22,7 @@ export default function OperatorAlerts() {
         setRows(
           threads.filter(
             (t) => t.humanRequiredReason || t.priority === "HOT" || t.commercialState === "HUMAN_REQUIRED",
-          ).slice(0, 6),
+          ).slice(0, 3),
         );
       })
       .catch(() => setRows([]));
@@ -32,7 +32,7 @@ export default function OperatorAlerts() {
 
   return (
     <section aria-label="Avvisi Attila" className="space-y-3">
-      <h2 className="text-sm font-semibold text-stone-800">Avvisi commerciali</h2>
+      <h2 className="text-sm font-semibold text-stone-800">Richiedono te</h2>
       <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 bg-white">
         {rows.map((row) => (
           <li key={row.threadId} className="flex items-center justify-between gap-3 px-4 py-3">
