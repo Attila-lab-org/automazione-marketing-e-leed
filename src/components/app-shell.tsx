@@ -62,10 +62,17 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/inbox",
-    label: "Comunicazioni",
-    description: "Controlla destinatari, invii, risposte e stato delle conversazioni.",
-    match: ["/inbox", "/telegram"],
+    label: "Messaggi",
+    description: "Leggi e filtra tutte le conversazioni email e Telegram.",
+    match: ["/inbox"],
     icon: navIcon("M4 6h16v12H4zM4 7l8 6 8-6"),
+  },
+  {
+    href: "/telegram",
+    label: "Telegram",
+    description: "Gestisci il bot, lo stato del canale e le conversazioni Telegram.",
+    match: ["/telegram"],
+    icon: navIcon("M21 3 3.7 10.1c-1.2.5-1.1 1.2-.2 1.5l4.4 1.4 1.7 5.2c.3.9.8 1 1.4.4l2.5-2.4 4.7 3.5c.9.6 1.6.3 1.8-.8L22 4.3c.2-1.1-.2-1.6-1-1.3ZM8 13l9-6"),
   },
   {
     href: "/calendar",
@@ -101,7 +108,7 @@ const SECTION_LABELS: Record<string, string> = {
   "review-queue": "Da controllare",
   demos: "Anteprime",
   templates: "Modelli",
-  inbox: "Comunicazioni",
+  inbox: "Messaggi",
   calendar: "Calendario",
   automations: "Automazioni",
   analytics: "Statistiche",
@@ -336,12 +343,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
             />
           </div>
 
-          <div className="ml-auto md:ml-0">
-            <Suspense fallback={null}>
-              <AttilaAiDrawer />
-            </Suspense>
-          </div>
-
           {/* Badge Resend runtime (single source of truth) */}
           <span
             title={
@@ -351,7 +352,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   ? "Il servizio email è in modalità prova: nessuna email reale viene inviata."
                   : "Non è stato possibile verificare il servizio email."
             }
-            className={`cursor-help whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+            className={`ml-auto cursor-help whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
               resendBadge.mode === "live"
                 ? "border-emerald-300 bg-emerald-50 text-emerald-900"
                 : resendBadge.mode === "mock"
@@ -428,6 +429,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
         }}
         onCancel={() => setKillSwitchOpen(false)}
       />
+      <Suspense fallback={null}>
+        <AttilaAiDrawer />
+      </Suspense>
     </div>
   );
 }

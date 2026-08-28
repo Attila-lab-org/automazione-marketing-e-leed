@@ -82,9 +82,33 @@ const DISCOVERY_CATEGORIES = [
   "Gelaterie",
   "Pasticcerie",
   "Hotel",
+  "Bed & Breakfast",
+  "Agenzie immobiliari",
+  "Studi legali",
+  "Commercialisti",
+  "Dentisti",
+  "Fisioterapisti",
+  "Cliniche private",
+  "Farmacie",
   "Parrucchieri",
+  "Barbieri",
   "Centri estetici",
+  "Spa",
   "Palestre",
+  "Personal trainer",
+  "Scuole di danza",
+  "Officine auto",
+  "Concessionarie",
+  "Imprese edili",
+  "Idraulici",
+  "Elettricisti",
+  "Fotografi",
+  "Wedding planner",
+  "Negozi di abbigliamento",
+  "Arredamento",
+  "Agenzie di viaggio",
+  "Scuole di formazione",
+  "Consulenti aziendali",
 ];
 
 function categoryLabel(raw: string | null): string {
@@ -199,6 +223,7 @@ export default function LeadsBrowser({
   const [manualBusy, setManualBusy] = useState(false);
   const [manualForm, setManualForm] = useState({
     businessName: "",
+    category: "",
     email: "",
     websiteUrl: "",
     phone: "",
@@ -514,6 +539,7 @@ export default function LeadsBrowser({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           businessName: manualForm.businessName,
+          category: manualForm.category || undefined,
           email: manualForm.email,
           websiteUrl: manualForm.websiteUrl || undefined,
           phone: manualForm.phone || undefined,
@@ -524,7 +550,7 @@ export default function LeadsBrowser({
       if (!res.ok) throw new Error(data.error ?? "Creazione attività fallita");
       setResultBanner(`Attività aggiunta: ${data.lead?.name ?? manualForm.businessName}`);
       setManualOpen(false);
-      setManualForm({ businessName: "", email: "", websiteUrl: "", phone: "", city: "" });
+      setManualForm({ businessName: "", category: "", email: "", websiteUrl: "", phone: "", city: "" });
       setLoading(true);
       setReloadToken((n) => n + 1);
     } catch (err) {
@@ -888,6 +914,28 @@ export default function LeadsBrowser({
               {campaignLeads.length} attività selezionat
               {campaignLeads.length === 1 ? "o" : "i"} · preparazione automatica
             </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {[...new Set(campaignLeads.map((lead) => lead.category))].map((item) => (
+                <span
+                  key={item}
+                  className="rounded-full bg-stone-100 px-2 py-1 text-xs font-medium text-stone-700"
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+            {campaignLeads.some(
+              (lead) =>
+                !["Ristoranti", "Pizzerie", "Bar ed enoteche", "Cibo da asporto", "Agriturismi"].includes(
+                  lead.category,
+                ),
+            ) ? (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Alcuni settori selezionati non hanno ancora un modello demo dedicato. La campagna
+                verrà creata, ma quei contatti potrebbero richiedere un modello compatibile prima
+                della preparazione.
+              </p>
+            ) : null}
 
             <label className="mt-5 block text-sm font-medium text-stone-700">
               Nome campagna
@@ -1015,6 +1063,25 @@ export default function LeadsBrowser({
                 className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 disabled={manualBusy}
               />
+            </label>
+            <label className="mt-3 block text-sm font-medium text-stone-700">
+              Categoria
+              <input
+                required
+                list="manual-category-options"
+                value={manualForm.category}
+                onChange={(e) =>
+                  setManualForm((f) => ({ ...f, category: e.target.value }))
+                }
+                placeholder="Scrivi qualsiasi settore"
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                disabled={manualBusy}
+              />
+              <datalist id="manual-category-options">
+                {DISCOVERY_CATEGORIES.map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
             </label>
             <label className="mt-3 block text-sm font-medium text-stone-700">
               Email

@@ -19,7 +19,47 @@ export const GET = withAdmin(async () => {
     .eq('workspace_id', workspace.id)
     .order('created_at', { ascending: false });
   if (error) return NextResponse.json({ error: error.message, campaigns: [] }, { status: 500 });
-  return NextResponse.json({ campaigns: data ?? [] });
+  const campaignIds = (data ?? []).map((campaign) => campaign.id);
+  const { data: memberships } = campaignIds.length
+    ? await admin
+        .from('campaign_leads')
+        .select('campaign_id, lead_id')
+        .eq('workspace_id', workspace.id)
+        .in('campaign_id', campaignIds)
+    : { data: [] };
+  const leadIds = [...new Set((memberships ?? []).map((row) => row.lead_id))];
+  const { data: leads } = leadIds.length
+    ? await admin
+        .from('leads')
+        .select('id, category')
+        .eq('workspace_id', workspace.id)
+        .in('id', leadIds)
+    : { data: [] };
+  const categoryByLead = new Map((leads ?? []).map((lead) => [lead.id, lead.category]));
+  const membershipsByCampaign = new Map<
+    string,
+    Array<{ campaign_id: string; lead_id: string }>
+  >();
+  for (const membership of memberships ?? []) {
+    const current = membershipsByCampaign.get(membership.campaign_id) ?? [];
+    current.push(membership);
+    membershipsByCampaign.set(membership.campaign_id, current);
+  }
+  const campaigns = (data ?? []).map((campaign) => {
+    const campaignMemberships = membershipsByCampaign.get(campaign.id) ?? [];
+    return {
+      ...campaign,
+      lead_count: campaignMemberships.length,
+      categories: [
+        ...new Set(
+          campaignMemberships
+            .map((membership) => categoryByLead.get(membership.lead_id))
+            .filter((category): category is string => Boolean(category)),
+        ),
+      ],
+    };
+  });
+  return NextResponse.json({ campaigns });
 });
 
 export const POST = withAdmin(async (request: Request) => {

@@ -11,8 +11,7 @@ export const CAMPAIGN_SUBNAV = [
 ] as const;
 
 export const MESSAGE_SUBNAV = [
-  { href: "/inbox", label: "Conversazioni", description: "Email e Telegram, raggruppati per cliente." },
-  { href: "/telegram", label: "Configura Telegram", description: "Collega o controlla il bot Telegram." },
+  { href: "/inbox", label: "Tutti i messaggi", description: "Email e Telegram, raggruppati per cliente." },
   { href: "/calendar", label: "Calendario", description: "Appuntamenti, scadenze e slot disponibili." },
 ] as const;
 

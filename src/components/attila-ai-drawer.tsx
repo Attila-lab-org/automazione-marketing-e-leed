@@ -141,6 +141,8 @@ export default function AttilaAiDrawer() {
   const [goalSummary, setGoalSummary] = useState<string | null>(null);
   const [goal, setGoal] = useState<DrawerGoal | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const briefingLoadedRef = useRef(false);
 
   const [seq, setSeq] = useState(0);
@@ -202,6 +204,18 @@ export default function AttilaAiDrawer() {
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, tools, busy]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    const trigger = triggerRef.current;
+    document.body.style.overflow = "hidden";
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      trigger?.focus();
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || messages.length > 0 || briefingLoadedRef.current) return;
@@ -346,15 +360,18 @@ export default function AttilaAiDrawer() {
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
-        className="whitespace-nowrap rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-amber-900 hover:bg-amber-100"
+        aria-expanded={open}
+        aria-controls="attila-ai-panel"
+        className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-300 bg-amber-50 px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-amber-950 shadow-lg hover:bg-amber-100 md:bottom-6 md:left-auto md:right-6 md:translate-x-0"
       >
         Attila AI
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-40 flex justify-end">
+        <div className="fixed inset-0 z-40 flex items-end justify-center">
           <button
             type="button"
             aria-label="Chiudi Attila AI"
@@ -362,13 +379,16 @@ export default function AttilaAiDrawer() {
             onClick={() => setOpen(false)}
           />
           <aside
+            id="attila-ai-panel"
             role="dialog"
-            aria-label="Attila AI"
-            className="relative flex h-full w-full max-w-md flex-col border-l border-stone-200 bg-white shadow-xl"
+            aria-modal="true"
+            aria-labelledby="attila-ai-title"
+            className="relative flex h-[min(78vh,760px)] w-full max-w-5xl flex-col rounded-t-2xl border border-b-0 border-stone-200 bg-white shadow-2xl"
           >
-            <header className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
+            <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-stone-300" aria-hidden />
+            <header className="flex items-center justify-between border-b border-stone-100 px-5 py-3">
               <div>
-                <h2 className="text-sm font-semibold text-stone-900">Attila AI</h2>
+                <h2 id="attila-ai-title" className="text-sm font-semibold text-stone-900">Attila AI</h2>
                 <p className="text-[11px] font-bold uppercase tracking-wide text-amber-800">
                   {modeLabel}
                 </p>
@@ -442,7 +462,7 @@ export default function AttilaAiDrawer() {
               )}
             </div>
 
-            <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+            <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
               {messages.length === 0 ? (
                 <div className="space-y-2">
                   {dailyBriefing ? (
@@ -552,7 +572,7 @@ export default function AttilaAiDrawer() {
             </div>
 
             <form
-              className="border-t border-stone-100 p-3"
+              className="border-t border-stone-100 bg-white p-4"
               onSubmit={(event) => {
                 event.preventDefault();
                 void send(draft);
@@ -560,6 +580,7 @@ export default function AttilaAiDrawer() {
             >
               {error ? <p className="mb-2 text-sm text-red-700">{error}</p> : null}
               <textarea
+                ref={inputRef}
                 rows={3}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}

@@ -7,6 +7,9 @@ import type { InboxConversationDetail } from "@/lib/inbound/conversation";
 import type { InboxThreadItem } from "@/lib/inbound/list-inbox";
 
 type InboxView = "all" | "manual" | "ai";
+type ChannelFilter = "all" | "email" | "telegram";
+type ReplyFilter = "all" | "replied" | "waiting" | "no_reply";
+type UrgencyFilter = "all" | "urgent" | "normal";
 
 function formatWhen(iso: string | null): string {
   if (!iso) return "—";
@@ -58,7 +61,11 @@ function primaryStatus(item: InboxThreadItem): string {
   return item.commercialState ? commercialStateLabel(item.commercialState) : "Conversazione aperta";
 }
 
-export default function InboxClient() {
+export default function InboxClient({
+  channelScope = "all",
+}: {
+  channelScope?: "all" | "telegram";
+}) {
   const [threads, setThreads] = useState<InboxThreadItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +74,13 @@ export default function InboxClient() {
   const [conversationLoading, setConversationLoading] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [view, setView] = useState<InboxView>("all");
+  const [channel, setChannel] = useState<ChannelFilter>(
+    channelScope === "telegram" ? "telegram" : "all",
+  );
+  const [reply, setReply] = useState<ReplyFilter>("all");
+  const [urgency, setUrgency] = useState<UrgencyFilter>("all");
+  const [query, setQuery] = useState("");
+  const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
 
   async function refreshThreads() {
     const response = await fetch("/api/inbox", { cache: "no-store" });
@@ -137,11 +151,20 @@ export default function InboxClient() {
     return <p className="text-sm text-red-600">{error}</p>;
   }
 
-  if (threads.length === 0) {
+  const scopedThreads =
+    channelScope === "telegram"
+      ? threads.filter((thread) => thread.channel === "telegram")
+      : threads;
+
+  if (scopedThreads.length === 0) {
     return (
       <EmptyState
         title="Nessuna conversazione"
-        description="Qui vedrai le risposte email e i contatti nati da Telegram (e in futuro altri canali). Quando arriva un messaggio rilevante, compare in questa lista."
+        description={
+          channelScope === "telegram"
+            ? "Le conversazioni del bot compariranno qui appena arriva il primo messaggio."
+            : "Qui vedrai le risposte email e Telegram. Quando arriva un messaggio rilevante, compare in questa lista."
+        }
         nextAction={{
           label: "Controlla i collegamenti",
           href: "/settings",
@@ -171,13 +194,40 @@ export default function InboxClient() {
     views.map((candidate) => [
       candidate.id,
       candidate.id === "all"
-        ? threads.length
-        : threads.filter((thread) => inboxViewFor(thread) === candidate.id).length,
+        ? scopedThreads.length
+        : scopedThreads.filter((thread) => inboxViewFor(thread) === candidate.id).length,
     ]),
   ) as Record<InboxView, number>;
-  const visible =
-    view === "all" ? threads : threads.filter((thread) => inboxViewFor(thread) === view);
+  const visible = scopedThreads.filter((thread) => {
+    const search = query.trim().toLocaleLowerCase("it-IT");
+    if (view !== "all" && inboxViewFor(thread) !== view) return false;
+    if (channel !== "all" && thread.channel !== channel) return false;
+    if (reply === "replied" && !thread.hasInboundReply) return false;
+    if (reply === "waiting" && thread.latestDirection !== "INBOUND") return false;
+    if (reply === "no_reply" && thread.hasInboundReply) return false;
+    const isUrgent =
+      thread.priority === "HOT" ||
+      thread.priority === "HIGH" ||
+      thread.needsAttention ||
+      Boolean(thread.humanRequiredReason);
+    if (urgency === "urgent" && !isUrgent) return false;
+    if (urgency === "normal" && isUrgent) return false;
+    if (
+      search &&
+      !`${thread.leadName} ${thread.campaignName ?? ""} ${thread.subject ?? ""} ${thread.preview ?? ""}`
+        .toLocaleLowerCase("it-IT")
+        .includes(search)
+    ) {
+      return false;
+    }
+    return true;
+  });
   const activeView = views.find((candidate) => candidate.id === view)!;
+  const activeFilterCount =
+    Number(channel !== "all") +
+    Number(reply !== "all") +
+    Number(urgency !== "all") +
+    Number(Boolean(query.trim()));
 
   return (
     <div className="space-y-5">
@@ -208,9 +258,75 @@ export default function InboxClient() {
       </section>
 
       <section className="space-y-3">
-        <div>
-          <h2 className="text-base font-semibold text-stone-900">{activeView.label}</h2>
-          <p className="text-sm text-stone-500">{activeView.description}</p>
+        <div className="rounded-xl border border-stone-200 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+            <label className="min-w-0 flex-1 text-xs font-semibold text-stone-600">
+              Cerca cliente, campagna o testo
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Es. Rossi, campagna Milano…"
+                className="mt-1.5 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-normal text-stone-900 outline-none focus:border-amber-500"
+              />
+            </label>
+            {channelScope === "all" ? (
+              <FilterSelect
+                label="Canale"
+                value={channel}
+                onChange={(value) => setChannel(value as ChannelFilter)}
+                options={[
+                  ["all", "Email + Telegram"],
+                  ["email", "Solo email"],
+                  ["telegram", "Solo Telegram"],
+                ]}
+              />
+            ) : null}
+            <FilterSelect
+              label="Risposta"
+              value={reply}
+              onChange={(value) => setReply(value as ReplyFilter)}
+              options={[
+                ["all", "Tutte"],
+                ["waiting", "Ha risposto: da gestire"],
+                ["replied", "Ha risposto almeno una volta"],
+                ["no_reply", "Non ha ancora risposto"],
+              ]}
+            />
+            <FilterSelect
+              label="Urgenza"
+              value={urgency}
+              onChange={(value) => setUrgency(value as UrgencyFilter)}
+              options={[
+                ["all", "Tutte"],
+                ["urgent", "Urgenti"],
+                ["normal", "Non urgenti"],
+              ]}
+            />
+            {activeFilterCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setChannel("all");
+                  setReply("all");
+                  setUrgency("all");
+                }}
+                className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+              >
+                Azzera
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold text-stone-900">{activeView.label}</h2>
+            <p className="text-sm text-stone-500">{activeView.description}</p>
+          </div>
+          <p className="shrink-0 text-sm font-medium text-stone-500">
+            {visible.length} {visible.length === 1 ? "conversazione" : "conversazioni"}
+          </p>
         </div>
         {visible.length ? (
           <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 bg-white">
@@ -218,6 +334,12 @@ export default function InboxClient() {
               <InboxRow
                 key={thread.threadId}
                 item={thread}
+                expanded={expandedThreadId === thread.threadId}
+                onToggle={() =>
+                  setExpandedThreadId((current) =>
+                    current === thread.threadId ? null : thread.threadId,
+                  )
+                }
                 onOpen={() => void openConversation(thread.threadId)}
               />
             ))}
@@ -248,16 +370,21 @@ export default function InboxClient() {
 
 function InboxRow({
   item,
+  expanded,
+  onToggle,
   onOpen,
 }: {
   item: InboxThreadItem;
+  expanded: boolean;
+  onToggle: () => void;
   onOpen: () => void;
 }) {
   return (
     <li>
       <button
         type="button"
-        onClick={onOpen}
+        onClick={onToggle}
+        aria-expanded={expanded}
         className="flex w-full flex-col gap-3 px-4 py-4 text-left hover:bg-stone-50 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="min-w-0 flex-1 space-y-1">
@@ -291,9 +418,73 @@ function InboxRow({
         </div>
         <div className="shrink-0 text-xs text-stone-500 sm:text-right">
           <p>{formatWhen(item.lastMessageAt)}</p>
-          <p className="mt-1 font-semibold text-stone-800">Vedi tutto →</p>
+          <p className="mt-1 font-semibold text-stone-800">
+            {expanded ? "Riduci ↑" : "Espandi ↓"}
+          </p>
         </div>
       </button>
+      {expanded ? (
+        <div className="border-t border-stone-100 bg-stone-50 px-4 py-4">
+          <div className="grid gap-3 text-sm sm:grid-cols-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">Ultimo movimento</p>
+              <p className="mt-1 font-medium text-stone-800">
+                {item.latestDirection === "INBOUND"
+                  ? "Il cliente ha risposto"
+                  : item.latestDirection === "OUTBOUND"
+                    ? "Hai inviato l’ultimo messaggio"
+                    : "Nessun movimento"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">Priorità</p>
+              <p className="mt-1 font-medium text-stone-800">
+                {item.priority === "HOT" || item.priority === "HIGH" ? "Urgente" : "Normale"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">Prossimo passo</p>
+              <p className="mt-1 font-medium text-stone-800">{item.nextStep ?? primaryStatus(item)}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpen}
+            className="mt-4 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
+          >
+            Apri cronologia completa
+          </button>
+        </div>
+      ) : null}
     </li>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<[string, string]>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="text-xs font-semibold text-stone-600">
+      {label}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-normal text-stone-900 lg:w-auto"
+      >
+        {options.map(([optionValue, optionLabel]) => (
+          <option key={optionValue} value={optionValue}>
+            {optionLabel}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

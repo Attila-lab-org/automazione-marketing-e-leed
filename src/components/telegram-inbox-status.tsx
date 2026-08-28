@@ -46,7 +46,6 @@ export default function TelegramInboxStatus() {
   }
 
   if (!status) return null;
-  if (status.settings.enabled && !feedback) return null;
 
   return (
     <section

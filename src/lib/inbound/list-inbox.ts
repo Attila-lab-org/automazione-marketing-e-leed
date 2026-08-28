@@ -23,6 +23,8 @@ export type InboxThreadItem = {
   humanRequiredReason: string | null;
   campaignId: string | null;
   campaignName: string | null;
+  latestDirection: 'INBOUND' | 'OUTBOUND' | null;
+  hasInboundReply: boolean;
 };
 
 /**
@@ -32,7 +34,7 @@ export type InboxThreadItem = {
 export async function listInboxThreads(
   admin: AppSupabaseClient,
   workspaceId: string,
-  limit = 50,
+  limit = 200,
 ): Promise<InboxThreadItem[]> {
   const { data: threads, error } = await admin
     .from('message_threads')
@@ -86,7 +88,9 @@ export async function listInboxThreads(
     string,
     { provider: string; body: string; direction: string }
   >();
+  const inboundThreadIds = new Set<string>();
   for (const m of messages ?? []) {
+    if (m.direction === 'INBOUND') inboundThreadIds.add(m.thread_id);
     if (!latestByThread.has(m.thread_id)) {
       latestByThread.set(m.thread_id, {
         provider: m.provider,
@@ -150,6 +154,11 @@ export async function listInboxThreads(
       humanRequiredReason: t.human_required_reason ?? null,
       campaignId: t.campaign_id ?? null,
       campaignName: t.campaign_id ? campaignById.get(t.campaign_id) ?? null : null,
+      latestDirection:
+        latest?.direction === 'INBOUND' || latest?.direction === 'OUTBOUND'
+          ? latest.direction
+          : null,
+      hasInboundReply: inboundThreadIds.has(t.id),
     };
   });
 }

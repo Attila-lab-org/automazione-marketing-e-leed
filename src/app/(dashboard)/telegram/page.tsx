@@ -1,43 +1,36 @@
 import PageHeader from "@/components/page-header";
 import TelegramControlPanel from "@/components/telegram-control-panel";
+import TelegramInboxStatus from "@/components/telegram-inbox-status";
+import InboxClient from "@/components/inbox-client";
 
 export default function TelegramPage() {
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
         title="Telegram"
-        description="Collega il bot, avvialo e controlla come Attila trova e segue i contatti fino all’appuntamento."
+        description="Gestisci il canale Telegram, controlla le conversazioni e intervieni quando serve."
       />
 
-      <section className="grid gap-3 md:grid-cols-3" aria-label="Come attivare Telegram">
-        {[
-          {
-            step: "1",
-            title: "Collega il bot",
-            text: "Configura token e webhook. Il riquadro sotto ti dice subito se manca qualcosa.",
-          },
-          {
-            step: "2",
-            title: "Aggiungilo alle chat",
-            text: "Inserisci il bot nei gruppi da monitorare e abilita la lettura dei messaggi in BotFather.",
-          },
-          {
-            step: "3",
-            title: "Premi Avvia Telegram",
-            text: "Da quel momento Attila intercetta i contatti e continua le conversazioni fino all’appuntamento.",
-          },
-        ].map((item) => (
-          <article key={item.step} className="rounded-xl border border-stone-200 bg-white p-4">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-stone-900 text-xs font-bold text-white">
-              {item.step}
-            </span>
-            <h2 className="mt-3 text-sm font-semibold text-stone-900">{item.title}</h2>
-            <p className="mt-1 text-xs leading-5 text-stone-600">{item.text}</p>
-          </article>
-        ))}
+      <TelegramInboxStatus />
+
+      <section>
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-stone-900">Conversazioni Telegram</h2>
+          <p className="text-sm text-stone-500">
+            Filtra chi ha risposto, le urgenze e i casi che richiedono il tuo intervento.
+          </p>
+        </div>
+        <InboxClient channelScope="telegram" />
       </section>
 
-      <TelegramControlPanel />
+      <details className="rounded-xl border border-stone-200 bg-white">
+        <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-stone-900">
+          Configurazione e controllo del bot
+        </summary>
+        <div className="border-t border-stone-100 p-5">
+          <TelegramControlPanel />
+        </div>
+      </details>
     </div>
   );
 }

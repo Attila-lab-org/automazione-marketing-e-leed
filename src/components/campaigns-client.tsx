@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import EmptyState from "@/components/empty-state";
 
 type Campaign = {
@@ -11,6 +11,8 @@ type Campaign = {
   mode: string;
   delivery_mode?: string;
   created_at: string;
+  lead_count: number;
+  categories: string[];
 };
 
 const CAMPAIGN_STATUS: Record<string, string> = {
@@ -27,14 +29,44 @@ const CAMPAIGN_MODE: Record<string, string> = {
   FULL_AUTO: "Completamente automatica",
 };
 
+function categoryLabel(value: string): string {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("it-IT"));
+}
+
 export default function CampaignsClient() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("");
+  const [status, setStatus] = useState("");
 
   useEffect(() => {
     fetch("/api/campaigns")
       .then((r) => r.json())
       .then((data) => setCampaigns(data.campaigns ?? []));
   }, []);
+
+  const categories = useMemo(
+    () => [...new Set(campaigns.flatMap((campaign) => campaign.categories))].sort(),
+    [campaigns],
+  );
+  const visibleCampaigns = useMemo(() => {
+    const search = query.trim().toLocaleLowerCase("it-IT");
+    return campaigns.filter((campaign) => {
+      if (status && campaign.status !== status) return false;
+      if (category && !campaign.categories.includes(category)) return false;
+      if (
+        search &&
+        !`${campaign.name} ${campaign.categories.join(" ")}`
+          .toLocaleLowerCase("it-IT")
+          .includes(search)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [campaigns, query, category, status]);
 
   return (
     <div className="space-y-6">
@@ -54,9 +86,63 @@ export default function CampaignsClient() {
       </section>
 
       {campaigns.length ? (
+        <>
+        <section className="rounded-xl border border-stone-200 bg-white p-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-end">
+            <label className="text-xs font-semibold text-stone-600">
+              Cerca campagna
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Nome o categoria…"
+                className="mt-1.5 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-normal"
+              />
+            </label>
+            <label className="text-xs font-semibold text-stone-600">
+              Categoria
+              <select
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-normal"
+              >
+                <option value="">Tutte le categorie</option>
+                {categories.map((item) => (
+                  <option key={item} value={item}>{categoryLabel(item)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-stone-600">
+              Stato
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-normal"
+              >
+                <option value="">Tutti gli stati</option>
+                {Object.entries(CAMPAIGN_STATUS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </label>
+            {query || category || status ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setCategory("");
+                  setStatus("");
+                }}
+                className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700"
+              >
+                Azzera
+              </button>
+            ) : <span />}
+          </div>
+        </section>
         <section className="rounded-xl border border-stone-200 bg-white">
           <ul className="divide-y divide-stone-100">
-            {campaigns.map((c) => (
+            {visibleCampaigns.map((c) => (
               <li key={c.id} className="flex items-center justify-between px-5 py-4 text-sm">
                 <div>
                   <Link
@@ -71,6 +157,19 @@ export default function CampaignsClient() {
                     {c.delivery_mode === "TEST" ? " · PROVA" : ""} ·{" "}
                     {new Date(c.created_at).toLocaleString("it-IT")}
                   </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-600">
+                      {c.lead_count} {c.lead_count === 1 ? "contatto" : "contatti"}
+                    </span>
+                    {c.categories.slice(0, 3).map((item) => (
+                      <span key={item} className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                        {categoryLabel(item)}
+                      </span>
+                    ))}
+                    {c.categories.length > 3 ? (
+                      <span className="text-[11px] text-stone-500">+{c.categories.length - 3}</span>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Link
@@ -91,7 +190,13 @@ export default function CampaignsClient() {
               </li>
             ))}
           </ul>
+          {visibleCampaigns.length === 0 ? (
+            <p className="px-5 py-10 text-center text-sm text-stone-500">
+              Nessuna campagna corrisponde ai filtri scelti.
+            </p>
+          ) : null}
         </section>
+        </>
       ) : (
         <EmptyState
           title="Nessuna campagna"
