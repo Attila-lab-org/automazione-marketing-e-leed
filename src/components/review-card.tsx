@@ -20,6 +20,7 @@ export type ReviewCardProps = {
   messagePreview: string;
   previewImageUrl?: string | null;
   demoUrl?: string | null;
+  emailBody?: string | null;
   demoSiteId?: string | null;
   thumbnailLabel?: string;
   signals: ReviewCardSignal[];
@@ -57,6 +58,7 @@ export default function ReviewCard({
   messagePreview,
   previewImageUrl,
   demoUrl,
+  emailBody,
   demoSiteId,
   thumbnailLabel,
   signals,
@@ -241,6 +243,36 @@ export default function ReviewCard({
           </div>
         </div>
       </div>
+
+      {demoUrl || emailBody ? (
+        <div className="space-y-3 border-t border-stone-100 px-5 py-4">
+          {demoUrl ? (
+            <details className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50" open>
+              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-stone-800">
+                Vedi il sito completo
+              </summary>
+              <iframe
+                src={demoUrl}
+                title={`Sito proposto per ${companyName}`}
+                className="h-[70vh] w-full border-t border-stone-200 bg-white"
+              />
+            </details>
+          ) : null}
+          {emailBody ? (
+            <details className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50" open>
+              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-stone-800">
+                Vedi la mail come arriverà
+              </summary>
+              <iframe
+                title={`Mail per ${companyName}`}
+                className="h-[28rem] w-full border-t border-stone-200 bg-white"
+                sandbox="allow-popups allow-popups-to-escape-sandbox"
+                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:24px;background:#f5f5f4;font-family:Arial,sans-serif}</style></head><body>${emailBody}</body></html>`}
+              />
+            </details>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-2 border-t border-stone-100 px-5 py-3">
         {actions.map((action) => (

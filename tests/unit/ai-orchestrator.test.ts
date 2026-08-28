@@ -625,7 +625,18 @@ describe('telegram sales thread follow-up', () => {
       channel: 'TELEGRAM',
     });
     expect(telegram.mode).toBe('AUTO_ALLOWED');
-    expect(telegram.reason).toBe('telegram_conversation');
+    expect(telegram.reason).toBe('telegram_auto_guarded');
+
+    const telegramManual = resolveResponseMode({
+      classification: info,
+      playbook: DEFAULT_PLAYBOOK,
+      autonomy: null,
+      firstReply: true,
+      channel: 'TELEGRAM',
+      telegramAutoSend: false,
+    });
+    expect(telegramManual.mode).toBe('APPROVAL_REQUIRED');
+    expect(telegramManual.reason).toBe('telegram_manual_mode');
 
     const email = resolveResponseMode({
       classification: info,
@@ -649,6 +660,19 @@ describe('telegram sales thread follow-up', () => {
     });
     expect(sent.source).toBe('sales_ai');
     expect(sent.text).toBe('Bozza contestuale Attila');
+
+    const blockedManual = selectTelegramReplyText({
+      salesAgentSucceeded: true,
+      salesMode: telegramManual.mode,
+      salesDraft: 'Bozza da approvare',
+      salesHumanRequired: false,
+      salesStopKind: null,
+      legacyEnabled: false,
+      intentMatched: false,
+      legacyText: null,
+    });
+    expect(blockedManual.source).toBe('none');
+    expect(blockedManual.skipReason).toBe('APPROVAL_REQUIRED');
   });
 
   it('il prezzo autorizzato può essere comunicato, sconto e legale restano HUMAN_ONLY', () => {
@@ -678,5 +702,62 @@ describe('telegram sales thread follow-up', () => {
       channel: 'EMAIL',
     });
     expect(emailLegal.mode).toBe('HUMAN_ONLY');
+  });
+});
+
+describe('controllo commerciale AI', () => {
+  it('parseTelegramKeywordCommand riconosce gruppo siti web', async () => {
+    const { parseTelegramKeywordCommand, detectOperatorOpsAction } = await import(
+      '../../src/lib/ai/operator/ops-writes'
+    );
+    const parsed = parseTelegramKeywordCommand(
+      'Aggiungi “restyling sito” alle parole chiave siti web',
+    );
+    expect(parsed?.group).toBe('website');
+    expect(parsed?.keyword.toLowerCase()).toContain('restyling');
+    expect(detectOperatorOpsAction('Metti Telegram in automatico protetto')).toBe(
+      'set_telegram_auto',
+    );
+    expect(detectOperatorOpsAction('Ferma Telegram')).toBe('stop_telegram');
+    expect(detectOperatorOpsAction('Mostrami i follow-up da approvare')).toBe(
+      'list_manual_followups',
+    );
+    expect(
+      detectOperatorOpsAction(
+        'Usa un tono consulenziale e non proporre chiamate prima di un interesse esplicito',
+      ),
+    ).toBe('update_playbook');
+  });
+
+  it('interesse esplicito gatea la chiamata', async () => {
+    const { hasExplicitCallInterest } = await import('../../src/lib/calendar/booking');
+    const curious = mockClassifyInbound('Ciao, mi interessa capire se potete aiutarci');
+    expect(
+      hasExplicitCallInterest({
+        classification: curious,
+        inboundText: 'Ciao, mi interessa capire se potete aiutarci',
+      }),
+    ).toBe(false);
+
+    const accepted = mockClassifyInbound('Sì, fissiamo una chiamata domani alle 15');
+    expect(
+      hasExplicitCallInterest({
+        classification: {
+          ...accepted,
+          bookingAccepted: true,
+          bookingConfidence: 0.9,
+        },
+        inboundText: 'Sì, fissiamo una chiamata domani alle 15',
+      }),
+    ).toBe(true);
+  });
+
+  it('playbook default propone chiamata solo dopo interesse', () => {
+    expect(DEFAULT_PLAYBOOK.conversation.proposeCallOnlyAfterExplicitInterest).toBe(true);
+    expect(DEFAULT_PLAYBOOK.conversation.path).toEqual([
+      'understand_need',
+      'value_offer',
+      'propose_call',
+    ]);
   });
 });

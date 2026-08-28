@@ -493,7 +493,16 @@ export default function DemoEditor({ demoId }: { demoId: string }) {
           Anteprima in tempo reale · modello {demo.rendererKey}
         </div>
         <div className="max-h-[80vh] overflow-auto">
-          <DemoRenderer rendererKey={demo.rendererKey} data={previewData as AnyData} compact />
+          <DemoRenderer
+            rendererKey={demo.rendererKey}
+            data={previewData as AnyData}
+            compact
+            demoSlug={demo.slug}
+            whatsappEnabled
+            phoneEnabled
+            offerPrice="350 €"
+            deliveryTime="24 ore"
+          />
         </div>
       </div>
     </div>

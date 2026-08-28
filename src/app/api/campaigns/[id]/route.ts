@@ -4,7 +4,6 @@ import { enqueueCampaignPreparation } from '@/lib/campaigns/prepare';
 import { resumeCampaign } from '@/lib/campaigns/resume';
 import { approveCampaignLeads } from '@/lib/campaigns/review-queue';
 import { buildFollowupDraft } from '@/lib/messaging/visual-email';
-import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
 import {
   isValidEmailShape,
   normalizeEmailAddress,
@@ -179,7 +178,7 @@ export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
     const result = await approveCampaignLeads(admin, workspace.id, id, body.campaignLeadIds);
     return NextResponse.json(result);
   }
-  if (body.action === 'send_followup') {
+  if (body.action === 'send_followup' || body.action === 'prepare_followup') {
     if (!body.campaignLeadId) {
       return NextResponse.json({ error: 'campaignLeadId obbligatorio' }, { status: 400 });
     }
@@ -194,7 +193,7 @@ export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
       return NextResponse.json({ error: 'Attività non trovata nella campagna' }, { status: 404 });
     }
     if (
-      campaignLead.status !== 'SENT' ||
+      !['SENT', 'REVIEW'].includes(campaignLead.status) ||
       campaignLead.sequence_step < 1 ||
       !campaignLead.next_action_at
     ) {
@@ -219,32 +218,65 @@ export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
       );
     }
 
-    await buildFollowupDraft(
-      admin,
-      workspace.id,
-      campaignLead.id,
-      campaignLead.sequence_step,
-      process.env,
-    );
+    try {
+      await buildFollowupDraft(
+        admin,
+        workspace.id,
+        campaignLead.id,
+        campaignLead.sequence_step,
+        process.env,
+      );
+    } catch (err) {
+      const code = err instanceof Error ? err.message : '';
+      if (code === 'FOLLOWUP_BLOCKED_REPLY') {
+        return NextResponse.json(
+          { error: 'Il cliente ha già risposto: continua dalla Posta in arrivo' },
+          { status: 409 },
+        );
+      }
+      if (code === 'FOLLOWUP_BLOCKED_STOP') {
+        return NextResponse.json(
+          { error: 'Questo contatto ha chiesto di non essere ricontattato' },
+          { status: 409 },
+        );
+      }
+      if (code === 'FOLLOWUP_BLOCKED_HUMAN') {
+        return NextResponse.json(
+          { error: 'Conversazione già in gestione manuale: nessun follow-up automatico' },
+          { status: 409 },
+        );
+      }
+      throw err;
+    }
+
+    // Il primo clic prepara solo la bozza in Review: nessuna approvazione e nessun invio.
     await admin
       .from('campaign_leads')
-      .update({ status: 'APPROVED', updated_at: new Date().toISOString() })
+      .update({ status: 'REVIEW', updated_at: new Date().toISOString() })
       .eq('id', campaignLead.id);
-    const queue = new SupabaseJobQueue(admin);
-    const queued = await queue.enqueue({
-      workspaceId: workspace.id,
-      jobType: 'SEND_MESSAGE',
-      entityType: 'campaign_lead',
-      entityId: campaignLead.id,
-      idempotencyKey: `SEND_MESSAGE:campaign_lead:${campaignLead.id}:step:${campaignLead.sequence_step}`,
-      inputSnapshot: { sequenceStep: campaignLead.sequence_step, manualFollowup: true },
-      priority: 80,
+
+    await admin.from('activity_log').insert({
+      workspace_id: workspace.id,
+      actor_type: 'USER',
+      entity_type: 'campaign_lead',
+      entity_id: campaignLead.id,
+      lead_id: campaignLead.lead_id,
+      category: 'DECISION',
+      event_type: 'FOLLOWUP_DRAFT_PREPARED',
+      message: `Bozza follow-up ${campaignLead.sequence_step} pronta da approvare`,
+      data: {
+        campaignId: id,
+        sequenceStep: campaignLead.sequence_step,
+      },
     });
+
     return NextResponse.json({
       ok: true,
-      queued: true,
-      deduplicated: queued.deduplicated,
+      prepared: true,
+      queued: false,
       sequenceStep: campaignLead.sequence_step,
+      href: '/review',
+      message: 'Bozza personalizzata pronta nella coda di controllo. Approvala lì per inviare.',
     });
   }
   if (body.action === 'pause') {

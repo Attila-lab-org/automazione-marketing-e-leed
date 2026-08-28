@@ -651,6 +651,7 @@ export function mockDraftReply(input: SalesReplyDraftInput): SalesReplyDraft {
   }
   const slots = input.availableSlots ?? [];
   if (
+    input.allowProposeCall !== false &&
     (input.classification.bookingRequest || input.classification.intent === 'call_accept') &&
     slots.length
   ) {
@@ -686,7 +687,7 @@ export function mockDraftReply(input: SalesReplyDraftInput): SalesReplyDraft {
   }
   if (extra.length) lines.push(`Posso includere: ${extra.join(', ')}.`);
   if (denied.length) lines.push(`Per ${denied.join(', ')} verifico prima se rientra nell’offerta.`);
-  if (slots.length) {
+  if (slots.length && input.allowProposeCall !== false) {
     lines.push(`Se vuole, il prossimo passo può essere una breve chiamata: ho disponibilità ${slots[0].label}.`);
   } else {
     lines.push('Il prossimo passo utile è capire cosa le serve davvero, così le propongo solo ciò che ha senso.');

@@ -162,6 +162,15 @@ export type AvailableSlotPrompt = {
 export type SalesReplyDraftInput = {
   classification: InboundClassification;
   playbookName: string;
+  brandTone?: string | null;
+  proposeWhen?: string | null;
+  conversationStrategy?: {
+    strategy: 'consultative';
+    maxQuestionsPerTurn: number;
+    proposeCallOnlyAfterExplicitInterest: boolean;
+    path: string[];
+  } | null;
+  allowProposeCall?: boolean;
   pricingAllowed: boolean;
   priceRange?: string | null;
   negotiation?: NegotiationGuidance | null;

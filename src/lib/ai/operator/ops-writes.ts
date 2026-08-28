@@ -14,6 +14,7 @@ import {
 import {
   getTelegramInboundSettings,
   saveTelegramInboundSettings,
+  type TelegramKeywordGroups,
 } from '@/lib/inbound/telegram-settings';
 import {
   getTelegramCredentialStatus,
@@ -34,6 +35,10 @@ export type OperatorOpsAction =
   | 'reschedule_appointment'
   | 'start_telegram'
   | 'stop_telegram'
+  | 'set_telegram_auto'
+  | 'set_telegram_manual'
+  | 'update_telegram_keywords'
+  | 'list_manual_followups'
   | 'update_playbook'
   | 'none';
 
@@ -47,13 +52,128 @@ function norm(text: string): string {
     .trim();
 }
 
+export function parseTelegramKeywordCommand(question: string): {
+  group: keyof TelegramKeywordGroups;
+  groupLabel: string;
+  keyword: string;
+} | null {
+  const raw = question.trim();
+  const quoted =
+    raw.match(
+      /aggiungi\s+[«"']([^»"']+)[»"']\s+(?:alle|ai|a)\s+(?:parole\s+chiave\s+)?(.+)$/i,
+    ) ??
+    raw.match(/aggiungi\s+(.+?)\s+(?:alle|ai|a)\s+parole\s+chiave\s+(.+)$/i) ??
+    raw.match(/aggiungi\s+(.+?)\s+(?:alle|ai|a)\s+(siti\s+web|ecommerce|e-?commerce|presenza(?:\s+online)?|preventivi?)/i);
+  if (!quoted) return null;
+  const keyword = quoted[1]?.trim().replace(/^["'«]+|["'»]+$/g, '').slice(0, 80);
+  const groupRaw = norm(quoted[2] ?? '');
+  if (!keyword) return null;
+  let group: keyof TelegramKeywordGroups = 'website';
+  let groupLabel = 'siti web';
+  if (/e-?commerce|negozio|shop/.test(groupRaw)) {
+    group = 'ecommerce';
+    groupLabel = 'e-commerce';
+  } else if (/presenza|digital|visibilit|google/.test(groupRaw)) {
+    group = 'digitalPresence';
+    groupLabel = 'presenza online';
+  } else if (/preventiv|prezzo|fornitor|quanto\s+costa|quote/.test(groupRaw)) {
+    group = 'quote';
+    groupLabel = 'preventivi';
+  } else if (/sito|web|landing|restyling/.test(groupRaw) || groupRaw.includes('siti')) {
+    group = 'website';
+    groupLabel = 'siti web';
+  }
+  return { group, groupLabel, keyword };
+}
+
+export async function listDueManualFollowups(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+): Promise<
+  Array<{
+    campaignLeadId: string;
+    campaignId: string;
+    campaignName: string;
+    leadName: string;
+    sequenceStep: number;
+    nextActionAt: string | null;
+    status: string;
+  }>
+> {
+  const nowIso = new Date().toISOString();
+  const { data: rows } = await admin
+    .from('campaign_leads')
+    .select('id, campaign_id, lead_id, sequence_step, next_action_at, status')
+    .eq('workspace_id', workspaceId)
+    .in('status', ['SENT', 'REVIEW'])
+    .gte('sequence_step', 1)
+    .lte('next_action_at', nowIso)
+    .order('next_action_at', { ascending: true })
+    .limit(30);
+  if (!rows?.length) return [];
+
+  const leadIds = [...new Set(rows.map((r) => r.lead_id))];
+  const campaignIds = [...new Set(rows.map((r) => r.campaign_id))];
+  const [{ data: leads }, { data: campaigns }] = await Promise.all([
+    admin.from('leads').select('id, name').in('id', leadIds),
+    admin.from('campaigns').select('id, name').in('id', campaignIds),
+  ]);
+  const leadById = new Map((leads ?? []).map((l) => [l.id, l.name]));
+  const campaignById = new Map((campaigns ?? []).map((c) => [c.id, c.name]));
+
+  const filtered: Array<{
+    campaignLeadId: string;
+    campaignId: string;
+    campaignName: string;
+    leadName: string;
+    sequenceStep: number;
+    nextActionAt: string | null;
+    status: string;
+  }> = [];
+
+  for (const row of rows) {
+    const { count: replies } = await admin
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('lead_id', row.lead_id)
+      .eq('direction', 'INBOUND');
+    if ((replies ?? 0) > 0) continue;
+    filtered.push({
+      campaignLeadId: row.id,
+      campaignId: row.campaign_id,
+      campaignName: campaignById.get(row.campaign_id) ?? 'Campagna',
+      leadName: leadById.get(row.lead_id) ?? 'Contatto',
+      sequenceStep: row.sequence_step ?? 1,
+      nextActionAt: row.next_action_at,
+      status: row.status,
+    });
+  }
+  return filtered;
+}
+
 export function detectOperatorOpsAction(question: string): OperatorOpsAction {
   const q = norm(question);
+  if (
+    /(aggiungi|metti|inserisci).{0,40}(parol|keyword)/.test(q) ||
+    /(parol|keyword).{0,40}(siti web|ecommerce|e commerce|presenza|preventiv)/.test(q)
+  ) {
+    return 'update_telegram_keywords';
+  }
+  if (
+    /(mostrami|mostra|elenca|lista|quali).{0,24}follow.?up/.test(q) ||
+    /follow.?up.{0,24}(approvare|da controllare|in coda|manual)/.test(q)
+  ) {
+    return 'list_manual_followups';
+  }
   if (
     /(modalita|modo) (autonom|equilibrat|assistit)/.test(q) ||
     /prezzo (minimo|standard|massimo)/.test(q) ||
     /sconto massimo/.test(q) ||
     /(imposta|cambia|usa).{0,12}tono/.test(q) ||
+    /tono consulenzial/.test(q) ||
+    /non proporre.{0,20}chiamat/.test(q) ||
+    /interesse esplicit/.test(q) ||
     /durata.{0,12}(chiamata|call)/.test(q) ||
     /non comunicare.{0,8}prezz/.test(q)
   ) {
@@ -69,7 +189,7 @@ export function detectOperatorOpsAction(question: string): OperatorOpsAction {
     q.includes('prendi in carico') ||
     q.includes('gestisci tu') ||
     q.includes('takeover') ||
-    q.includes('gestione manuale')
+    (q.includes('gestione manuale') && !q.includes('telegram'))
   ) {
     return 'take_over';
   }
@@ -104,6 +224,20 @@ export function detectOperatorOpsAction(question: string): OperatorOpsAction {
     return 'reschedule_appointment';
   }
   if (
+    q.includes('telegram') &&
+    (q.includes('automatico protetto') ||
+      q.includes('auto protetto') ||
+      (q.includes('automatico') && !q.includes('ferma')))
+  ) {
+    return 'set_telegram_auto';
+  }
+  if (
+    q.includes('telegram') &&
+    (q.includes('gestione manuale') || q.includes('modo manuale') || q.includes('manuale'))
+  ) {
+    return 'set_telegram_manual';
+  }
+  if (
     (q.includes('avvia') || q.includes('accendi') || q.includes('parti')) &&
     q.includes('telegram')
   ) {
@@ -129,6 +263,10 @@ const OPS_TOOL_BY_ACTION: Record<Exclude<OperatorOpsAction, 'none'>, string> = {
   reschedule_appointment: 'reschedule_appointment',
   start_telegram: 'set_telegram_runtime',
   stop_telegram: 'set_telegram_runtime',
+  set_telegram_auto: 'set_telegram_runtime',
+  set_telegram_manual: 'set_telegram_runtime',
+  update_telegram_keywords: 'update_telegram_keywords',
+  list_manual_followups: 'list_manual_followups',
   update_playbook: 'update_commercial_playbook',
 };
 
@@ -274,6 +412,29 @@ async function buildOpsPreview(args: {
           ? 'Sto per avviare Telegram (webhook + ascolto).'
           : 'Sto per fermare Telegram.',
       data: { runtimeAction: args.action === 'start_telegram' ? 'start' : 'stop' },
+    };
+  }
+
+  if (args.action === 'set_telegram_auto' || args.action === 'set_telegram_manual') {
+    const connection = getTelegramCredentialStatus(env);
+    if (!connection.ready) {
+      return {
+        tool: 'set_telegram_runtime',
+        ok: false,
+        summary: `Telegram non è collegato. Mancano: ${connection.missing.join(', ') || 'credenziali'}.`,
+        data: { missing: connection.missing },
+      };
+    }
+    return {
+      tool: 'set_telegram_runtime',
+      ok: true,
+      summary:
+        args.action === 'set_telegram_manual'
+          ? 'Sto per mettere Telegram in gestione manuale (ascolta, non invia da solo).'
+          : 'Sto per mettere Telegram in automatico protetto.',
+      data: {
+        runtimeAction: args.action === 'set_telegram_manual' ? 'manual' : 'auto',
+      },
     };
   }
 
@@ -431,6 +592,31 @@ export function applyPlaybookCommand(
     next.brand = { ...next.brand, tone };
     changes.push(`tono “${tone}”`);
   }
+  if (/tono consulenzial/.test(q) || /consulenziale e non aggressiv/.test(q)) {
+    next.brand = {
+      ...next.brand,
+      tone: 'consulenziale, concreto, non aggressivo',
+    };
+    changes.push('tono consulenziale');
+  }
+  if (
+    /non proporre.{0,20}chiamat/.test(q) ||
+    /interesse esplicit/.test(q) ||
+    /solo dopo interesse/.test(q)
+  ) {
+    next.conversation = {
+      ...next.conversation,
+      strategy: 'consultative',
+      proposeCallOnlyAfterExplicitInterest: true,
+      path: ['understand_need', 'value_offer', 'propose_call'],
+    };
+    next.call = {
+      ...next.call,
+      proposeWhen:
+        'Solo dopo interesse esplicito del cliente. Mai nelle prime risposte solo perché ci sono slot liberi.',
+    };
+    changes.push('chiamata solo dopo interesse esplicito');
+  }
 
   return { playbook: next, changes };
 }
@@ -491,16 +677,21 @@ export async function executeOpsActionNow(args: {
   }
 
   const runtimeAction =
-    action === 'start_telegram' || params.runtimeAction === 'start'
-      ? 'start'
-      : action === 'stop_telegram' || params.runtimeAction === 'stop'
-        ? 'stop'
-        : null;
+    action === 'start_telegram' ||
+    action === 'set_telegram_auto' ||
+    params.runtimeAction === 'start' ||
+    params.runtimeAction === 'auto'
+      ? 'auto'
+      : action === 'set_telegram_manual' || params.runtimeAction === 'manual'
+        ? 'manual'
+        : action === 'stop_telegram' || params.runtimeAction === 'stop'
+          ? 'stop'
+          : null;
 
   if (runtimeAction) {
     const current = await getTelegramInboundSettings(args.admin, args.workspaceId);
     const connection = getTelegramCredentialStatus(env);
-    if (runtimeAction === 'start') {
+    if (runtimeAction === 'auto') {
       if (!connection.ready) {
         return {
           tool: 'set_telegram_runtime',
@@ -513,19 +704,51 @@ export async function executeOpsActionNow(args: {
       const settings = await saveTelegramInboundSettings(args.admin, args.workspaceId, {
         ...current,
         enabled: true,
+        replyEnabled: true,
       });
       await recordAiAudit(args.admin, {
         workspaceId: args.workspaceId,
         actor: 'AI',
         tool: 'set_telegram_runtime',
         action: 'execute',
-        result: { enabled: true },
+        result: { enabled: true, replyEnabled: true, mode: 'auto_guarded' },
       });
       return {
         tool: 'set_telegram_runtime',
         ok: true,
-        summary: 'Telegram è attivo e in ascolto.',
-        data: { enabled: settings.enabled, webhookUrl },
+        summary: 'Telegram è in automatico protetto: risponde alle conversazioni sicure.',
+        data: { enabled: settings.enabled, replyEnabled: settings.replyEnabled, webhookUrl },
+      };
+    }
+    if (runtimeAction === 'manual') {
+      if (!connection.ready && !current.enabled) {
+        return {
+          tool: 'set_telegram_runtime',
+          ok: false,
+          summary: `Telegram non è collegato. Mancano: ${connection.missing.join(', ') || 'credenziali'}.`,
+          data: { missing: connection.missing },
+        };
+      }
+      if (!current.enabled) {
+        await registerTelegramWebhook(env);
+      }
+      const settings = await saveTelegramInboundSettings(args.admin, args.workspaceId, {
+        ...current,
+        enabled: true,
+        replyEnabled: false,
+      });
+      await recordAiAudit(args.admin, {
+        workspaceId: args.workspaceId,
+        actor: 'AI',
+        tool: 'set_telegram_runtime',
+        action: 'execute',
+        result: { enabled: true, replyEnabled: false, mode: 'manual' },
+      });
+      return {
+        tool: 'set_telegram_runtime',
+        ok: true,
+        summary: 'Telegram è in gestione manuale: ascolta e prepara bozze, senza inviare da solo.',
+        data: { enabled: settings.enabled, replyEnabled: settings.replyEnabled },
       };
     }
     try {
@@ -549,6 +772,71 @@ export async function executeOpsActionNow(args: {
       ok: true,
       summary: 'Telegram è fermo.',
       data: { enabled: settings.enabled },
+    };
+  }
+
+  if (action === 'update_telegram_keywords') {
+    const parsed = parseTelegramKeywordCommand(args.question ?? '');
+    if (!parsed) {
+      return {
+        tool: 'update_telegram_keywords',
+        ok: false,
+        summary:
+          'Dimmi quale parola aggiungere e a quale gruppo. Esempio: «Aggiungi “restyling sito” alle parole chiave siti web».',
+        data: {},
+      };
+    }
+    const current = await getTelegramInboundSettings(args.admin, args.workspaceId);
+    const groupKeywords = [...current.keywords[parsed.group]];
+    if (!groupKeywords.some((k) => k.toLowerCase() === parsed.keyword.toLowerCase())) {
+      groupKeywords.push(parsed.keyword);
+    }
+    const settings = await saveTelegramInboundSettings(args.admin, args.workspaceId, {
+      ...current,
+      keywords: { ...current.keywords, [parsed.group]: groupKeywords },
+    });
+    await recordAiAudit(args.admin, {
+      workspaceId: args.workspaceId,
+      actor: 'AI',
+      tool: 'update_telegram_keywords',
+      action: 'execute',
+      result: { group: parsed.group, keyword: parsed.keyword },
+    });
+    return {
+      tool: 'update_telegram_keywords',
+      ok: true,
+      summary: `Ho aggiunto «${parsed.keyword}» alle parole chiave ${parsed.groupLabel}.`,
+      data: {
+        group: parsed.group,
+        keyword: parsed.keyword,
+        keywords: settings.keywords[parsed.group],
+        href: '/telegram',
+      },
+    };
+  }
+
+  if (action === 'list_manual_followups') {
+    const due = await listDueManualFollowups(args.admin, args.workspaceId);
+    if (!due.length) {
+      return {
+        tool: 'list_manual_followups',
+        ok: true,
+        summary: 'Non ci sono follow-up da approvare in questo momento.',
+        data: { items: [], href: '/review' },
+      };
+    }
+    const lines = due
+      .slice(0, 8)
+      .map(
+        (item, index) =>
+          `${index + 1}. ${item.leadName} · step ${item.sequenceStep} · campagna ${item.campaignName}`,
+      )
+      .join('\n');
+    return {
+      tool: 'list_manual_followups',
+      ok: true,
+      summary: `Follow-up da approvare (${due.length}):\n${lines}\nApri la coda di controllo per leggere, modificare e approvare.`,
+      data: { items: due, href: '/review', count: due.length },
     };
   }
 

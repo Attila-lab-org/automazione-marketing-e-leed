@@ -36,6 +36,16 @@ export type CommercialPlaybook = {
     bookingUrl: string | null;
     durationMinutes: number;
   };
+  /**
+   * Percorso consulenziale non aggressivo:
+   * capire bisogno → valorizzare proposta → chiamata solo dopo interesse esplicito.
+   */
+  conversation: {
+    strategy: 'consultative';
+    maxQuestionsPerTurn: 1;
+    proposeCallOnlyAfterExplicitInterest: boolean;
+    path: Array<'understand_need' | 'value_offer' | 'propose_call'>;
+  };
   promisePolicy: {
     neverPromise: string[];
   };
@@ -99,9 +109,16 @@ export const DEFAULT_PLAYBOOK: CommercialPlaybook = {
     disqualifiers: ['richiesta illegale', 'fuori settore'],
   },
   call: {
-    proposeWhen: 'Dopo interesse chiaro o richiesta di dettagli sul lavoro',
+    proposeWhen:
+      'Solo dopo interesse esplicito del cliente (vuole capire meglio, chiede dettagli concreti, o accetta una chiamata). Mai nelle prime risposte solo perché ci sono slot liberi.',
     bookingUrl: null,
     durationMinutes: 20,
+  },
+  conversation: {
+    strategy: 'consultative',
+    maxQuestionsPerTurn: 1,
+    proposeCallOnlyAfterExplicitInterest: true,
+    path: ['understand_need', 'value_offer', 'propose_call'],
   },
   promisePolicy: {
     neverPromise: [
@@ -140,6 +157,10 @@ export function mergePlaybook(raw: unknown): CommercialPlaybook {
       ? (rec.qualification as Record<string, unknown>)
       : {};
   const call = rec.call && typeof rec.call === 'object' ? (rec.call as Record<string, unknown>) : {};
+  const conversation =
+    rec.conversation && typeof rec.conversation === 'object'
+      ? (rec.conversation as Record<string, unknown>)
+      : {};
   const promise =
     rec.promisePolicy && typeof rec.promisePolicy === 'object'
       ? (rec.promisePolicy as Record<string, unknown>)
@@ -210,6 +231,20 @@ export function mergePlaybook(raw: unknown): CommercialPlaybook {
       proposeWhen: str(call.proposeWhen, DEFAULT_PLAYBOOK.call.proposeWhen),
       bookingUrl: typeof call.bookingUrl === 'string' && call.bookingUrl.trim() ? call.bookingUrl.trim() : null,
       durationMinutes: typeof call.durationMinutes === 'number' ? call.durationMinutes : 20,
+    },
+    conversation: {
+      strategy: 'consultative',
+      maxQuestionsPerTurn: 1,
+      proposeCallOnlyAfterExplicitInterest: bool(
+        conversation.proposeCallOnlyAfterExplicitInterest,
+        DEFAULT_PLAYBOOK.conversation.proposeCallOnlyAfterExplicitInterest,
+      ),
+      path: Array.isArray(conversation.path)
+        ? (conversation.path.filter(
+            (step): step is 'understand_need' | 'value_offer' | 'propose_call' =>
+              step === 'understand_need' || step === 'value_offer' || step === 'propose_call',
+          ) as Array<'understand_need' | 'value_offer' | 'propose_call'>)
+        : DEFAULT_PLAYBOOK.conversation.path,
     },
     promisePolicy: {
       neverPromise: list(promise.neverPromise, DEFAULT_PLAYBOOK.promisePolicy.neverPromise),

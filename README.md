@@ -45,7 +45,7 @@ QA visuale: `/demo/qa-v3` e `/demo/qa-v3/email-preview`.
 - `CRON_SECRET` for **`/api/cron/jobs`**
 - `NEXT_PUBLIC_APP_URL` for demo/email preview URLs
 - `OWNER_CONTACT_URL` — http(s) destinazione commerciale (`?channel=site`). Se mancante: nessun redirect arbitrario
-- `OWNER_WHATSAPP` — numero internazionale o URL `wa.me` (`?channel=whatsapp`). Se mancante: nessun CTA WhatsApp
+- `OWNER_WHATSAPP` — numero internazionale o URL `wa.me` (`?channel=whatsapp`). Se mancante: i clienti scrivono ad Attila (`393462689082`)
 - `OWNER_OFFER_PRICE` — opzionale (es. `350€`); se vuoto nessun prezzo in demo/WhatsApp
 - `OWNER_SHOW_BRIDGE` — opzionale; mid-page OwnerBridge default **OFF**
 

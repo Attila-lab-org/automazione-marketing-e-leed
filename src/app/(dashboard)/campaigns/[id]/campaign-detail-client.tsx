@@ -249,9 +249,9 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
     }
   }
 
-  async function sendManualFollowup(item: ManualFollowup) {
+  async function prepareManualFollowup(item: ManualFollowup) {
     const ok = window.confirm(
-      `Inviare ora il follow-up ${item.sequenceStep} a ${item.leadName}?`,
+      `Preparare la bozza personalizzata del follow-up ${item.sequenceStep} per ${item.leadName}? Potrai leggerla e approvarla nella coda di controllo prima dell’invio.`,
     );
     if (!ok) return;
     setBusy(true);
@@ -262,16 +262,19 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "send_followup",
+          action: "prepare_followup",
           campaignLeadId: item.campaignLeadId,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Invio follow-up fallito");
-      setMessage(`Follow-up per ${item.leadName} messo in coda dopo i controlli di sicurezza.`);
+      if (!res.ok) throw new Error(data.error ?? "Preparazione follow-up fallita");
+      setMessage(
+        data.message ??
+          `Bozza per ${item.leadName} pronta nella coda di controllo. Nessun invio finché non la approvi.`,
+      );
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invio follow-up fallito");
+      setError(err instanceof Error ? err.message : "Preparazione follow-up fallita");
     } finally {
       setBusy(false);
     }
@@ -568,10 +571,11 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       <section className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold text-stone-900">Follow-up manuali</h3>
+            <h3 className="text-base font-semibold text-stone-900">Follow-up da approvare</h3>
             <p className="mt-1 max-w-2xl text-sm text-stone-600">
-              Nessun sollecito parte da solo. Quando è trascorso il tempo previsto, scegli tu
-              cliente per cliente. Chi ha risposto viene rimosso automaticamente da questa lista.
+              Due sollecito personalizzati (+3 e +7 giorni), sempre leggeri e senza pressione.
+              Il primo clic prepara la bozza: l’invio avviene solo dopo la tua approvazione nella
+              coda di controllo. Chi ha risposto, chiesto stop o è in gestione umana viene escluso.
             </p>
           </div>
           <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-700">
@@ -598,10 +602,10 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
                 <button
                   type="button"
                   disabled={busy || !item.due}
-                  onClick={() => void sendManualFollowup(item)}
+                  onClick={() => void prepareManualFollowup(item)}
                   className="rounded-lg bg-stone-900 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-500"
                 >
-                  {item.due ? "Invia follow-up" : "Non ancora disponibile"}
+                  {item.due ? "Prepara bozza" : "Non ancora disponibile"}
                 </button>
               </li>
             ))}

@@ -3,6 +3,7 @@ import { withAdmin } from '@/lib/api/with-admin';
 import {
   getTelegramInboundSettings,
   normalizeTelegramSettings,
+  resolveTelegramOperationalMode,
   saveTelegramInboundSettings,
 } from '@/lib/inbound/telegram-settings';
 import {
@@ -19,6 +20,46 @@ function unavailable() {
   return NextResponse.json({ error: 'Supabase non configurato' }, { status: 503 });
 }
 
+async function loadTelegramStats(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  workspaceId: string,
+) {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const [sentRes, draftsRes, errorsRes, urgentRes] = await Promise.all([
+    admin
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('provider', 'telegram')
+      .eq('direction', 'OUTBOUND')
+      .gte('created_at', since),
+    admin
+      .from('message_threads')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('channel', 'TELEGRAM')
+      .or('assigned_mode.eq.HUMAN,status.eq.NEEDS_REPLY'),
+    admin
+      .from('activity_log')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('event_type', 'TELEGRAM_REPLY_FAILED')
+      .gte('occurred_at', since),
+    admin
+      .from('message_threads')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('channel', 'TELEGRAM')
+      .eq('priority', 'HOT'),
+  ]);
+  return {
+    sent24h: sentRes.count ?? 0,
+    draftsPending: draftsRes.count ?? 0,
+    errors24h: errorsRes.count ?? 0,
+    urgent: urgentRes.count ?? 0,
+  };
+}
+
 export const GET = withAdmin(async () => {
   if (!isSupabaseConfigured(process.env) || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return unavailable();
@@ -27,7 +68,13 @@ export const GET = withAdmin(async () => {
   const workspace = await ensureDefaultWorkspace(admin);
   const settings = await getTelegramInboundSettings(admin, workspace.id);
   const connection = getTelegramCredentialStatus(process.env);
-  return NextResponse.json({ settings, connection });
+  const stats = await loadTelegramStats(admin, workspace.id);
+  return NextResponse.json({
+    settings,
+    connection,
+    operationalMode: resolveTelegramOperationalMode(settings),
+    stats,
+  });
 });
 
 export const PATCH = withAdmin(async (request: Request) => {
@@ -48,7 +95,13 @@ export const PATCH = withAdmin(async (request: Request) => {
     return NextResponse.json({ error: 'Scrivi una risposta automatica' }, { status: 400 });
   }
   const settings = await saveTelegramInboundSettings(admin, workspace.id, next);
-  return NextResponse.json({ settings, message: 'Impostazioni Telegram salvate' });
+  const stats = await loadTelegramStats(admin, workspace.id);
+  return NextResponse.json({
+    settings,
+    operationalMode: resolveTelegramOperationalMode(settings),
+    stats,
+    message: 'Impostazioni Telegram salvate',
+  });
 });
 
 export const POST = withAdmin(async (request: Request) => {
@@ -99,13 +152,16 @@ export const POST = withAdmin(async (request: Request) => {
     data: { webhook_url: webhookUrl, warning },
   });
 
+  const stats = await loadTelegramStats(admin, workspace.id);
   return NextResponse.json({
     settings,
     connection: getTelegramCredentialStatus(process.env),
+    operationalMode: resolveTelegramOperationalMode(settings),
+    stats,
     warning,
     message:
       body.action === 'start'
-        ? 'Telegram è attivo e in ascolto'
+        ? 'Telegram è in automatico protetto'
         : 'Telegram è fermo',
   });
 });

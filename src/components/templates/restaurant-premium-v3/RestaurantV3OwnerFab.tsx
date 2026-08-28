@@ -1,5 +1,6 @@
 import styles from './restaurant-v3.module.css';
 import { RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '@/lib/templates/v3-assets';
+import { WhatsAppIcon } from './WhatsAppIcon';
 
 type Props = {
   href: string;
@@ -13,8 +14,10 @@ export function RestaurantV3OwnerFab({ href }: Props) {
       href={href}
       aria-label={RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaWhatsApp}
     >
-      <span className={styles.ownerFabDot} aria-hidden />
-      WhatsApp
+      <span className={styles.ownerFabIcon}>
+        <WhatsAppIcon size={26} />
+      </span>
+      Scrivimi
     </a>
   );
 }

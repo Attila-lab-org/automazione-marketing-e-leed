@@ -3,50 +3,50 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-type AlertRow = {
-  threadId: string;
-  leadName: string;
-  commercialState: string | null;
-  humanRequiredReason: string | null;
-  priority: string | null;
+type CommercialAlert = {
+  id: string;
+  kind: string;
+  title: string;
+  reason: string;
+  href: string;
+  createdAt: string;
+  leadName?: string | null;
 };
 
 export default function OperatorAlerts() {
-  const [rows, setRows] = useState<AlertRow[]>([]);
+  const [alerts, setAlerts] = useState<CommercialAlert[]>([]);
 
   useEffect(() => {
-    void fetch("/api/inbox", { cache: "no-store" })
+    void fetch("/api/sales/alerts", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
-        const threads = (data.threads ?? []) as AlertRow[];
-        setRows(
-          threads.filter(
-            (t) => t.humanRequiredReason || t.priority === "HOT" || t.commercialState === "HUMAN_REQUIRED",
-          ).slice(0, 3),
-        );
+        setAlerts(Array.isArray(data.alerts) ? data.alerts.slice(0, 8) : []);
       })
-      .catch(() => setRows([]));
+      .catch(() => setAlerts([]));
   }, []);
 
-  if (!rows.length) return null;
+  if (!alerts.length) return null;
 
   return (
-    <section aria-label="Avvisi Attila" className="space-y-3">
-      <h2 className="text-sm font-semibold text-stone-800">Richiedono te</h2>
+    <section aria-label="Avvisi commerciali" className="space-y-3">
+      <h2 className="text-sm font-semibold text-stone-800">Cosa sta succedendo</h2>
       <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 bg-white">
-        {rows.map((row) => (
-          <li key={row.threadId} className="flex items-center justify-between gap-3 px-4 py-3">
+        {alerts.map((row) => (
+          <li key={row.id} className="flex items-start justify-between gap-3 px-4 py-3">
             <div>
-              <p className="text-sm font-medium text-stone-900">{row.leadName}</p>
-              <p className="text-xs text-stone-500">
-                {row.humanRequiredReason ?? row.commercialState ?? row.priority}
+              <p className="text-sm font-medium text-stone-900">
+                {row.title}
+                {row.leadName ? (
+                  <span className="font-normal text-stone-500"> · {row.leadName}</span>
+                ) : null}
               </p>
+              <p className="mt-0.5 text-xs text-stone-500">{row.reason}</p>
             </div>
             <Link
-              href={`/inbox?thread=${encodeURIComponent(row.threadId)}`}
-              className="text-xs font-semibold text-amber-800 hover:underline"
+              href={row.href}
+              className="shrink-0 text-xs font-semibold text-amber-800 hover:underline"
             >
-              Apri conversazione
+              Apri
             </Link>
           </li>
         ))}

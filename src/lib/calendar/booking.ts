@@ -67,6 +67,32 @@ export function wantsImmediateBooking(c: InboundClassification): boolean {
   return false;
 }
 
+/**
+ * Interesse esplicito a una chiamata/appuntamento (non basta avere slot liberi).
+ * Usato per non proporre né fissare chiamate troppo presto.
+ */
+export function hasExplicitCallInterest(args: {
+  classification: InboundClassification;
+  inboundText?: string;
+  memoryNextStep?: string | null;
+  priorStates?: string[];
+}): boolean {
+  const c = args.classification;
+  if (c.bookingAccepted || c.bookingRequest || c.intent === 'call_accept') return true;
+  if (c.rescheduleAppointment || c.cancelAppointment) return true;
+  const blob = [
+    args.inboundText ?? '',
+    c.summary,
+    args.memoryNextStep ?? '',
+    ...(args.priorStates ?? []),
+  ]
+    .join(' ')
+    .toLowerCase();
+  return /(si|sì).{0,20}(chiamata|call|appuntamento|ci sentiamo|fissiamo)|prenot|fissiamo|mi va bene.{0,20}(orario|giorno)|accetto|va bene (domani|luned|marted|mercoled|gioved|venerd)/i.test(
+    blob,
+  );
+}
+
 function hasSpecificTimeHint(hint: string | null): boolean {
   if (!hint?.trim()) return false;
   return /\d{1,2}[:.]\d{2}|\d{1,2}\s*(am|pm)|luned|marted|mercoled|gioved|venerd|sabat|domenic|\d{1,2}\s*\/\s*\d{1,2}/i.test(
@@ -89,10 +115,21 @@ export async function applyConversationBooking(args: {
   threadId: string;
   classification: InboundClassification;
   leadName?: string | null;
+  /** Se true, non fissa né propone slot senza interesse/accettazione esplicita. */
+  requireExplicitInterest?: boolean;
+  inboundText?: string;
+  memoryNextStep?: string | null;
 }): Promise<ConversationBookingOutcome> {
   const c = normalizeBookingClassification(args.classification);
   const existing = await getActiveAppointmentForLead(args.admin, args.workspaceId, args.leadId);
   const title = `Chiamata · ${args.leadName?.trim() || 'Cliente'}`;
+  const interestOk =
+    !args.requireExplicitInterest ||
+    hasExplicitCallInterest({
+      classification: c,
+      inboundText: args.inboundText,
+      memoryNextStep: args.memoryNextStep,
+    });
 
   if (c.cancelAppointment && existing) {
     await cancelAppointment(args.admin, args.workspaceId, existing.id);
@@ -175,6 +212,10 @@ export async function applyConversationBooking(args: {
       message:
         'Va benissimo spostarla. Dimmi pure che giorni ti sono più comodi e ti propongo subito un orario libero.',
     };
+  }
+
+  if (!interestOk) {
+    return { action: 'NONE' };
   }
 
   if (!wantsImmediateBooking(c)) {

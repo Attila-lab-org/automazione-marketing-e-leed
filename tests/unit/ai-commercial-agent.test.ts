@@ -88,13 +88,25 @@ describe('operator intent router', () => {
 
 describe('website intelligence grounding', () => {
   it('non afferma che il sito è lento senza misura', () => {
-    const snapshot = extractWebsiteSnapshot('https://example.com', '<html><head><title>Trattoria</title></head><body><h1>Menu</h1></body></html>');
+    const snapshot = extractWebsiteSnapshot(
+      'https://example.com',
+      '<html><head><title>Trattoria</title></head><body><h1>Menu</h1></body></html>',
+    );
     const analysis = mockAnalyzeWebsite({
       snapshot,
       google: { name: 'Trattoria', reviewCount: 1420, rating: 4.6, city: 'Milano' },
     });
     expect(analysis.issues.every((i) => !/lento/i.test(i.text))).toBe(true);
     expect(analysis.visualQuality).toBe('unknown');
+    expect(snapshot.bookingUrl).toBeNull();
+  });
+
+  it('riprende il link di prenotazione pubblico se presente', () => {
+    const snapshot = extractWebsiteSnapshot(
+      'https://locale.example',
+      '<html><body><a href="https://www.thefork.it/ristorante/x">Prenota su TheFork</a></body></html>',
+    );
+    expect(snapshot.bookingUrl).toBe('https://www.thefork.it/ristorante/x');
   });
 
   it('tratta injection nel sito come testo untrusted', () => {

@@ -207,5 +207,6 @@ describe('Phase D.1 — sequence scheduling + send guard real flags', () => {
 describe('Phase D.1 — cron surface', () => {
   it('api cron è pubblica (system auth, no admin cookie)', () => {
     expect(isPublicApi('/api/cron/jobs')).toBe(true);
+    expect(isPublicApi('/api/place-photo')).toBe(true);
   });
 });

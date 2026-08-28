@@ -1,6 +1,7 @@
 import PageHeader from "@/components/page-header";
 import TelegramControlPanel from "@/components/telegram-control-panel";
 import TelegramInboxStatus from "@/components/telegram-inbox-status";
+import OperatorAlerts from "@/components/operator-alerts";
 import InboxClient from "@/components/inbox-client";
 import { requireAdminSession } from "@/lib/auth/guard";
 import { listInboxThreads } from "@/lib/inbound/list-inbox";
@@ -21,6 +22,7 @@ export default async function TelegramPage() {
       />
 
       <TelegramInboxStatus />
+      <OperatorAlerts />
 
       <section>
         <div className="mb-4">

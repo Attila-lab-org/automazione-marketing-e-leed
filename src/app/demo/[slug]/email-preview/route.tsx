@@ -204,7 +204,7 @@ export async function GET(
             {headline}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', position: 'relative', gap: 10 }}>
             <div
               style={{
                 display: 'flex',
@@ -215,10 +215,24 @@ export async function GET(
                 fontSize: 13,
                 fontWeight: 700,
                 fontFamily: 'system-ui, sans-serif',
-                marginRight: 14,
               }}
             >
               {cta}
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                background: '#25d366',
+                color: '#062816',
+                padding: '10px 16px',
+                borderRadius: 999,
+                fontSize: 13,
+                fontWeight: 700,
+                fontFamily: 'system-ui, sans-serif',
+              }}
+            >
+              WhatsApp
             </div>
             {rating != null ? (
               <div

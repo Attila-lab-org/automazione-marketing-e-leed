@@ -39,6 +39,7 @@ const DETAILS_FIELD_MASK = [
   'rating',
   'userRatingCount',
   'regularOpeningHours',
+  'photos',
 ].join(',');
 
 interface PlacesApiPlace {
@@ -60,6 +61,7 @@ interface PlacesApiPlace {
   nationalPhoneNumber?: string;
   internationalPhoneNumber?: string;
   regularOpeningHours?: { weekdayDescriptions?: string[] };
+  photos?: Array<{ name?: string; widthPx?: number; heightPx?: number }>;
 }
 
 function sanitizeErrorMessage(message: string): string {
@@ -85,6 +87,16 @@ function primaryCategory(types: string[] | undefined, fallback: string): string 
   const skip = new Set(['point_of_interest', 'establishment', 'geocode', 'political']);
   const primary = types.find((t) => !skip.has(t));
   return primary ?? types[0] ?? (fallback.trim() || null);
+}
+
+function pickVenuePhotoNames(photos: PlacesApiPlace['photos'] | undefined): string[] {
+  const ranked = [...(photos ?? [])]
+    .filter((photo) => typeof photo.name === 'string' && photo.name.includes('/photos/'))
+    .sort((a, b) => (b.widthPx ?? 0) * (b.heightPx ?? 0) - (a.widthPx ?? 0) * (a.heightPx ?? 0));
+  return ranked
+    .map((photo) => photo.name!.trim())
+    .filter((name, index, all) => all.indexOf(name) === index)
+    .slice(0, 6);
 }
 
 export function mapPlaceToDiscovered(
@@ -244,6 +256,7 @@ export class GooglePlacesLive implements GooglePlacesProvider {
       reviewCount:
         typeof place.userRatingCount === 'number' ? place.userRatingCount : null,
       openingHours: place.regularOpeningHours?.weekdayDescriptions ?? null,
+      photoNames: pickVenuePhotoNames(place.photos),
       enrichedAt: new Date().toISOString(),
     };
   }

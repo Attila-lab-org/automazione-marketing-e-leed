@@ -9,13 +9,31 @@ export type TelegramKeywordGroups = {
   quote: string[];
 };
 
+/**
+ * Modalità operativa unica:
+ * - stopped: ascolto spento
+ * - auto_guarded: Attila risponde automaticamente se i controlli passano
+ * - manual: ascolto attivo, bozze da approvare (niente invio AI)
+ *
+ * `replyEnabled` controlla davvero l’invio AI (non solo il template legacy).
+ */
+export type TelegramOperationalMode = 'stopped' | 'auto_guarded' | 'manual';
+
 export type TelegramInboundSettings = {
   enabled: boolean;
+  /** true = automatico protetto; false = gestione manuale (se enabled). */
   replyEnabled: boolean;
   replyTemplate: string;
   keywords: TelegramKeywordGroups;
   updatedAt: string | null;
 };
+
+export function resolveTelegramOperationalMode(
+  settings: Pick<TelegramInboundSettings, 'enabled' | 'replyEnabled'>,
+): TelegramOperationalMode {
+  if (!settings.enabled) return 'stopped';
+  return settings.replyEnabled ? 'auto_guarded' : 'manual';
+}
 
 export const DEFAULT_TELEGRAM_SETTINGS: TelegramInboundSettings = {
   enabled: false,

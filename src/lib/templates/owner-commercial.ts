@@ -1,7 +1,11 @@
 /**
- * Owner commercial presentation — env-driven, no hardcoded studio fallbacks.
+ * Owner commercial presentation — env-driven, with Attila's WhatsApp as default
+ * so the contact buttons never disappear if Production env is missing.
  * Secrets/values are never returned for UI status (READY/MISSING only).
  */
+
+/** Numero indicato da Attila: i clienti devono scrivere qui, non al capo. */
+export const OWNER_WHATSAPP_DEFAULT = '393462689082';
 
 export type ConfigReadiness = 'READY' | 'MISSING';
 
@@ -34,12 +38,16 @@ export function isOwnerBridgeEnabled(env: NodeJS.ProcessEnv = process.env): bool
   return v === '1' || v === 'true' || v === 'yes' || v === 'on';
 }
 
+export function getOwnerWhatsApp(env: NodeJS.ProcessEnv = process.env): string {
+  return env.OWNER_WHATSAPP?.trim() || OWNER_WHATSAPP_DEFAULT;
+}
+
 export function isOwnerWhatsAppConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean(env.OWNER_WHATSAPP?.trim());
+  return Boolean(getOwnerWhatsApp(env));
 }
 
 export function isOwnerPhoneConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean(env.OWNER_PHONE?.trim() || env.OWNER_WHATSAPP?.trim());
+  return Boolean(env.OWNER_PHONE?.trim() || getOwnerWhatsApp(env));
 }
 
 export function isOwnerContactConfigured(env: NodeJS.ProcessEnv = process.env): boolean {

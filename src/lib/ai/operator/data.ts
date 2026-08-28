@@ -433,14 +433,24 @@ export function createSupabaseOperatorData(
 
     async getTelegramInboundStatus() {
       const settings = await getTelegramInboundSettings(admin, workspaceId);
-      const mode = (env.TELEGRAM_PROVIDER_MODE ?? 'mock').toLowerCase();
+      const providerMode = (env.TELEGRAM_PROVIDER_MODE ?? 'mock').toLowerCase();
+      const operational =
+        !settings.enabled
+          ? 'Fermo'
+          : settings.replyEnabled
+            ? 'Automatico protetto'
+            : 'Gestione manuale';
       const summary = settings.enabled
-        ? `Telegram è in ascolto (mode ${mode}). Intercetta richieste inbound già configurate; non cerca lead e non crea campagne.`
-        : `Telegram non è in ascolto. Puoi avviarlo da Impostazioni. Non esiste una ricerca Telegram che popola campagne.`;
+        ? `Telegram è in ${operational.toLowerCase()} (provider ${providerMode}). ${
+            settings.replyEnabled
+              ? 'Risponde automaticamente se i controlli passano.'
+              : 'Ascolta e prepara bozze, senza inviare da solo.'
+          }`
+        : `Telegram è fermo. Puoi avviarlo da Impostazioni o chiedere «metti Telegram in automatico protetto».`;
       return {
         enabled: settings.enabled,
         replyEnabled: settings.replyEnabled,
-        mode,
+        mode: operational,
         summary,
       } satisfies TelegramInboundStatus;
     },

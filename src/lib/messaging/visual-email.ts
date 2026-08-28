@@ -4,6 +4,7 @@ import { loadDemoById } from '@/lib/demos/load';
 import {
   getOwnerDeliveryTime,
   getOwnerOfferPrice,
+  getOwnerWhatsApp,
   isOwnerWhatsAppConfigured,
 } from '@/lib/templates/owner-commercial';
 import { extractContactPhone } from '@/lib/templates/v3-cta';
@@ -74,6 +75,7 @@ export const VISUAL_INTRO_BODY_V2 = `<table role="presentation" cellpadding="0" 
 <tr><td style="padding:0">{{whatsapp_block}}{{call_block}}</td></tr>
 <tr><td style="padding:24px 0 0;font-size:13px;line-height:1.5;color:#78716c">L'anteprima è gratuita e senza impegno. Prezzo e tempi si riferiscono alla proposta base; eventuali richieste aggiuntive vengono concordate prima.</td></tr>
 <tr><td style="padding:20px 0 0;font-size:15px;line-height:1.55;color:#292524">A presto,<br/><strong>{{sender_name}}</strong></td></tr>
+{{studio_block}}
 </table>`;
 
 export function buildGroundedEmailInsight(analysis: unknown): string {
@@ -108,12 +110,30 @@ function buildOfferBlock(price: string, deliveryTime: string): string {
 
 function buildWhatsAppBlock(whatsappUrl: string | null): string {
   if (!whatsappUrl) return '';
-  return `<a href="${whatsappUrl}" style="display:inline-block;margin:10px 8px 0 0;padding:13px 18px;background:#128c7e;color:#ffffff;text-decoration:none;border-radius:10px;font-family:Arial,sans-serif;font-size:14px;font-weight:700">Scrivimi su WhatsApp</a>`;
+  return `<p style="margin:0 0 10px;font-size:15px;line-height:1.5;color:#44403c"><strong>Come contattarmi:</strong> un messaggio su WhatsApp o una chiamata. Ti rispondo io.</p><a href="${whatsappUrl}" style="display:inline-block;margin:0 8px 0 0;padding:13px 20px;background:#25d366;color:#062816;text-decoration:none;border-radius:999px;font-family:Arial,sans-serif;font-size:15px;font-weight:700">WhatsApp · scrivimi</a>`;
 }
 
 function buildCallBlock(callUrl: string | null): string {
   if (!callUrl) return '';
   return `<a href="${callUrl}" style="display:inline-block;margin:10px 0 0;padding:13px 18px;background:#ffffff;color:#1c1917;text-decoration:none;border:1px solid #d6d3d1;border-radius:10px;font-family:Arial,sans-serif;font-size:14px;font-weight:700">Chiamami</a>`;
+}
+
+export const STUDIO_SITE_URL = 'https://www.attila-lab.net/';
+
+function buildStudioBlock(): string {
+  return `<tr><td style="padding:18px 0 0;border-top:1px solid #e7e5e4"><p style="margin:16px 0 0;font-size:14px;line-height:1.55;color:#44403c"><strong>Chi siamo</strong><br/>Siamo Attila Lab. Per vedere chi siamo e come lavoriamo: <a href="${STUDIO_SITE_URL}" style="color:#1c1917;font-weight:700;text-decoration:underline">attila-lab.net</a></p></td></tr>`;
+}
+
+function buildStudioLine(): string {
+  return `<p style="margin:16px 0 0;font-size:14px;line-height:1.55;color:#44403c"><strong>Chi siamo:</strong> Attila Lab · <a href="${STUDIO_SITE_URL}" style="color:#1c1917;font-weight:700">attila-lab.net</a></p>`;
+}
+
+function ensureStudioPresent(html: string): string {
+  if (/attila-lab\.net/i.test(html)) return html;
+  const block = buildStudioBlock();
+  const close = html.lastIndexOf('</table>');
+  if (close >= 0) return `${html.slice(0, close)}${block}${html.slice(close)}`;
+  return `${html}${buildStudioLine()}`;
 }
 
 function isLegacyPlainIntro(body: string): boolean {
@@ -177,9 +197,7 @@ export async function buildVisualEmailDraft(
   const whatsappUrl = whatsappEnabled
     ? `${appUrl}${demo.publicPath}/interesse?channel=whatsapp`
     : null;
-  const ownerPhone = extractContactPhone(
-    env.OWNER_PHONE?.trim() || env.OWNER_WHATSAPP?.trim() || '',
-  );
+  const ownerPhone = extractContactPhone(env.OWNER_PHONE?.trim() || getOwnerWhatsApp(env));
   const callUrl = ownerPhone
     ? `${appUrl}${demo.publicPath}/interesse?channel=phone`
     : null;
@@ -197,6 +215,7 @@ export async function buildVisualEmailDraft(
     ? `<tr><td style="padding:0 0 20px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.55;color:#5c534c">${escapeHtml(insight)}</td></tr>`
     : '';
 
+  const studioBlock = buildStudioBlock();
   const vars: Record<string, string> = {
     business_name: businessName,
     demo_url: demoUrl,
@@ -207,6 +226,7 @@ export async function buildVisualEmailDraft(
     whatsapp_block: whatsappBlock,
     call_block: callBlock,
     personalized_insight_block: personalizedInsightBlock,
+    studio_block: studioBlock,
     sender_name: senderName,
     offer_price: offerPrice,
     delivery_time: deliveryTime,
@@ -238,6 +258,7 @@ export async function buildVisualEmailDraft(
       .map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
       .join('');
   }
+  body = ensureStudioPresent(body);
   if (/\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(subject) || /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(body)) {
     throw new Error('Draft: il modello contiene variabili non riconosciute');
   }
@@ -264,20 +285,70 @@ export async function buildFollowupDraft(
 ) {
   const { data: cl, error } = await admin
     .from('campaign_leads')
-    .select('id, lead_id, demo_site_id, campaign_id')
+    .select('id, lead_id, demo_site_id, campaign_id, preparation')
     .eq('workspace_id', workspaceId)
     .eq('id', campaignLeadId)
     .single();
   if (error || !cl) throw new Error(`Followup draft: campaign_lead non trovato`);
 
-  const [{ data: lead }, { data: campaign }] = await Promise.all([
-    admin.from('leads').select('name').eq('id', cl.lead_id).single(),
-    admin
-      .from('campaigns')
-      .select('message_template_version_id, followup_sequence_version_id')
-      .eq('id', cl.campaign_id)
-      .single(),
-  ]);
+  const [{ data: lead }, { data: campaign }, { data: lastOutbound }, inboundRes] =
+    await Promise.all([
+      admin
+        .from('leads')
+        .select('name, category, city, business_status, email, normalized_email')
+        .eq('id', cl.lead_id)
+        .single(),
+      admin
+        .from('campaigns')
+        .select('message_template_version_id, followup_sequence_version_id')
+        .eq('id', cl.campaign_id)
+        .single(),
+      admin
+        .from('messages')
+        .select('subject, body_snapshot')
+        .eq('campaign_lead_id', campaignLeadId)
+        .eq('direction', 'OUTBOUND')
+        .eq('sequence_step', 0)
+        .order('sent_at', { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', workspaceId)
+        .eq('lead_id', cl.lead_id)
+        .eq('direction', 'INBOUND'),
+    ]);
+
+  if ((inboundRes.count ?? 0) > 0) {
+    throw new Error('FOLLOWUP_BLOCKED_REPLY');
+  }
+
+  if (lead?.business_status === 'SUPPRESSED') {
+    throw new Error('FOLLOWUP_BLOCKED_STOP');
+  }
+
+  const normalizedEmail = lead?.normalized_email || lead?.email;
+  if (normalizedEmail) {
+    const { data: suppressed } = await admin
+      .from('suppression_list')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('normalized_email', normalizedEmail.toLowerCase())
+      .limit(1)
+      .maybeSingle();
+    if (suppressed) throw new Error('FOLLOWUP_BLOCKED_STOP');
+  }
+
+  const { data: humanThread } = await admin
+    .from('message_threads')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .eq('lead_id', cl.lead_id)
+    .eq('assigned_mode', 'HUMAN')
+    .limit(1)
+    .maybeSingle();
+  if (humanThread) throw new Error('FOLLOWUP_BLOCKED_HUMAN');
 
   const demo = cl.demo_site_id ? await loadDemoById(admin, workspaceId, cl.demo_site_id) : null;
   if (!demo) throw new Error('Follow-up: anteprima non disponibile');
@@ -290,34 +361,47 @@ export async function buildFollowupDraft(
   const senderName = env.OWNER_SENDER_NAME?.trim() || 'Attila Lab';
   const safeBusinessName = escapeHtml(businessName);
   const safeSenderName = escapeHtml(senderName);
+  const category = lead?.category?.trim() || null;
+  const city = lead?.city?.trim() || null;
+  const contextBits = [
+    category ? `nel settore ${category}` : null,
+    city ? `a ${city}` : null,
+  ].filter(Boolean);
+  const contextPhrase = contextBits.length ? ` ${contextBits.join(' ')}` : '';
   const whatsappUrl =
     demo && isOwnerWhatsAppConfigured(env)
       ? `${appUrl}${demo.publicPath}/interesse?channel=whatsapp`
       : null;
-  const ownerPhone = extractContactPhone(
-    env.OWNER_PHONE?.trim() || env.OWNER_WHATSAPP?.trim() || '',
-  );
+  const ownerPhone = extractContactPhone(env.OWNER_PHONE?.trim() || getOwnerWhatsApp(env));
   const callUrl =
     demo && ownerPhone ? `${appUrl}${demo.publicPath}/interesse?channel=phone` : null;
   const offerPrice = getOwnerOfferPrice(env) ?? '350 €';
   const deliveryTime = getOwnerDeliveryTime(env);
-  const waHtml = whatsappUrl
-    ? `<a href="${whatsappUrl}" style="display:inline-block;margin:8px 8px 8px 0;padding:12px 18px;background:#128c7e;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">WhatsApp</a>`
-    : '';
-  const callHtml = callUrl
-    ? `<a href="${callUrl}" style="display:inline-block;margin:8px 0;padding:12px 18px;border:1px solid #d6d3d1;color:#1c1917;text-decoration:none;border-radius:10px;font-weight:700">Chiamami</a>`
-    : '';
-  const contactHtml = waHtml || callHtml ? `<p style="margin:8px 0">${waHtml}${callHtml}</p>` : '';
+  const softContact = whatsappUrl
+    ? `<p style="margin:16px 0 8px;font-size:15px;color:#44403c">Se ti va, puoi rispondermi qui o scrivermi su WhatsApp senza impegno.</p><a href="${whatsappUrl}" style="display:inline-block;margin:8px 8px 8px 0;padding:12px 18px;background:#25d366;color:#062816;text-decoration:none;border-radius:999px;font-weight:700">WhatsApp · scrivimi</a>`
+    : callUrl
+      ? `<p style="margin:16px 0 8px;font-size:15px;color:#44403c">Se preferisci, puoi anche chiamarmi quando ti è comodo.</p><a href="${callUrl}" style="display:inline-block;margin:8px 0;padding:12px 18px;border:1px solid #d6d3d1;color:#1c1917;text-decoration:none;border-radius:10px;font-weight:700">Chiamami</a>`
+      : '';
   const offerLine = `La proposta base parte da <strong>${escapeHtml(offerPrice)}</strong>, con consegna in <strong>${escapeHtml(deliveryTime)}</strong>.`;
+  const studioLine = buildStudioLine();
+  const interestHint =
+    typeof (cl.preparation as Record<string, unknown> | null)?.interestNote === 'string'
+      ? String((cl.preparation as Record<string, unknown>).interestNote)
+      : null;
+  const personalNote = interestHint
+    ? `<p>Mi era rimasto in mente questo punto: <em>${escapeHtml(interestHint)}</em>.</p>`
+    : lastOutbound?.subject
+      ? `<p>Ti avevo inviato la proposta «${escapeHtml(lastOutbound.subject)}»${contextPhrase}.</p>`
+      : `<p>Ti avevo inviato una proposta dimostrativa per <strong>${safeBusinessName}</strong>${contextPhrase}.</p>`;
 
   const templates: Record<number, { subject: string; body: string }> = {
     1: {
-      subject: `${businessName} — hai visto la proposta?`,
-      body: `<p>Ciao,</p><p>hai avuto modo di vedere la proposta preparata per <strong>${safeBusinessName}</strong>?</p><p>${offerLine}</p><p><a href="${demoUrl}" style="display:inline-block;padding:13px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">Rivedi la proposta</a></p>${contactHtml}<p>Se ti va, dimmi cosa cambieresti per primo: ti rispondo con un’indicazione concreta.</p><p>A presto,<br/>${safeSenderName}</p>`,
+      subject: `${businessName} — solo un pensiero sulla proposta`,
+      body: `<p>Ciao,</p>${personalNote}<p>Nessuna fretta: volevo solo capire se l’anteprima ti è stata utile o se c’è qualcosa che cambieresti per primo.</p><p>${offerLine}</p><p><a href="${demoUrl}" style="display:inline-block;padding:13px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">Rivedi la proposta</a></p>${softContact}${studioLine}<p>Se preferisci lasciar perdere, va benissimo: non ti sollecito oltre se non mi rispondi.</p><p>A presto,<br/>${safeSenderName}</p>`,
     },
     2: {
-      subject: `${businessName} — tengo aperta la proposta?`,
-      body: `<p>Ciao,</p><p>ultimo messaggio sulla proposta dimostrativa per <strong>${safeBusinessName}</strong>.</p><p>${offerLine}</p><p><a href="${demoUrl}" style="display:inline-block;padding:13px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">Rivedi la proposta</a></p>${contactHtml}<p>Se vuoi approfondire, rispondi con “sì”, scrivimi o chiamami. Altrimenti non riceverai altri promemoria.</p><p>A presto,<br/>${safeSenderName}</p>`,
+      subject: `${businessName} — chiudo qui, senza pressione`,
+      body: `<p>Ciao,</p><p>ultimo messaggio soft sulla proposta per <strong>${safeBusinessName}</strong>${contextPhrase}.</p><p>${offerLine}</p><p><a href="${demoUrl}" style="display:inline-block;padding:13px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">Rivedi la proposta</a></p>${softContact}${studioLine}<p>Se ti interessa approfondire, rispondi pure quando vuoi. Altrimenti non riceverai altri promemoria da questa sequenza.</p><p>A presto,<br/>${safeSenderName}</p>`,
     },
   };
 
@@ -339,6 +423,8 @@ export async function buildFollowupDraft(
       sender_name: senderName,
       offer_price: offerPrice,
       delivery_time: deliveryTime,
+      personalized: 'true',
+      sequence_step: String(sequenceStep),
     },
   });
 

@@ -26,7 +26,9 @@ export function RestaurantV3Location({ address, city, phone, email, openingHours
               <div>
                 <dt>Telefono</dt>
                 <dd>
-                  <a href={`tel:${phone}`}>{phone}</a>
+                  <a className={styles.locationPhone} href={`tel:${phone}`}>
+                    {phone}
+                  </a>
                 </dd>
               </div>
             ) : null}

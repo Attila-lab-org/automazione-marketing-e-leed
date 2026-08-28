@@ -1,6 +1,7 @@
 import styles from './restaurant-v3.module.css';
 import { RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '@/lib/templates/v3-assets';
 import { ownerRibbonBody } from '@/lib/templates/owner-commercial';
+import { WhatsAppIcon } from './WhatsAppIcon';
 
 type Props = {
   businessName: string;
@@ -30,6 +31,7 @@ export function RestaurantV3OwnerRibbon({
       <div className={styles.ribbonActions}>
         {whatsappHref ? (
           <a className={styles.ribbonWa} href={whatsappHref}>
+            <WhatsAppIcon size={16} />
             <span className={styles.ribbonCtaFull}>
               {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaWhatsApp}
             </span>

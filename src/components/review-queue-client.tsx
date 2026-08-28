@@ -319,6 +319,7 @@ export default function ReviewQueueClient() {
           messagePreview={item.messagePreview}
           previewImageUrl={item.previewImageUrl}
           demoUrl={item.demoUrl}
+          emailBody={item.body}
           demoSiteId={item.demoSiteId}
           thumbnailLabel={item.previewImageUrl ? "Anteprima email" : undefined}
           selected={selected.has(item.id)}

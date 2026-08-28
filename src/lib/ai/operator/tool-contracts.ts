@@ -104,6 +104,17 @@ export const TOOL_CONTRACTS: Record<string, ToolContract> = {
     label: 'aggiorna regole commerciali',
     auditExecute: 'execute_playbook_update',
   },
+  update_telegram_keywords: {
+    name: 'update_telegram_keywords',
+    tier: 'INTERNAL',
+    label: 'aggiorna parole chiave Telegram',
+    auditExecute: 'execute_telegram_keywords',
+  },
+  list_manual_followups: {
+    name: 'list_manual_followups',
+    tier: 'INTERNAL',
+    label: 'mostra follow-up da approvare',
+  },
   take_over_thread: { name: 'take_over_thread', tier: 'INTERNAL', label: 'prendi in carico' },
   return_to_ai: { name: 'return_to_ai', tier: 'INTERNAL', label: 'ridai ad Attila' },
   create_calendar_slot: { name: 'create_calendar_slot', tier: 'INTERNAL', label: 'crea disponibilità' },

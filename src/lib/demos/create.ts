@@ -6,9 +6,10 @@ import { listPublishedTemplates, type PublishedTemplate } from '@/lib/demos/ensu
 import { pickCompatibleTemplateKey } from '@/lib/templates/match';
 import { prefillFromLead, normalizeDemoData } from '@/lib/templates/merge';
 import { prefillFromLeadV2, normalizeDemoDataV2 } from '@/lib/templates/merge-v2';
+import { getGooglePlacesProvider } from '@/lib/providers/google-places';
 import {
   normalizeDemoDataV3,
-  personalizeDemoFromWebsiteAnalysisV3,
+  personalizeDemoForProspectV3,
   prefillFromLeadV3,
 } from '@/lib/templates/merge-v3';
 import { RESTAURANT_PREMIUM_RENDERER_KEY } from '@/lib/templates/restaurant-premium';
@@ -37,6 +38,37 @@ export interface CreatedDemo {
   reused: boolean;
 }
 
+function snapshotBooking(analysisJson: unknown): { retrieved: boolean; bookingUrl: string | null } {
+  const root =
+    analysisJson && typeof analysisJson === 'object' && !Array.isArray(analysisJson)
+      ? (analysisJson as Record<string, unknown>)
+      : {};
+  const snap =
+    root.snapshot && typeof root.snapshot === 'object' && !Array.isArray(root.snapshot)
+      ? (root.snapshot as Record<string, unknown>)
+      : {};
+  return {
+    retrieved: snap.retrieved === true,
+    bookingUrl: typeof snap.bookingUrl === 'string' && snap.bookingUrl.trim() ? snap.bookingUrl.trim() : null,
+  };
+}
+
+async function googleVenueExtras(lead: { google_place_id: string | null; phone: string | null }) {
+  if (!lead.google_place_id) {
+    return { photoNames: [] as string[], openingHours: null as string | null, phone: lead.phone };
+  }
+  try {
+    const enrichment = await getGooglePlacesProvider().enrich(lead.google_place_id);
+    return {
+      photoNames: enrichment.photoNames ?? [],
+      openingHours: enrichment.openingHours?.filter(Boolean).join('\n') || null,
+      phone: lead.phone || enrichment.phone,
+    };
+  } catch {
+    return { photoNames: [] as string[], openingHours: null as string | null, phone: lead.phone };
+  }
+}
+
 function publicPath(slug: string): string {
   return `/demo/${slug}`;
 }
@@ -61,6 +93,9 @@ function prefillForLayout(
     city: string | null;
     rating: number | null;
     reviewCount: number | null;
+    openingHours?: string | null;
+    photoNames?: string[];
+    bookingUrl?: string | null;
   },
   defaults: unknown,
 ) {
@@ -188,29 +223,51 @@ export async function createDemoFromLead(
     };
   }
 
-  const leadInput = {
-    name: typedLead.name,
-    phone: typedLead.phone,
-    email: typedLead.email,
-    address: typedLead.address,
-    city: typedLead.city,
-    rating: typedLead.rating,
-    reviewCount: typedLead.review_count,
-  };
+  const venue = await googleVenueExtras(typedLead);
+  let bookingUrl: string | null = null;
+  let websiteRetrieved = false;
+  let analysisRow: {
+    strengths: unknown;
+    issues: unknown;
+    confidence: number | null;
+    human_review_required: boolean | null;
+    analysis: unknown;
+  } | null = null;
 
-  let data = prefillForLayout(template.layoutKey, leadInput, template.defaultContent);
   if (template.layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) {
     const { data: analysis } = await admin
       .from('website_analyses')
-      .select('confidence, human_review_required, strengths, issues')
+      .select('confidence, human_review_required, strengths, issues, analysis')
       .eq('workspace_id', workspaceId)
       .eq('lead_id', typedLead.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (analysis) {
-      data = personalizeDemoFromWebsiteAnalysisV3(normalizeDemoDataV3(data), analysis);
-    }
+    analysisRow = analysis;
+    const snap = snapshotBooking(analysis?.analysis);
+    bookingUrl = snap.bookingUrl;
+    websiteRetrieved = snap.retrieved;
+  }
+
+  const leadInput = {
+    name: typedLead.name,
+    phone: venue.phone,
+    email: typedLead.email,
+    address: typedLead.address,
+    city: typedLead.city,
+    rating: typedLead.rating,
+    reviewCount: typedLead.review_count,
+    openingHours: venue.openingHours,
+    photoNames: venue.photoNames,
+    bookingUrl,
+  };
+
+  let data = prefillForLayout(template.layoutKey, leadInput, template.defaultContent);
+  if (template.layoutKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) {
+    data = personalizeDemoForProspectV3(normalizeDemoDataV3(data), {
+      analysis: analysisRow ?? undefined,
+      websiteRetrieved,
+    });
   }
 
   let lastError: Error | null = null;

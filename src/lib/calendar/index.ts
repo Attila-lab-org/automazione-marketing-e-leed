@@ -26,6 +26,7 @@ export {
 export {
   applyConversationBooking,
   wantsImmediateBooking,
+  hasExplicitCallInterest,
   normalizeBookingClassification,
   type ConversationBookingOutcome,
 } from './booking';

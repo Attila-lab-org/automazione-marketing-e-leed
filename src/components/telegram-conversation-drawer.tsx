@@ -225,7 +225,7 @@ export default function TelegramConversationDrawer({
                   Messaggi ({detail.messages.length})
                 </h3>
                 {detail.messages.length ? (
-                  detail.messages.map((message) => (
+                  [...detail.messages].reverse().map((message) => (
                     <div
                       key={message.id}
                       className={

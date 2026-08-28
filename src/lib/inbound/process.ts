@@ -16,6 +16,8 @@ import type {
 import type { TelegramProvider } from '@/lib/providers/telegram';
 import { processSalesInbound } from '@/lib/sales/pipeline';
 import { scheduleFollowUpLater, stopLeadSequences, suppressLeadEmail } from '@/lib/sales/stop';
+import { evaluateTelegramSendGuard } from '@/lib/inbound/telegram-send-guard';
+import { recordOperatorAlert } from '@/lib/sales/reply-persist';
 
 export type ProcessInboundResult = {
   skipped?: boolean;
@@ -79,7 +81,19 @@ export function selectTelegramReplyText(args: {
 function skipMessageForReason(reason: string): string {
   switch (reason) {
     case 'AUTO_REPLY_DISABLED':
-      return 'Risposta Telegram non inviata: risposta automatica disattivata';
+    case 'MANUAL_MODE':
+      return 'Risposta Telegram non inviata: gestione manuale attiva';
+    case 'TELEGRAM_STOPPED':
+      return 'Risposta Telegram non inviata: Telegram è fermo';
+    case 'RATE_LIMIT':
+      return 'Risposta Telegram non inviata: limite frequenza';
+    case 'DUPLICATE_OUTBOUND':
+      return 'Risposta Telegram non inviata: messaggio duplicato';
+    case 'LOW_CONFIDENCE':
+      return 'Risposta Telegram non inviata: sicurezza bassa, bozza da controllare';
+    case 'CRITICAL_HANDOFF':
+      return 'Risposta Telegram non inviata: richiesta delicata, serve te';
+    case 'HUMAN_TAKEOVER':
     case 'HUMAN_ONLY':
       return 'Risposta Telegram non inviata: HUMAN_ONLY, conversazione in carico all’operatore';
     case 'APPROVAL_REQUIRED':
@@ -92,6 +106,7 @@ function skipMessageForReason(reason: string): string {
     case 'NOT_INTERESTED':
       return 'Stop deterministico: nessun invio commerciale';
     case 'SALES_DRAFT_MISSING':
+    case 'NO_DRAFT':
       return 'AUTO_ALLOWED senza bozza vendibile: nessun invio';
     case 'FOLLOWUP_NO_AUTO_REPLY':
       return 'Messaggio Telegram successivo registrato senza risposta automatica';
@@ -190,6 +205,7 @@ export async function processTelegramInbound(args: {
   let salesMode: string | null = null;
   let salesAgentUsed = false;
   let salesHumanRequired = false;
+  let salesConfidence: number | null = null;
   let salesStopKind: 'unsubscribe' | 'not_interested' | 'follow_up_later' | null = null;
   try {
     const sales = await processSalesInbound({
@@ -204,6 +220,7 @@ export async function processTelegramInbound(args: {
     salesDraft = sales.draft;
     salesMode = sales.mode;
     salesHumanRequired = sales.humanRequired;
+    salesConfidence = sales.classification.confidence;
     salesAgentUsed = true;
     if (sales.classification.unsubscribe) {
       await suppressLeadEmail(admin, workspaceId, lead.leadId, 'UNSUBSCRIBE');
@@ -272,9 +289,59 @@ export async function processTelegramInbound(args: {
     intentMatched: intent.matched,
     legacyText,
   });
-  const replyText = chosen.text;
+  let replyText = chosen.text;
+  let skipReason = chosen.skipReason;
+
+  if (replyText) {
+    const guard = await evaluateTelegramSendGuard({
+      admin,
+      workspaceId,
+      threadId,
+      settings,
+      draft: replyText,
+      salesMode,
+      salesHumanRequired,
+      classificationConfidence: salesConfidence,
+    });
+    if (!guard.allowed) {
+      replyText = null;
+      skipReason = guard.reason;
+      await admin.from('activity_log').insert({
+        workspace_id: workspaceId,
+        actor_type: 'SYSTEM',
+        entity_type: 'lead',
+        entity_id: lead.leadId,
+        lead_id: lead.leadId,
+        category: 'DECISION',
+        event_type: 'TELEGRAM_SEND_GUARD_BLOCKED',
+        message: guard.message,
+        data: {
+          reason: guard.reason,
+          salesMode,
+          chat_id: message.chatId,
+          provider_message_id: message.providerMessageId,
+        },
+      });
+      if (
+        guard.reason === 'MANUAL_MODE' ||
+        guard.reason === 'LOW_CONFIDENCE' ||
+        guard.reason === 'CRITICAL_HANDOFF' ||
+        guard.reason === 'HUMAN_TAKEOVER'
+      ) {
+        await recordOperatorAlert({
+          admin,
+          workspaceId,
+          leadId: lead.leadId,
+          threadId,
+          kind: 'telegram_draft_blocked',
+          message: guard.message,
+        });
+      }
+    }
+  }
+
   if (!replyText) {
-    const reason = chosen.skipReason ?? 'SALES_POLICY';
+    const reason = skipReason ?? 'SALES_POLICY';
     await admin.from('activity_log').insert({
       workspace_id: workspaceId,
       actor_type: 'SYSTEM',
@@ -403,8 +470,10 @@ export async function processTelegramInbound(args: {
     message: 'Risposta automatica Telegram inviata',
     data: {
       chat_id: message.chatId,
+      threadId,
       inbound_provider_message_id: message.providerMessageId,
       outbound_provider_message_id: send.providerMessageId,
+      why: 'Controlli superati: risposta automatica protetta',
     },
   });
 

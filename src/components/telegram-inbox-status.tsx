@@ -1,13 +1,43 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { TelegramOperationalMode } from "@/lib/inbound/telegram-settings";
 
 type TelegramStatus = {
-  settings: { enabled: boolean };
+  settings: { enabled: boolean; replyEnabled: boolean };
   connection: { ready: boolean; missing: string[] };
+  operationalMode?: TelegramOperationalMode;
+  stats?: {
+    sent24h: number;
+    draftsPending: number;
+    errors24h: number;
+    urgent: number;
+  };
   message?: string;
   warning?: string | null;
 };
+
+function modeCopy(mode: TelegramOperationalMode | undefined, enabled: boolean) {
+  if (!enabled || mode === "stopped") {
+    return {
+      title: "Telegram è fermo",
+      body: "Avvialo per ricevere e gestire i messaggi dalle chat collegate.",
+      active: false,
+    };
+  }
+  if (mode === "manual") {
+    return {
+      title: "Telegram in gestione manuale",
+      body: "Attila ascolta e prepara le bozze: nessun invio automatico.",
+      active: true,
+    };
+  }
+  return {
+    title: "Telegram in automatico protetto",
+    body: "Attila risponde alle conversazioni sicure. Appuntamento solo dopo interesse esplicito.",
+    active: true,
+  };
+}
 
 export default function TelegramInboxStatus() {
   const [status, setStatus] = useState<TelegramStatus | null>(null);
@@ -47,25 +77,31 @@ export default function TelegramInboxStatus() {
 
   if (!status) return null;
 
+  const copy = modeCopy(status.operationalMode, status.settings.enabled);
+
   return (
     <section
       className={
-        status.settings.enabled
+        copy.active
           ? "flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           : "flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
       }
     >
       <div>
-        <p className={status.settings.enabled ? "text-sm font-semibold text-emerald-900" : "text-sm font-semibold text-amber-900"}>
-          Telegram {status.settings.enabled ? "è attivo" : "è fermo"}
+        <p className={copy.active ? "text-sm font-semibold text-emerald-900" : "text-sm font-semibold text-amber-900"}>
+          {copy.title}
         </p>
-        <p className={status.settings.enabled ? "text-xs text-emerald-800" : "text-xs text-amber-800"}>
-          {status.settings.enabled
-            ? "Attila ascolta le chat collegate e gestisce le conversazioni sicure."
-            : status.connection.ready
-              ? "Avvialo per ricevere e gestire i messaggi dalle chat collegate."
-              : "Completa prima il collegamento del bot nelle Impostazioni."}
+        <p className={copy.active ? "text-xs text-emerald-800" : "text-xs text-amber-800"}>
+          {!status.settings.enabled && !status.connection.ready
+            ? "Completa prima il collegamento del bot nelle Impostazioni."
+            : copy.body}
         </p>
+        {status.stats ? (
+          <p className="mt-1 text-xs text-stone-600">
+            Inviate {status.stats.sent24h} · bozze {status.stats.draftsPending} · errori{" "}
+            {status.stats.errors24h} · urgenti {status.stats.urgent}
+          </p>
+        ) : null}
         {feedback ? <p className="mt-1 text-xs font-medium">{feedback}</p> : null}
       </div>
       <div className="flex shrink-0 gap-2">

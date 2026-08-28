@@ -131,6 +131,7 @@ export async function analyzeLeadWebsite(args: {
         title: snapshot.title,
         ctas: snapshot.ctas,
         bookingSignals: snapshot.bookingSignals,
+        bookingUrl: snapshot.bookingUrl,
         blockedReason: snapshot.blockedReason,
       },
     } as unknown as Json,

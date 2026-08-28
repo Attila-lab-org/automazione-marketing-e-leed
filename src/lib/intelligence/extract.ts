@@ -8,6 +8,7 @@ export type WebsiteSnapshot = {
   emails: string[];
   phones: string[];
   bookingSignals: string[];
+  bookingUrl: string | null;
   hasViewportMeta: boolean;
   usesHttps: boolean;
   textExcerpt: string;
@@ -28,6 +29,31 @@ const CTA_WORDS = [
 ];
 
 const BOOKING_WORDS = ['thefork', 'quandoo', 'opentable', 'prenota online', 'prenotazione'];
+const BOOKING_HREF = /thefork|quandoo|opentable|resy|covermanager|prenota/i;
+
+function resolveHref(href: string, baseUrl: string): string | null {
+  try {
+    const url = new URL(href, baseUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function extractBookingUrl(html: string, baseUrl: string): string | null {
+  for (const match of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
+    const attrs = match[1] ?? '';
+    const label = stripTags(match[2] ?? '');
+    const href = attrs.match(/href=["']([^"']+)["']/i)?.[1]?.trim();
+    if (!href || href.startsWith('mailto:') || href.startsWith('tel:')) continue;
+    if (BOOKING_HREF.test(href) || BOOKING_HREF.test(label)) {
+      const resolved = resolveHref(href, baseUrl);
+      if (resolved) return resolved;
+    }
+  }
+  return null;
+}
 
 function stripTags(html: string): string {
   return html
@@ -63,6 +89,7 @@ export function extractWebsiteSnapshot(url: string, html: string | null, blocked
       emails: [],
       phones: [],
       bookingSignals: [],
+      bookingUrl: null,
       hasViewportMeta: false,
       usesHttps,
       textExcerpt: '',
@@ -98,6 +125,7 @@ export function extractWebsiteSnapshot(url: string, html: string | null, blocked
     emails,
     phones,
     bookingSignals,
+    bookingUrl: extractBookingUrl(html, url),
     hasViewportMeta: /name=["']viewport["']/i.test(html),
     usesHttps,
     textExcerpt: text,
@@ -114,6 +142,7 @@ export function snapshotCorpus(snapshot: WebsiteSnapshot): string {
     snapshot.headings.join(' '),
     snapshot.ctas.join(' '),
     snapshot.bookingSignals.join(' '),
+    snapshot.bookingUrl,
     snapshot.textExcerpt,
   ]
     .filter(Boolean)

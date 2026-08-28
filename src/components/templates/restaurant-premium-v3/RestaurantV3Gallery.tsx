@@ -18,7 +18,7 @@ export function RestaurantV3Gallery({ images }: Props) {
           margin: '0.6rem 0 1.5rem',
         }}
       >
-        Atmosfere
+        Uno sguardo al locale
       </h2>
       <div className={styles.gallery}>
         {list.map((src, i) => (

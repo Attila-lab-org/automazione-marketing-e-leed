@@ -68,6 +68,7 @@ export class GooglePlacesMock implements GooglePlacesProvider {
       rating: 3 + (h % 21) / 10,
       reviewCount: h % 400,
       openingHours: ['Mo-Fr 09:00-18:00'],
+      photoNames: [],
       enrichedAt: new Date().toISOString(),
     };
   }

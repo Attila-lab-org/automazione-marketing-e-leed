@@ -12,7 +12,7 @@ export function RestaurantV3Intro({ description, conceptNote, imageSrc }: Props)
     <section className={`${styles.section} ${styles.sectionNarrow}`} data-reveal>
       <div className={styles.intro}>
         <div className={styles.introCopy}>
-          <p className={styles.eyebrow}>Identità, informazioni, prenotazione</p>
+          <p className={styles.eyebrow}>Il locale, a colpo d’occhio</p>
           <h2>Dal primo sguardo al tavolo.</h2>
           <p>{description || RESTAURANT_PREMIUM_V3_CONCEPT_COPY.description}</p>
           {conceptNote ? <p className={styles.conceptNote}>{conceptNote}</p> : null}

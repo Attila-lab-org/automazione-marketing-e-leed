@@ -5,7 +5,7 @@ import {
   resolveOwnerCtaHref,
 } from '../../src/lib/templates/v3-cta';
 
-describe('Owner interesse route — no hardcoded fallbacks', () => {
+describe('Owner interesse route — contatto Attila', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
@@ -48,7 +48,7 @@ describe('Owner interesse route — no hardcoded fallbacks', () => {
     expect(loc).toContain('source=restaurant-premium-v3-owner-cta');
   });
 
-  it('missing OWNER_WHATSAPP → nessun hardcoded fallback wa.me', async () => {
+  it('manca OWNER_WHATSAPP → scrive comunque ad Attila', async () => {
     delete process.env.OWNER_WHATSAPP;
     delete process.env.OWNER_CONTACT_URL;
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -58,11 +58,9 @@ describe('Owner interesse route — no hardcoded fallbacks', () => {
       new Request('http://localhost/demo/trattoria-duomo/interesse?channel=whatsapp'),
       { params: Promise.resolve({ slug: 'trattoria-duomo' }) },
     );
-    expect(res.status).toBe(503);
-    const body = await res.json();
-    expect(body.error).toMatch(/OWNER_WHATSAPP/);
-    expect(JSON.stringify(body)).not.toMatch(/393462689082/);
-    expect(JSON.stringify(body)).not.toMatch(/attila-lab/);
+    expect(res.status).toBe(302);
+    const loc = res.headers.get('location') ?? '';
+    expect(loc.startsWith('https://wa.me/393462689082')).toBe(true);
   });
 
   it('channel=whatsapp con OWNER_WHATSAPP → wa.me + proposta base', async () => {

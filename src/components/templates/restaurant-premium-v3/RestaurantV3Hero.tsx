@@ -20,7 +20,7 @@ function stars(rating: number) {
 }
 
 function isLocalAsset(src: string) {
-  return src.startsWith('/');
+  return src.startsWith('/') && !src.startsWith('/api/');
 }
 
 export function RestaurantV3Hero({

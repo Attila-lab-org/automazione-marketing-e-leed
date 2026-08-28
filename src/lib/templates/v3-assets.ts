@@ -32,33 +32,33 @@ export const RESTAURANT_PREMIUM_V3_ASSETS = {
 } as const;
 
 export const RESTAURANT_PREMIUM_V3_CONCEPT_COPY = {
-  headline: 'Scopri il locale. Trova ciò che serve. Prenota.',
+  headline: 'Il locale, chiaro dal primo sguardo. Prenota in un gesto.',
   subheadline:
-    'Una presenza digitale premium che unisce identità, informazioni essenziali e un percorso diretto verso la prenotazione.',
+    'Foto, recensioni e recapiti in evidenza: l’ospite capisce subito dove si trova e come riservare un tavolo.',
   description:
-    'Una pagina veloce da capire e piacevole da esplorare: racconta il carattere del locale e accompagna l’ospite verso una scelta concreta.',
+    'Una pagina pensata per il telefono: si capisce in pochi secondi chi siete, dove siete e come prenotare.',
   about:
-    'Concept dimostrativo di vetrina digitale. I dati anagrafici del locale restano quelli reali; immagini e testi di atmosfera appartengono al template.',
+    'I recapiti e le recensioni sono quelli reali del locale. Lo stile visivo è la proposta: chiaro, rapido da capire, pronto per prenotare.',
   experience: [
     {
       title: 'Atmosfera',
-      body: 'Uno spazio digitale che anticipa il tono del locale: caldo, contemporaneo, credibile.',
+      body: 'Foto e testi che fanno capire subito il carattere del locale, senza rumore visivo.',
     },
     {
-      title: 'Esperienza',
-      body: 'Racconto visivo e tipografico che guida lo sguardo senza rumore, fino all’invito a prenotare.',
+      title: 'Informazioni chiare',
+      body: 'Indirizzo, recensioni e recapiti visibili: l’ospite sa dove siete e come raggiungervi.',
     },
     {
-      title: 'Prenotazione semplice',
-      body: 'Un invito chiaro, ripetuto nei punti giusti, per trasformare l’interesse in una prenotazione.',
+      title: 'Prenotazione in un gesto',
+      body: 'Un bottone evidente, ripetuto nei punti giusti, per prenotare dal telefono in pochi secondi.',
     },
   ],
-  storyHeadline: 'La qualità del locale merita una presenza all’altezza.',
+  storyHeadline: 'Il locale merita una vetrina all’altezza del tavolo.',
   storyBody:
-    'Il sito non sostituisce l’esperienza: la anticipa. Immagini, informazioni e inviti all’azione lavorano insieme per trasformare una visita in interesse.',
+    'Il sito non sostituisce l’esperienza: la anticipa. Si capisce chi siete, dove siete e come prenotare, prima ancora di entrare.',
   digitalValueHeadline: 'Dal primo sguardo alla prenotazione',
   digitalValueBody:
-    'Una pagina pensata per mobile e desktop, con gerarchia chiara e un percorso naturale verso il contatto.',
+    'Pensato per il telefono: gerarchia chiara, recensioni in evidenza e un percorso naturale verso il contatto.',
   finalCtaHeadline: 'Il prossimo tavolo è a un gesto.',
   finalCtaBody: 'Quando siete pronti, riservate il vostro momento.',
   ownerBridgeEyebrow: 'Per il proprietario',
@@ -71,11 +71,13 @@ export const RESTAURANT_PREMIUM_V3_CONCEPT_COPY = {
   ownerOfferLabel: 'Sito professionale completo',
   ownerBody:
     'Hai visto cosa può diventare il tuo locale online. Possiamo trasformare questa proposta in un sito reale, costruito sulla tua identità.',
+  ownerContactHow:
+    'Come contattarmi: un messaggio su WhatsApp o una chiamata. Ti rispondo io, senza moduli e senza attese.',
   ownerCta: 'Parliamone',
   ownerCtaWhatsApp: 'Scrivimi su WhatsApp',
   ownerCtaPhone: 'Chiamami ora',
   ownerCtaSite: 'Scopri Attila Lab',
-  ownerMicro: 'Prezzo chiaro · Tempi chiari · Nessun costo nascosto',
+  ownerMicro: 'Da 350 € · Consegna in 24 ore · Nessun impegno',
   cta: 'Prenota un tavolo',
   ctaShort: 'Prenota',
   ribbonTitle: 'Anteprima riservata',

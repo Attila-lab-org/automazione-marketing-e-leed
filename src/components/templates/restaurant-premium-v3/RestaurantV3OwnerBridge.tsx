@@ -1,6 +1,7 @@
 import styles from './restaurant-v3.module.css';
 import { RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '@/lib/templates/v3-assets';
 import { ownerBridgeBody } from '@/lib/templates/owner-commercial';
+import { WhatsAppIcon } from './WhatsAppIcon';
 
 type Props = {
   businessName: string;
@@ -40,6 +41,7 @@ export function RestaurantV3OwnerBridge({
           ) : null}
           {whatsappHref ? (
             <a className={`${styles.btn} ${styles.btnWhatsApp}`} href={whatsappHref}>
+              <WhatsAppIcon size={18} />
               {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaWhatsApp}
             </a>
           ) : null}

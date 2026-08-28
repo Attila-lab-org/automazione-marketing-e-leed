@@ -1,6 +1,7 @@
 import styles from './restaurant-v3.module.css';
 import { RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '@/lib/templates/v3-assets';
 import { ownerFinalBody } from '@/lib/templates/owner-commercial';
+import { WhatsAppIcon } from './WhatsAppIcon';
 
 type Props = {
   ownerCtaLabel: string;
@@ -39,10 +40,14 @@ export function RestaurantV3OwnerCTA({
         ) : null}
         <h2>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerHeadline}</h2>
         <p>{ownerFinalBody(offerPrice, deliveryTime)}</p>
+        <p className={styles.ownerContactHow}>
+          {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerContactHow}
+        </p>
         <p className={styles.ownerMicro}>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerMicro}</p>
         <div className={styles.ownerActions}>
           {whatsappHref ? (
             <a className={`${styles.btn} ${styles.btnWhatsApp}`} href={whatsappHref}>
+              <WhatsAppIcon size={20} />
               {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaWhatsApp}
             </a>
           ) : null}

@@ -114,6 +114,8 @@ export function composeOperatorReply(
       'reschedule_appointment',
       'set_telegram_runtime',
       'update_commercial_playbook',
+      'update_telegram_keywords',
+      'list_manual_followups',
     ].includes(w.tool),
   );
   if (opsWrite) {

@@ -10,7 +10,7 @@ import {
 } from '../../src/lib/templates/restaurant-premium-v3';
 import {
   normalizeDemoDataV3,
-  personalizeDemoFromWebsiteAnalysisV3,
+  personalizeDemoForProspectV3,
   prefillFromLeadV3,
 } from '../../src/lib/templates/merge-v3';
 import { RESTAURANT_PREMIUM_V3_ASSETS, RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '../../src/lib/templates/v3-assets';
@@ -84,25 +84,41 @@ describe('Restaurant Premium V3', () => {
     expect(data.branding.accent_color).toBe('#cc5500');
   });
 
-  it('personalizza il copy da analisi grounded senza usare analisi incerte', () => {
+  it('personalizza sempre con i dati Google, senza logo, e usa i segnali sito se ci sono', () => {
     const base = prefillFromLeadV3(
-      { name: 'Trattoria Duomo', city: 'Milano' },
+      {
+        name: 'Trattoria Duomo',
+        city: 'Milano',
+        rating: 4.7,
+        reviewCount: 1082,
+        address: 'Via Torino 12',
+        photoNames: ['places/ChIJ123/photos/Abc_def-1'],
+        openingHours: 'lunedì: 12:00-15:00',
+      },
       RESTAURANT_PREMIUM_V3_DEFAULTS,
     );
-    const personalized = personalizeDemoFromWebsiteAnalysisV3(base, {
-      confidence: 0.82,
-      human_review_required: false,
-      strengths: [{ text: 'Molte recensioni pubbliche', evidence: '1.082 recensioni' }],
-      issues: [{ text: 'CTA di prenotazione poco evidente', evidence: 'nessuna CTA osservata' }],
+    expect(base.branding.logo_url).toBeNull();
+    expect(base.branding.hero_image).toContain('/api/place-photo?name=');
+    expect(base.contact.opening_hours).toContain('12:00');
+
+    const personalized = personalizeDemoForProspectV3(base, {
+      websiteRetrieved: true,
+      analysis: {
+        confidence: 0.82,
+        human_review_required: false,
+        strengths: [{ text: 'Molte recensioni pubbliche', evidence: '1.082 recensioni' }],
+        issues: [{ text: 'CTA di prenotazione poco evidente', evidence: 'nessuna CTA osservata' }],
+      },
     });
     expect(personalized.content.headline).toContain('Trattoria Duomo');
+    expect(personalized.content.headline).toContain('Milano');
+    expect(personalized.content.subheadline).toMatch(/4\.7 su Google/);
     expect(personalized.content.description).toMatch(/recensioni.*CTA/i);
-    expect(
-      personalizeDemoFromWebsiteAnalysisV3(base, {
-        confidence: 0.3,
-        strengths: [{ text: 'dato incerto' }],
-      }),
-    ).toEqual(base);
+    expect(personalized.branding.logo_url).toBeNull();
+
+    const withoutSite = personalizeDemoForProspectV3(base, { websiteRetrieved: false });
+    expect(withoutSite.content.headline).toContain('Trattoria Duomo');
+    expect(withoutSite.content.description).not.toMatch(/Segnali dal sito/);
   });
 
   it('missing opening hours stays null — no invented hours', () => {

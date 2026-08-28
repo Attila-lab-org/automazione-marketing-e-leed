@@ -156,7 +156,9 @@ export async function listReviewQueue(
       deliveryMode,
       testRecipient,
       subject: draft?.subject ?? '(messaggio in preparazione)',
-      messagePreview: body ? stripHtml(body).slice(0, 220) : 'Anteprima non ancora generata.',
+      messagePreview: body
+        ? `${(row.sequence_step ?? 0) > 0 ? `Follow-up ${row.sequence_step}: ` : ''}${stripHtml(body).slice(0, 220)}`
+        : 'Anteprima non ancora generata.',
       body,
       previewImageUrl,
       demoUrl,
@@ -248,7 +250,11 @@ export async function approveCampaignLeads(
       entityType: 'campaign_lead',
       entityId: row.id,
       idempotencyKey: `SEND_MESSAGE:campaign_lead:${row.id}:step:${row.sequence_step ?? 0}`,
-      inputSnapshot: { sequenceStep: row.sequence_step ?? 0, leadId: row.lead_id },
+      inputSnapshot: {
+        sequenceStep: row.sequence_step ?? 0,
+        leadId: row.lead_id,
+        manualFollowup: (row.sequence_step ?? 0) >= 1,
+      },
       priority: 80,
     });
   }

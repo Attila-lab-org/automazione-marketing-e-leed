@@ -20,12 +20,14 @@ import { alertKindFromInbound, persistSalesReplyDraft, recordOperatorAlert } fro
 import {
   applyConversationBooking,
   getActiveAppointmentForLead,
+  hasExplicitCallInterest,
   listAvailableSlots,
   normalizeBookingClassification,
   slotsForAiPrompt,
 } from '@/lib/calendar';
 import { formatSlotForHuman } from '@/lib/calendar/slots';
 import { resolveNegotiationGuidance } from './negotiation';
+import { getTelegramInboundSettings } from '@/lib/inbound/telegram-settings';
 
 export type SalesMemory = {
   business_summary: string | null;
@@ -165,6 +167,8 @@ export function resolveResponseMode(args: {
   autonomy: Awaited<ReturnType<typeof getActiveAutonomy>>;
   firstReply: boolean;
   channel?: 'EMAIL' | 'TELEGRAM';
+  /** Telegram: false = gestione manuale (bozza), true/undefined = automatico protetto. */
+  telegramAutoSend?: boolean;
 }): { mode: ResponseMode; reason: string } {
   const c = args.classification;
   if (c.unsubscribe || c.notInterested) {
@@ -200,9 +204,15 @@ export function resolveResponseMode(args: {
     };
   }
   if (args.channel === 'TELEGRAM') {
+    if (args.telegramAutoSend === false) {
+      return {
+        mode: 'APPROVAL_REQUIRED',
+        reason: 'telegram_manual_mode',
+      };
+    }
     return {
       mode: 'AUTO_ALLOWED',
-      reason: 'telegram_conversation',
+      reason: 'telegram_auto_guarded',
     };
   }
   if (args.firstReply) return { mode: args.playbook.autonomy.firstReplyMode, reason: 'first_reply' };
@@ -271,12 +281,17 @@ export async function processSalesInbound(args: {
     .eq('thread_id', args.threadId)
     .eq('direction', 'OUTBOUND');
   const firstReply = (outboundCount ?? 0) === 0;
+  const telegramSettings =
+    args.channel === 'TELEGRAM'
+      ? await getTelegramInboundSettings(args.admin, args.workspaceId)
+      : null;
   const resolved = resolveResponseMode({
     classification,
     playbook,
     autonomy,
     firstReply,
     channel: args.channel,
+    telegramAutoSend: telegramSettings ? telegramSettings.replyEnabled : undefined,
   });
   const negotiation = resolveNegotiationGuidance({
     playbook,
@@ -365,6 +380,12 @@ export async function processSalesInbound(args: {
 
   let bookingConfirmation: string | null = null;
   let appointmentLabel: string | null = null;
+  const requireExplicitInterest = playbook.conversation.proposeCallOnlyAfterExplicitInterest;
+  const callInterest = hasExplicitCallInterest({
+    classification,
+    inboundText: args.text,
+    memoryNextStep: priorMemory?.next_step ?? null,
+  });
   if (!takeoverActive && resolved.mode !== 'HUMAN_ONLY') {
     const booking = await applyConversationBooking({
       admin: args.admin,
@@ -373,6 +394,9 @@ export async function processSalesInbound(args: {
       threadId: args.threadId,
       classification,
       leadName: leadRow?.name,
+      requireExplicitInterest,
+      inboundText: args.text,
+      memoryNextStep: priorMemory?.next_step ?? null,
     });
     if (booking.action === 'BOOKED' || booking.action === 'RESCHEDULED') {
       bookingConfirmation = booking.confirmationText;
@@ -396,12 +420,15 @@ export async function processSalesInbound(args: {
     }
   }
 
-  const availableSlots = await listAvailableSlots(args.admin, args.workspaceId, { limit: 5 });
   const existingAppt = await getActiveAppointmentForLead(
     args.admin,
     args.workspaceId,
     args.leadId,
   );
+  const availableSlots =
+    callInterest || Boolean(existingAppt) || classification.rescheduleAppointment
+      ? await listAvailableSlots(args.admin, args.workspaceId, { limit: 5 })
+      : [];
   if (!appointmentLabel && existingAppt?.starts_at) {
     appointmentLabel = formatSlotForHuman({
       id: existingAppt.id,
@@ -425,6 +452,10 @@ export async function processSalesInbound(args: {
         {
           classification,
           playbookName: playbook.brand.signature,
+          brandTone: playbook.brand.tone,
+          proposeWhen: playbook.call.proposeWhen,
+          conversationStrategy: playbook.conversation,
+          allowProposeCall: callInterest,
           pricingAllowed: playbook.pricing.aiMayCommunicate,
           priceRange,
           negotiation,
@@ -443,6 +474,10 @@ export async function processSalesInbound(args: {
       draftText = mockDraftReply({
         classification,
         playbookName: playbook.brand.signature,
+        brandTone: playbook.brand.tone,
+        proposeWhen: playbook.call.proposeWhen,
+        conversationStrategy: playbook.conversation,
+        allowProposeCall: callInterest,
         pricingAllowed: playbook.pricing.aiMayCommunicate,
         priceRange:
           playbook.pricing.aiMayCommunicate &&

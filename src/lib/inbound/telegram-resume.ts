@@ -4,6 +4,7 @@ import { getTelegramProvider } from '@/lib/providers/telegram';
 import { processSalesInbound } from '@/lib/sales/pipeline';
 import { selectTelegramReplyText } from '@/lib/inbound/process';
 import { getTelegramInboundSettings } from '@/lib/inbound/telegram-settings';
+import { evaluateTelegramSendGuard } from '@/lib/inbound/telegram-send-guard';
 import type { WriteResult } from '@/lib/ai/operator/writes';
 
 function parseInboundProviderId(value: string | null): { chatId: string; messageId: string } | null {
@@ -102,6 +103,21 @@ export async function resumeTelegramAiAndReply(args: {
   });
   if (!selected.text) {
     return { sent: false, reason: selected.skipReason ?? 'AI_REPLY_BLOCKED' };
+  }
+
+  const guard = await evaluateTelegramSendGuard({
+    admin: args.admin,
+    workspaceId: args.workspaceId,
+    threadId: args.threadId,
+    settings,
+    draft: selected.text,
+    salesMode: 'AUTO_ALLOWED',
+    salesHumanRequired: sales.humanRequired,
+    classificationConfidence: sales.classification.confidence,
+    operatorOverride: true,
+  });
+  if (!guard.allowed) {
+    return { sent: false, reason: guard.reason };
   }
 
   const provider = getTelegramProvider(env);

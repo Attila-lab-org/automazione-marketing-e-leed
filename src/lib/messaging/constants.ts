@@ -1,1 +1,1 @@
-export const EMAIL_PREVIEW_CACHE_VERSION = '6';
+export const EMAIL_PREVIEW_CACHE_VERSION = '7';

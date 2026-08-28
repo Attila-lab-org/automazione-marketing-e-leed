@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import { getOwnerOfferPrice } from '@/lib/templates/owner-commercial';
+import { getOwnerOfferPrice, getOwnerWhatsApp } from '@/lib/templates/owner-commercial';
 import {
   buildWhatsAppUrl,
   extractContactPhone,
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Commercial owner contact destination.
- * OWNER_CONTACT_URL only — no hardcoded studio fallback.
+ * Site URL from env only. WhatsApp: OWNER_WHATSAPP, otherwise Attila's number.
  */
 export function resolveOwnerContactUrl(env: NodeJS.ProcessEnv = process.env): string | null {
   const fromEnv = env.OWNER_CONTACT_URL?.trim();
@@ -31,7 +31,7 @@ function parseChannel(raw: string | null): OwnerContactChannel {
   return 'auto';
 }
 
-function resolveWhatsAppSource(env: NodeJS.ProcessEnv): string | null {
+function resolveWhatsAppSource(env: NodeJS.ProcessEnv): string {
   const fromEnv = env.OWNER_WHATSAPP?.trim();
   if (fromEnv) return fromEnv;
   if (env.OWNER_CONTACT_URL && isWhatsAppContactTarget(env.OWNER_CONTACT_URL)) {
@@ -43,7 +43,7 @@ function resolveWhatsAppSource(env: NodeJS.ProcessEnv): string | null {
   ) {
     return env.NEXT_PUBLIC_OWNER_CONTACT_URL.trim();
   }
-  return null;
+  return getOwnerWhatsApp(env);
 }
 
 function resolveDestination(args: {
@@ -56,9 +56,7 @@ function resolveDestination(args: {
   const offerPrice = getOwnerOfferPrice(env);
 
   if (channel === 'phone') {
-    const phone = extractContactPhone(
-      env.OWNER_PHONE?.trim() || env.OWNER_WHATSAPP?.trim() || '',
-    );
+    const phone = extractContactPhone(env.OWNER_PHONE?.trim() || getOwnerWhatsApp(env));
     return phone
       ? { url: `tel:+${phone}`, channel: 'phone' }
       : { error: 'Numero telefonico non configurato' };

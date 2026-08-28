@@ -129,15 +129,13 @@ export default function RestaurantPremiumV3({
       style={tokenStyle}
       data-renderer="restaurant-premium-v3"
     >
-      {!compact ? (
-        <RestaurantV3OwnerRibbon
-          businessName={name}
-          whatsappHref={ownerWhatsAppHref}
-          siteHref={siteHref}
-          offerPrice={offerPrice}
-          deliveryTime={deliveryTime}
-        />
-      ) : null}
+      <RestaurantV3OwnerRibbon
+        businessName={name}
+        whatsappHref={ownerWhatsAppHref}
+        siteHref={compact ? null : siteHref}
+        offerPrice={offerPrice}
+        deliveryTime={deliveryTime}
+      />
       <RestaurantV3Header
         name={wordmarkFromName(name) || name}
         logoUrl={data.branding.logo_url}

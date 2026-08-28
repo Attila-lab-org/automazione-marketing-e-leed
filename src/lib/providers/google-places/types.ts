@@ -43,6 +43,8 @@ export interface PlaceEnrichment {
   rating: number | null;
   reviewCount: number | null;
   openingHours: string[] | null;
+  /** Resource name Google Places (`places/.../photos/...`), mai loghi. */
+  photoNames: string[];
   /** timestamp dell'enrichment → leads.google_last_enriched_at */
   enrichedAt: string;
 }
