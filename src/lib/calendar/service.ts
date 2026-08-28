@@ -241,6 +241,7 @@ export async function rescheduleAppointment(
     source?: CalendarEventSource;
     afterIso?: string | null;
     excludeStartsAt?: string[];
+    slotId?: string;
   },
 ): Promise<BookAppointmentResult> {
   const { data: previous } = await admin
@@ -254,6 +255,17 @@ export async function rescheduleAppointment(
     ...(previous?.starts_at ? [previous.starts_at] : []),
   ];
   await cancelAppointment(admin, args.workspaceId, args.eventId);
+  if (args.slotId) {
+    return bookSlotAtomic(admin, {
+      workspaceId: args.workspaceId,
+      slotId: args.slotId,
+      leadId: args.leadId,
+      threadId: args.threadId,
+      title: args.title,
+      description: args.description,
+      source: args.source ?? 'HUMAN',
+    });
+  }
   return bookFirstCompatibleSlot(admin, {
     workspaceId: args.workspaceId,
     leadId: args.leadId,

@@ -179,6 +179,7 @@ export default function CalendarClient() {
     d.setMinutes(d.getMinutes() + 30);
     return toLocalInputValue(d);
   });
+  const [repeatWeeks, setRepeatWeeks] = useState(1);
   const [contactOptions, setContactOptions] = useState<ContactOption[]>([]);
   const [selectedContact, setSelectedContact] = useState("");
   const [selected, setSelected] = useState<SelectedItem | null>(null);
@@ -285,11 +286,16 @@ export default function CalendarClient() {
             kind: "slot",
             startsAt: new Date(when).toISOString(),
             endsAt: new Date(slotEnd).toISOString(),
+            repeatWeeks,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Creazione disponibilità fallita");
-        setFeedback("Disponibilità aggiunta.");
+        setFeedback(
+          repeatWeeks === 1
+            ? "Disponibilità aggiunta."
+            : `Disponibilità aggiunta per ${repeatWeeks} settimane.`,
+        );
       } else {
         const whenIso = new Date(when).toISOString();
         const endIso = new Date(new Date(when).getTime() + 30 * 60_000).toISOString();
@@ -652,15 +658,33 @@ export default function CalendarClient() {
               </label>
 
               {createKind === "AVAILABILITY" ? (
-                <label className="block text-sm text-stone-700">
-                  Fine
-                  <input
-                    type="datetime-local"
-                    value={slotEnd}
-                    onChange={(e) => setSlotEnd(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm"
-                  />
-                </label>
+                <>
+                  <label className="block text-sm text-stone-700">
+                    Fine
+                    <input
+                      type="datetime-local"
+                      value={slotEnd}
+                      onChange={(e) => setSlotEnd(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="block text-sm text-stone-700">
+                    Ripeti
+                    <select
+                      value={repeatWeeks}
+                      onChange={(e) => setRepeatWeeks(Number(e.target.value))}
+                      className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm"
+                    >
+                      <option value={1}>Solo questa volta</option>
+                      <option value={4}>Ogni settimana per 4 settimane</option>
+                      <option value={8}>Ogni settimana per 8 settimane</option>
+                      <option value={12}>Ogni settimana per 12 settimane</option>
+                    </select>
+                    <span className="mt-1 block text-xs text-stone-500">
+                      Attila potrà prenotare soltanto questi orari.
+                    </span>
+                  </label>
+                </>
               ) : null}
 
               {createKind === "APPOINTMENT" ? (

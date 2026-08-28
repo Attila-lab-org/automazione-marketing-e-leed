@@ -3,7 +3,7 @@ import { withAdmin } from '@/lib/api/with-admin';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 import {
-  createAvailabilitySlot,
+  addWeeksInTimeZone,
   createCalendarEvent,
   listCalendarEvents,
   listSlotsInRange,
@@ -154,6 +154,7 @@ export const POST = withAdmin(async (request: Request) => {
     leadId?: string | null;
     threadId?: string | null;
     reminderAt?: string | null;
+    repeatWeeks?: number;
   };
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
@@ -163,14 +164,28 @@ export const POST = withAdmin(async (request: Request) => {
       if (!body.startsAt || !body.endsAt) {
         return NextResponse.json({ error: 'startsAt e endsAt obbligatori' }, { status: 400 });
       }
-      const slot = await createAvailabilitySlot(admin, {
+      if (new Date(body.endsAt).getTime() <= new Date(body.startsAt).getTime()) {
+        return NextResponse.json({ error: 'La fine deve essere successiva all’inizio' }, { status: 400 });
+      }
+      const timezone = body.timezone ?? 'Europe/Rome';
+      const repeatWeeks = Math.min(12, Math.max(1, Math.floor(body.repeatWeeks ?? 1)));
+      const rows = Array.from({ length: repeatWeeks }, (_, week) => ({
         workspace_id: workspace.id,
-        starts_at: body.startsAt,
-        ends_at: body.endsAt,
-        timezone: body.timezone ?? 'Europe/Rome',
-        note: body.note ?? null,
-      });
-      return NextResponse.json({ slot });
+        starts_at: addWeeksInTimeZone(body.startsAt!, week, timezone),
+        ends_at: addWeeksInTimeZone(body.endsAt!, week, timezone),
+        timezone,
+        status: 'AVAILABLE' as const,
+        note: body.note ?? (repeatWeeks > 1 ? 'Disponibilità settimanale' : null),
+      }));
+      const { data: slots, error } = await admin
+        .from('calendar_availability_slots')
+        .upsert(rows, {
+          onConflict: 'workspace_id,starts_at,ends_at',
+          ignoreDuplicates: true,
+        })
+        .select('*');
+      if (error) throw new Error(`Creazione disponibilità: ${error.message}`);
+      return NextResponse.json({ slot: slots?.[0] ?? null, slots: slots ?? [] });
     }
 
     if (!body.title || !body.eventType) {

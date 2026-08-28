@@ -1,6 +1,10 @@
 export {
   pickFirstCompatibleSlot,
   listAlternativeSlots,
+  listClosestAvailableSlots,
+  findSlotForPreferredTime,
+  resolvePreferredTimeHint,
+  addWeeksInTimeZone,
   formatSlotForHuman,
   slotsForAiPrompt,
   type SlotLike,

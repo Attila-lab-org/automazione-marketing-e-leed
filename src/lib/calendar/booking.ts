@@ -2,6 +2,7 @@ import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import type { InboundClassification } from '@/lib/ai/commercial/schemas';
 import type { Json } from '@/lib/types/database';
 import {
+  bookSlotAtomic,
   bookFirstCompatibleSlot,
   cancelAppointment,
   getActiveAppointmentForLead,
@@ -9,7 +10,14 @@ import {
   rescheduleAppointment,
   type BookAppointmentResult,
 } from './service';
-import { formatSlotForHuman, listAlternativeSlots, type SlotLike } from './slots';
+import {
+  findSlotForPreferredTime,
+  formatSlotForHuman,
+  listAlternativeSlots,
+  listClosestAvailableSlots,
+  resolvePreferredTimeHint,
+  type SlotLike,
+} from './slots';
 import { recordOperatorAlert } from '@/lib/sales/reply-persist';
 import { validateSalesTransition } from '@/lib/sales/states';
 
@@ -100,12 +108,18 @@ function hasSpecificTimeHint(hint: string | null): boolean {
   );
 }
 
-function proposeAlternativesMessage(alternatives: SlotLike[]): string {
+function proposeAlternativesMessage(
+  alternatives: SlotLike[],
+  unavailableHint?: string | null,
+): string {
   const labels = alternatives.map((slot) => formatSlotForHuman(slot));
+  const prefix = unavailableHint?.trim()
+    ? `L’orario richiesto (${unavailableHint.trim()}) non è disponibile.`
+    : 'Quell’orario non è disponibile.';
   if (labels.length === 1) {
-    return `Va benissimo spostarla. Ho questo orario libero: ${labels[0]}. Ti va bene o preferisci un altro giorno?`;
+    return `${prefix} Ho questo orario libero: ${labels[0]}. Ti va bene?`;
   }
-  return `Va benissimo spostarla. Orari liberi: ${labels.join('; ')}. Quale preferisci?`;
+  return `${prefix} Posso proporti: ${labels.join('; ')}. Quale preferisci?`;
 }
 
 export async function applyConversationBooking(args: {
@@ -146,14 +160,28 @@ export async function applyConversationBooking(args: {
   if (c.rescheduleAppointment && existing) {
     const allSlots = await listAvailableSlots(args.admin, args.workspaceId, { limit: 40 });
     const excludeStartsAt = existing.starts_at ? [existing.starts_at] : [];
-    const alternatives = listAlternativeSlots(allSlots, {
+    const classifiedHintIso = resolvePreferredTimeHint(c.preferredTimeHint);
+    const requestedHint = classifiedHintIso
+      ? c.preferredTimeHint
+      : args.inboundText ?? c.preferredTimeHint ?? null;
+    const requestedIso = classifiedHintIso ?? resolvePreferredTimeHint(args.inboundText);
+    const requestedSlot = requestedIso
+      ? findSlotForPreferredTime(allSlots, requestedHint)
+      : null;
+    const alternatives = requestedIso
+      ? listClosestAvailableSlots(allSlots, requestedIso, 5).filter(
+          (slot) =>
+            slot.id !== existing.slot_id &&
+            !excludeStartsAt.includes(slot.starts_at),
+        )
+      : listAlternativeSlots(allSlots, {
       excludeStartsAt,
       excludeSlotIds: existing.slot_id ? [existing.slot_id] : [],
       limit: 5,
-    });
+        });
 
     const canAutoMove = hasSpecificTimeHint(c.preferredTimeHint) || c.bookingAccepted;
-    if (canAutoMove && alternatives.length > 0) {
+    if (canAutoMove && (requestedSlot || (!requestedIso && alternatives.length > 0))) {
       const result = await rescheduleAppointment(args.admin, {
         workspaceId: args.workspaceId,
         eventId: existing.id,
@@ -163,6 +191,7 @@ export async function applyConversationBooking(args: {
         description: c.preferredTimeHint,
         source: 'AI',
         excludeStartsAt,
+        slotId: requestedSlot?.id,
       });
       if (result.ok) {
         await markThreadBooked(args.admin, args.workspaceId, args.threadId, result);
@@ -185,7 +214,7 @@ export async function applyConversationBooking(args: {
         .eq('id', args.threadId);
       return {
         action: 'PROPOSE_ALTERNATIVES',
-        message: proposeAlternativesMessage(alternatives),
+        message: proposeAlternativesMessage(alternatives, requestedHint),
       };
     }
 
@@ -257,14 +286,44 @@ export async function applyConversationBooking(args: {
     };
   }
 
-  const result = await bookFirstCompatibleSlot(args.admin, {
-    workspaceId: args.workspaceId,
-    leadId: args.leadId,
-    threadId: args.threadId,
-    title,
-    description: c.preferredTimeHint,
-    source: 'AI',
-  });
+  const classifiedHintIso = resolvePreferredTimeHint(c.preferredTimeHint);
+  const requestedHint = classifiedHintIso
+    ? c.preferredTimeHint
+    : args.inboundText ?? c.preferredTimeHint ?? null;
+  const requestedIso = classifiedHintIso ?? resolvePreferredTimeHint(args.inboundText);
+  const availableSlots = await listAvailableSlots(args.admin, args.workspaceId, { limit: 50 });
+  const requestedSlot = requestedIso
+    ? findSlotForPreferredTime(availableSlots, requestedHint)
+    : null;
+
+  if (requestedIso && !requestedSlot) {
+    const alternatives = listClosestAvailableSlots(availableSlots, requestedIso, 3);
+    if (alternatives.length > 0) {
+      return {
+        action: 'PROPOSE_ALTERNATIVES',
+        message: proposeAlternativesMessage(alternatives, requestedHint),
+      };
+    }
+  }
+
+  const result = requestedSlot
+    ? await bookSlotAtomic(args.admin, {
+        workspaceId: args.workspaceId,
+        slotId: requestedSlot.id,
+        leadId: args.leadId,
+        threadId: args.threadId,
+        title,
+        description: c.preferredTimeHint,
+        source: 'AI',
+      })
+    : await bookFirstCompatibleSlot(args.admin, {
+        workspaceId: args.workspaceId,
+        leadId: args.leadId,
+        threadId: args.threadId,
+        title,
+        description: c.preferredTimeHint,
+        source: 'AI',
+      });
 
   if (!result.ok) {
     await recordOperatorAlert({

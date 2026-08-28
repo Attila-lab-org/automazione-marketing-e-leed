@@ -368,6 +368,34 @@ export function mockClassifyInbound(text: string): InboundClassification {
     });
   }
   if (
+    /\b(?:oggi|domani|dopodomani|luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|domenica|\d{1,2}[/-]\d{1,2})\b.{0,30}\b(?:alle|ore)\s*\d{1,2}(?::\d{2})?\b/.test(
+      t,
+    ) ||
+    /^\s*(?:alle|ore)\s*\d{1,2}(?::\d{2})?\s*$/.test(t)
+  ) {
+    return base({
+      intent: 'call_accept',
+      language: 'it',
+      sentiment: 'positive',
+      recommendedState: 'CALL_BOOKED',
+      unsubscribe: false,
+      notInterested: false,
+      pricing: false,
+      discountAsk: false,
+      legal: false,
+      angry: false,
+      followUpLater: false,
+      followUpAt: null,
+      confidence: 0.9,
+      summary: `Accettazione dell’orario: ${text.trim()}`,
+      servicesRequested: [],
+      bookingRequest: true,
+      bookingAccepted: true,
+      preferredTimeHint: text.trim(),
+      bookingConfidence: 0.9,
+    });
+  }
+  if (
     /va bene|ok fissiamo|prenotiamo|ci sentiamo|accetto|va benissimo|sì.*chiamata|si.*chiamata|fissiamo/.test(
       t,
     )
@@ -393,7 +421,7 @@ export function mockClassifyInbound(text: string): InboundClassification {
       bookingConfidence: 0.92,
     });
   }
-  if (/chiamata|appuntamento|sentiamoci|videochiamata/.test(t)) {
+  if (/chiamata|telefonata|appuntamento|sentiamoci|videochiamata|fissare (?:una |un )?call/.test(t)) {
     return base({
       intent: 'call_accept',
       language: 'it',
