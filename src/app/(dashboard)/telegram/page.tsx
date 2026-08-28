@@ -2,8 +2,17 @@ import PageHeader from "@/components/page-header";
 import TelegramControlPanel from "@/components/telegram-control-panel";
 import TelegramInboxStatus from "@/components/telegram-inbox-status";
 import InboxClient from "@/components/inbox-client";
+import { requireAdminSession } from "@/lib/auth/guard";
+import { listInboxThreads } from "@/lib/inbound/list-inbox";
+import { createAdminSupabaseClient } from "@/lib/supabase/client";
+import { ensureDefaultWorkspace } from "@/lib/workspace";
 
-export default function TelegramPage() {
+export default async function TelegramPage() {
+  await requireAdminSession();
+  const admin = createAdminSupabaseClient(process.env);
+  const workspace = await ensureDefaultWorkspace(admin);
+  const threads = await listInboxThreads(admin, workspace.id);
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
@@ -20,7 +29,7 @@ export default function TelegramPage() {
             Filtra chi ha risposto, le urgenze e i casi che richiedono il tuo intervento.
           </p>
         </div>
-        <InboxClient channelScope="telegram" />
+        <InboxClient channelScope="telegram" initialThreads={threads} />
       </section>
 
       <details className="rounded-xl border border-stone-200 bg-white">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import EmptyState from "@/components/empty-state";
 import TelegramConversationDrawer from "@/components/telegram-conversation-drawer";
 import type { InboxConversationDetail } from "@/lib/inbound/conversation";
@@ -65,11 +65,13 @@ function primaryStatus(item: InboxThreadItem): string {
 
 export default function InboxClient({
   channelScope = "all",
+  initialThreads,
 }: {
   channelScope?: "all" | "telegram";
+  initialThreads?: InboxThreadItem[];
 }) {
-  const [threads, setThreads] = useState<InboxThreadItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [threads, setThreads] = useState<InboxThreadItem[]>(initialThreads ?? []);
+  const [loading, setLoading] = useState(initialThreads === undefined);
   const [error, setError] = useState<string | null>(null);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [conversation, setConversation] = useState<InboxConversationDetail | null>(null);
@@ -83,6 +85,11 @@ export default function InboxClient({
   const [urgency, setUrgency] = useState<UrgencyFilter>("all");
   const [query, setQuery] = useState("");
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
+  const openThreadRef = useRef<string | null>(null);
+  const conversationCache = useRef(new Map<string, InboxConversationDetail>());
+  const conversationRequests = useRef(
+    new Map<string, Promise<InboxConversationDetail>>(),
+  );
 
   async function refreshThreads() {
     const response = await fetch("/api/inbox", { cache: "no-store" });
@@ -93,26 +100,63 @@ export default function InboxClient({
     return loadedThreads;
   }
 
-  async function openConversation(threadId: string) {
-    setOpenThreadId(threadId);
-    setConversation(null);
-    setConversationError(null);
-    setConversationLoading(true);
-    try {
-      const response = await fetch(`/api/inbox/${encodeURIComponent(threadId)}`, {
-        cache: "no-store",
-      });
+  function loadConversation(
+    threadId: string,
+    force = false,
+  ): Promise<InboxConversationDetail> {
+    if (!force) {
+      const cached = conversationCache.current.get(threadId);
+      if (cached) return Promise.resolve(cached);
+      const pending = conversationRequests.current.get(threadId);
+      if (pending) return pending;
+    }
+
+    const request = (async () => {
+      const response = await fetch(`/api/inbox/${encodeURIComponent(threadId)}`);
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error ?? "Impossibile caricare la conversazione");
       }
-      setConversation(data.conversation as InboxConversationDetail);
+      const detail = data.conversation as InboxConversationDetail;
+      conversationCache.current.set(threadId, detail);
+      return detail;
+    })();
+    conversationRequests.current.set(threadId, request);
+    void request.finally(() => {
+      if (conversationRequests.current.get(threadId) === request) {
+        conversationRequests.current.delete(threadId);
+      }
+    }).catch(() => undefined);
+    return request;
+  }
+
+  function prefetchConversation(threadId: string) {
+    void loadConversation(threadId).catch(() => undefined);
+  }
+
+  async function openConversation(threadId: string, force = false) {
+    openThreadRef.current = threadId;
+    setOpenThreadId(threadId);
+    setConversationError(null);
+    const cached = force ? null : conversationCache.current.get(threadId);
+    setConversation(cached ?? null);
+    setConversationLoading(!cached);
+    if (cached) return;
+    try {
+      const detail = await loadConversation(threadId, force);
+      if (openThreadRef.current === threadId) {
+        setConversation(detail);
+      }
     } catch (reason) {
-      setConversationError(
-        reason instanceof Error ? reason.message : "Errore conversazione",
-      );
+      if (openThreadRef.current === threadId) {
+        setConversationError(
+          reason instanceof Error ? reason.message : "Errore conversazione",
+        );
+      }
     } finally {
-      setConversationLoading(false);
+      if (openThreadRef.current === threadId) {
+        setConversationLoading(false);
+      }
     }
   }
 
@@ -120,7 +164,7 @@ export default function InboxClient({
     let cancelled = false;
     (async () => {
       try {
-        const loadedThreads = await refreshThreads();
+        const loadedThreads = initialThreads ?? (await refreshThreads());
         if (!cancelled) {
           const params = new URLSearchParams(window.location.search);
           const threadId = params.get("thread");
@@ -143,6 +187,8 @@ export default function InboxClient({
     return () => {
       cancelled = true;
     };
+    // Bootstrap iniziale soltanto: i refresh successivi sono espliciti dopo le mutation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -337,11 +383,13 @@ export default function InboxClient({
                 key={thread.threadId}
                 item={thread}
                 expanded={expandedThreadId === thread.threadId}
-                onToggle={() =>
+                onToggle={() => {
+                  prefetchConversation(thread.threadId);
                   setExpandedThreadId((current) =>
                     current === thread.threadId ? null : thread.threadId,
-                  )
-                }
+                  );
+                }}
+                onPrefetch={() => prefetchConversation(thread.threadId)}
                 onOpen={() => void openConversation(thread.threadId)}
               />
             ))}
@@ -358,11 +406,13 @@ export default function InboxClient({
           loading={conversationLoading}
           error={conversationError}
           onClose={() => {
+            openThreadRef.current = null;
             setOpenThreadId(null);
             setConversation(null);
           }}
           onChanged={async () => {
-            await Promise.all([refreshThreads(), openConversation(openThreadId)]);
+            conversationCache.current.delete(openThreadId);
+            await Promise.all([refreshThreads(), openConversation(openThreadId, true)]);
           }}
         />
       ) : null}
@@ -374,11 +424,13 @@ function InboxRow({
   item,
   expanded,
   onToggle,
+  onPrefetch,
   onOpen,
 }: {
   item: InboxThreadItem;
   expanded: boolean;
   onToggle: () => void;
+  onPrefetch: () => void;
   onOpen: () => void;
 }) {
   return (
@@ -386,6 +438,8 @@ function InboxRow({
       <button
         type="button"
         onClick={onToggle}
+        onMouseEnter={onPrefetch}
+        onFocus={onPrefetch}
         aria-expanded={expanded}
         className="flex w-full flex-col gap-3 px-4 py-4 text-left hover:bg-stone-50 sm:flex-row sm:items-center sm:justify-between"
       >
