@@ -1,7 +1,12 @@
 import { resolveAppUrl } from '@/lib/app-url';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadDemoById } from '@/lib/demos/load';
-import { isOwnerWhatsAppConfigured } from '@/lib/templates/owner-commercial';
+import {
+  getOwnerDeliveryTime,
+  getOwnerOfferPrice,
+  isOwnerWhatsAppConfigured,
+} from '@/lib/templates/owner-commercial';
+import { extractContactPhone } from '@/lib/templates/v3-cta';
 import { EMAIL_PREVIEW_CACHE_VERSION } from '@/lib/messaging/constants';
 
 function resolveTemplate(body: string, vars: Record<string, string>): string {
@@ -57,16 +62,18 @@ async function upsertDraft(
   return draft;
 }
 
-/** Intro HTML v2 — CTA chiari, WhatsApp opzionale. Firma studio (non il destinatario). */
-export const VISUAL_INTRO_BODY_V2 = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 auto;font-family:Georgia,serif">
-<tr><td style="padding:0 0 16px;font-size:16px;line-height:1.55;color:#2c241e">Buongiorno,</td></tr>
-<tr><td style="padding:0 0 12px;font-size:16px;line-height:1.55;color:#2c241e">ho preparato una proposta visiva per <strong>{{business_name}}</strong>{{city_phrase}}, partendo solo dalle informazioni pubbliche dell'attività.</td></tr>
+/** Email commerciale: valore, offerta e contatti leggibili anche su Gmail mobile. */
+export const VISUAL_INTRO_BODY_V2 = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;color:#292524">
+<tr><td style="padding:0 0 10px;font-size:12px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#a16207">Proposta riservata</td></tr>
+<tr><td style="padding:0 0 14px;font-family:Georgia,serif;font-size:30px;line-height:1.15;color:#1c1917">Abbiamo immaginato il nuovo sito di {{business_name}}.</td></tr>
+<tr><td style="padding:0 0 18px;font-size:16px;line-height:1.6;color:#57534e">Buongiorno, abbiamo preparato una proposta visiva per <strong>{{business_name}}</strong>{{city_phrase}}, usando soltanto le informazioni pubbliche dell'attività.</td></tr>
 {{personalized_insight_block}}
+<tr><td style="padding:0 0 20px">{{offer_block}}</td></tr>
 <tr><td style="padding:0">{{preview_image_block}}</td></tr>
-<tr><td style="padding:24px 0 8px">{{cta_block}}</td></tr>
-<tr><td style="padding:0">{{whatsapp_block}}</td></tr>
-<tr><td style="padding:24px 0 0;font-family:system-ui,-apple-system,sans-serif;font-size:13px;line-height:1.5;color:#6b625a">È solo una proposta dimostrativa, senza alcun impegno.</td></tr>
-<tr><td style="padding:20px 0 0;font-size:15px;line-height:1.55;color:#2c241e">Cordiali saluti,<br/>{{sender_name}}</td></tr>
+<tr><td style="padding:22px 0 8px">{{cta_block}}</td></tr>
+<tr><td style="padding:0">{{whatsapp_block}}{{call_block}}</td></tr>
+<tr><td style="padding:24px 0 0;font-size:13px;line-height:1.5;color:#78716c">L'anteprima è gratuita e senza impegno. Prezzo e tempi si riferiscono alla proposta base; eventuali richieste aggiuntive vengono concordate prima.</td></tr>
+<tr><td style="padding:20px 0 0;font-size:15px;line-height:1.55;color:#292524">A presto,<br/><strong>{{sender_name}}</strong></td></tr>
 </table>`;
 
 export function buildGroundedEmailInsight(analysis: unknown): string {
@@ -92,13 +99,21 @@ export function buildGroundedEmailInsight(analysis: unknown): string {
 }
 
 function buildCtaBlock(demoUrl: string): string {
-  return `<a href="${demoUrl}" style="display:inline-block;padding:14px 22px;background:#1c1917;color:#fffdf9;text-decoration:none;border-radius:999px;font-family:system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600">Vedi l'anteprima completa</a>`;
+  return `<a href="${demoUrl}" style="display:inline-block;padding:15px 24px;background:#1c1917;color:#ffffff;text-decoration:none;border-radius:10px;font-family:Arial,sans-serif;font-size:15px;font-weight:700">Guarda la proposta completa</a>`;
+}
+
+function buildOfferBlock(price: string, deliveryTime: string): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px"><tr><td style="padding:16px 18px"><span style="display:block;font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#92400e">La proposta per te</span><strong style="display:block;margin-top:4px;font-family:Georgia,serif;font-size:22px;line-height:1.25;color:#1c1917">Il tuo sito da ${escapeHtml(price)}</strong><span style="display:block;margin-top:5px;font-size:14px;color:#57534e">Consegna in ${escapeHtml(deliveryTime)}</span></td></tr></table>`;
 }
 
 function buildWhatsAppBlock(whatsappUrl: string | null): string {
   if (!whatsappUrl) return '';
-  return `<div style="margin:12px 0 0"><a href="${whatsappUrl}" style="display:inline-block;padding:14px 22px;background:#128C7E;color:#ffffff;text-decoration:none;border-radius:999px;font-family:system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600">Scrivimi su WhatsApp</a></div>
-<p style="margin:10px 0 0;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#5c534c">Preferisci scrivere in privato? Tocca il pulsante sopra.</p>`;
+  return `<a href="${whatsappUrl}" style="display:inline-block;margin:10px 8px 0 0;padding:13px 18px;background:#128c7e;color:#ffffff;text-decoration:none;border-radius:10px;font-family:Arial,sans-serif;font-size:14px;font-weight:700">Scrivimi su WhatsApp</a>`;
+}
+
+function buildCallBlock(callUrl: string | null): string {
+  if (!callUrl) return '';
+  return `<a href="${callUrl}" style="display:inline-block;margin:10px 0 0;padding:13px 18px;background:#ffffff;color:#1c1917;text-decoration:none;border:1px solid #d6d3d1;border-radius:10px;font-family:Arial,sans-serif;font-size:14px;font-weight:700">Chiamami</a>`;
 }
 
 function isLegacyPlainIntro(body: string): boolean {
@@ -162,11 +177,21 @@ export async function buildVisualEmailDraft(
   const whatsappUrl = whatsappEnabled
     ? `${appUrl}${demo.publicPath}/interesse?channel=whatsapp`
     : null;
+  const ownerPhone = extractContactPhone(
+    env.OWNER_PHONE?.trim() || env.OWNER_WHATSAPP?.trim() || '',
+  );
+  const callUrl = ownerPhone
+    ? `${appUrl}${demo.publicPath}/interesse?channel=phone`
+    : null;
+  const offerPrice = getOwnerOfferPrice(env) ?? '350 €';
+  const deliveryTime = getOwnerDeliveryTime(env);
 
   // Table wrapper: Gmail non allarga/zoomma l'immagine oltre 600px
   const previewImageBlock = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 0 8px 0"><tr><td style="padding:0"><a href="${demoUrl}" style="display:block;text-decoration:none;border:0;outline:none"><img src="${previewImageUrl}" alt="Anteprima ${escapeHtml(businessName)}" width="600" height="340" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:10px;outline:none" /></a></td></tr></table>`;
   const ctaBlock = buildCtaBlock(demoUrl);
+  const offerBlock = buildOfferBlock(offerPrice, deliveryTime);
   const whatsappBlock = buildWhatsAppBlock(whatsappUrl);
+  const callBlock = buildCallBlock(callUrl);
   const insight = buildGroundedEmailInsight(analysis);
   const personalizedInsightBlock = insight
     ? `<tr><td style="padding:0 0 20px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.55;color:#5c534c">${escapeHtml(insight)}</td></tr>`
@@ -178,9 +203,13 @@ export async function buildVisualEmailDraft(
     preview_image_url: previewImageUrl,
     preview_image_block: previewImageBlock,
     cta_block: ctaBlock,
+    offer_block: offerBlock,
     whatsapp_block: whatsappBlock,
+    call_block: callBlock,
     personalized_insight_block: personalizedInsightBlock,
     sender_name: senderName,
+    offer_price: offerPrice,
+    delivery_time: deliveryTime,
     city: lead?.city ?? '',
     city_phrase: lead?.city?.trim() ? `, attività di ${lead.city.trim()}` : '',
   };
@@ -265,18 +294,30 @@ export async function buildFollowupDraft(
     demo && isOwnerWhatsAppConfigured(env)
       ? `${appUrl}${demo.publicPath}/interesse?channel=whatsapp`
       : null;
+  const ownerPhone = extractContactPhone(
+    env.OWNER_PHONE?.trim() || env.OWNER_WHATSAPP?.trim() || '',
+  );
+  const callUrl =
+    demo && ownerPhone ? `${appUrl}${demo.publicPath}/interesse?channel=phone` : null;
+  const offerPrice = getOwnerOfferPrice(env) ?? '350 €';
+  const deliveryTime = getOwnerDeliveryTime(env);
   const waHtml = whatsappUrl
-    ? `<p style="margin:16px 0"><a href="${whatsappUrl}" style="display:inline-block;padding:12px 20px;background:#128C7E;color:#fff;text-decoration:none;border-radius:999px;font-weight:600">Scrivimi su WhatsApp</a></p>`
+    ? `<a href="${whatsappUrl}" style="display:inline-block;margin:8px 8px 8px 0;padding:12px 18px;background:#128c7e;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">WhatsApp</a>`
     : '';
+  const callHtml = callUrl
+    ? `<a href="${callUrl}" style="display:inline-block;margin:8px 0;padding:12px 18px;border:1px solid #d6d3d1;color:#1c1917;text-decoration:none;border-radius:10px;font-weight:700">Chiamami</a>`
+    : '';
+  const contactHtml = waHtml || callHtml ? `<p style="margin:8px 0">${waHtml}${callHtml}</p>` : '';
+  const offerLine = `La proposta base parte da <strong>${escapeHtml(offerPrice)}</strong>, con consegna in <strong>${escapeHtml(deliveryTime)}</strong>.`;
 
   const templates: Record<number, { subject: string; body: string }> = {
     1: {
       subject: `${businessName} — hai visto la proposta?`,
-      body: `<p>Ciao,</p><p>hai avuto modo di vedere la proposta preparata per <strong>${safeBusinessName}</strong>?</p><p><a href="${demoUrl}" style="display:inline-block;padding:12px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:999px;font-weight:600">Rivedi la proposta</a></p>${waHtml}<p>Se ti va, dimmi cosa cambieresti per primo: ti rispondo con un’indicazione concreta.</p><p>A presto,<br/>${safeSenderName}</p>`,
+      body: `<p>Ciao,</p><p>hai avuto modo di vedere la proposta preparata per <strong>${safeBusinessName}</strong>?</p><p>${offerLine}</p><p><a href="${demoUrl}" style="display:inline-block;padding:13px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">Rivedi la proposta</a></p>${contactHtml}<p>Se ti va, dimmi cosa cambieresti per primo: ti rispondo con un’indicazione concreta.</p><p>A presto,<br/>${safeSenderName}</p>`,
     },
     2: {
       subject: `${businessName} — tengo aperta la proposta?`,
-      body: `<p>Ciao,</p><p>ultimo messaggio sulla proposta dimostrativa per <strong>${safeBusinessName}</strong>.</p><p><a href="${demoUrl}" style="display:inline-block;padding:12px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:999px;font-weight:600">Rivedi la proposta</a></p>${waHtml}<p>Se vuoi approfondire, rispondi con “sì” e fissiamo una breve chiamata. Altrimenti non riceverai altri promemoria.</p><p>A presto,<br/>${safeSenderName}</p>`,
+      body: `<p>Ciao,</p><p>ultimo messaggio sulla proposta dimostrativa per <strong>${safeBusinessName}</strong>.</p><p>${offerLine}</p><p><a href="${demoUrl}" style="display:inline-block;padding:13px 20px;background:#1c1917;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">Rivedi la proposta</a></p>${contactHtml}<p>Se vuoi approfondire, rispondi con “sì”, scrivimi o chiamami. Altrimenti non riceverai altri promemoria.</p><p>A presto,<br/>${safeSenderName}</p>`,
     },
   };
 
@@ -292,7 +333,13 @@ export async function buildFollowupDraft(
     sequenceStep,
     subject: tpl.subject,
     body: tpl.body,
-    resolved: { business_name: businessName, demo_url: demoUrl, sender_name: senderName },
+    resolved: {
+      business_name: businessName,
+      demo_url: demoUrl,
+      sender_name: senderName,
+      offer_price: offerPrice,
+      delivery_time: deliveryTime,
+    },
   });
 
   return { draftId: draft.id, subject: draft.subject, demoUrl };

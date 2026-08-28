@@ -3,6 +3,7 @@ import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/
 import { getOwnerOfferPrice } from '@/lib/templates/owner-commercial';
 import {
   buildWhatsAppUrl,
+  extractContactPhone,
   isWhatsAppContactTarget,
   type OwnerContactChannel,
 } from '@/lib/templates/v3-cta';
@@ -25,6 +26,7 @@ export function resolveOwnerContactUrl(env: NodeJS.ProcessEnv = process.env): st
 function parseChannel(raw: string | null): OwnerContactChannel {
   const v = (raw ?? 'auto').toLowerCase();
   if (v === 'whatsapp' || v === 'wa') return 'whatsapp';
+  if (v === 'phone' || v === 'tel' || v === 'call') return 'phone';
   if (v === 'site' || v === 'web') return 'site';
   return 'auto';
 }
@@ -49,9 +51,18 @@ function resolveDestination(args: {
   channel: OwnerContactChannel;
   businessName?: string | null;
   slug: string;
-}): { url: string; channel: 'whatsapp' | 'site' } | { error: string } {
+}): { url: string; channel: 'whatsapp' | 'phone' | 'site' } | { error: string } {
   const { env, channel, businessName, slug } = args;
   const offerPrice = getOwnerOfferPrice(env);
+
+  if (channel === 'phone') {
+    const phone = extractContactPhone(
+      env.OWNER_PHONE?.trim() || env.OWNER_WHATSAPP?.trim() || '',
+    );
+    return phone
+      ? { url: `tel:+${phone}`, channel: 'phone' }
+      : { error: 'Numero telefonico non configurato' };
+  }
 
   if (channel === 'whatsapp' || channel === 'auto') {
     const source = resolveWhatsAppSource(env);
@@ -93,7 +104,7 @@ function resolveDestination(args: {
 /**
  * Public owner CTA endpoint.
  * Logs OWNER_CTA_CLICKED then redirects to WhatsApp or commercial site.
- * Query: ?channel=whatsapp|site|auto
+ * Query: ?channel=whatsapp|phone|site|auto
  */
 export async function GET(
   request: Request,

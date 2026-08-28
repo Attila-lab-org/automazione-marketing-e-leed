@@ -43,8 +43,11 @@ export type RestaurantPremiumV3CommercialProps = {
   showOwnerBridge?: boolean;
   /** When false, hide WhatsApp CTAs (OWNER_WHATSAPP missing). */
   whatsappEnabled?: boolean;
+  /** When false, hide direct call CTA (OWNER_PHONE / OWNER_WHATSAPP missing). */
+  phoneEnabled?: boolean;
   /** When false, hide site CTAs (OWNER_CONTACT_URL missing). */
   siteEnabled?: boolean;
+  deliveryTime?: string;
 };
 
 export type RestaurantPremiumV3Props = {
@@ -67,7 +70,9 @@ export default function RestaurantPremiumV3({
   offerPrice = null,
   showOwnerBridge = false,
   whatsappEnabled = true,
+  phoneEnabled = true,
   siteEnabled = true,
+  deliveryTime = '24 ore',
 }: RestaurantPremiumV3Props) {
   useReveal();
   const scrolled = useHeaderScroll();
@@ -103,6 +108,10 @@ export default function RestaurantPremiumV3({
     whatsappEnabled && demoSlug
       ? resolveOwnerCtaHref({ demoSlug, channel: 'whatsapp' })
       : null;
+  const ownerPhoneHref =
+    phoneEnabled && demoSlug
+      ? resolveOwnerCtaHref({ demoSlug, channel: 'phone' })
+      : null;
   const siteHref =
     siteEnabled && demoSlug
       ? resolveOwnerCtaHref({ demoSlug, channel: 'site' })
@@ -126,6 +135,7 @@ export default function RestaurantPremiumV3({
           whatsappHref={ownerWhatsAppHref}
           siteHref={siteHref}
           offerPrice={offerPrice}
+          deliveryTime={deliveryTime}
         />
       ) : null}
       <RestaurantV3Header
@@ -178,9 +188,11 @@ export default function RestaurantPremiumV3({
         <RestaurantV3OwnerCTA
           ownerCtaLabel={ownerCta}
           whatsappHref={ownerWhatsAppHref}
+          phoneHref={ownerPhoneHref}
           siteHref={siteHref}
           businessName={name}
           offerPrice={offerPrice}
+          deliveryTime={deliveryTime}
         />
       ) : null}
       {!compact && ownerWhatsAppHref ? <RestaurantV3OwnerFab href={ownerWhatsAppHref} /> : null}

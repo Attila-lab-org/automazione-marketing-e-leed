@@ -3,9 +3,11 @@ import RestaurantPremiumV3 from '@/components/templates/restaurant-premium-v3';
 import { areQaFixturesAllowed } from '@/lib/qa/gate';
 import { prefillFromLeadV3 } from '@/lib/templates/merge-v3';
 import {
+  getOwnerDeliveryTime,
   getOwnerOfferPrice,
   isOwnerBridgeEnabled,
   isOwnerContactConfigured,
+  isOwnerPhoneConfigured,
   isOwnerWhatsAppConfigured,
 } from '@/lib/templates/owner-commercial';
 import { RESTAURANT_PREMIUM_V3_DEFAULTS } from '@/lib/templates/restaurant-premium-v3';
@@ -37,8 +39,10 @@ export default function RestaurantV3QaPage() {
         data={data}
         demoSlug="qa-v3"
         offerPrice={getOwnerOfferPrice()}
+        deliveryTime={getOwnerDeliveryTime()}
         showOwnerBridge={isOwnerBridgeEnabled()}
         whatsappEnabled={isOwnerWhatsAppConfigured()}
+        phoneEnabled={isOwnerPhoneConfigured()}
         siteEnabled={isOwnerContactConfigured()}
       />
     </>

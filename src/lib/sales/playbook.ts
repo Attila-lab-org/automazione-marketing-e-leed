@@ -67,14 +67,21 @@ export const DEFAULT_PLAYBOOK: CommercialPlaybook = {
   },
   offer: {
     key: 'website_upgrade',
-    description: 'Sito vetrina / ristorante con prenotazione visibile e presenza digitale più chiara',
-    allowedFeatures: ['sito vetrina', 'prenotazioni online', 'galleria', 'menu visibile', 'contatti chiari'],
+    description: 'Sito professionale per attività locali, da 350 €, con consegna della proposta base in 24 ore',
+    allowedFeatures: [
+      'sito vetrina',
+      'prenotazioni online',
+      'galleria',
+      'menu visibile',
+      'contatti chiari',
+      'consegna della proposta base in 24 ore',
+    ],
   },
   pricing: {
-    mode: 'hidden',
-    aiMayCommunicate: false,
-    min: null,
-    max: null,
+    mode: 'range',
+    aiMayCommunicate: true,
+    min: 350,
+    max: 1000,
     currency: 'EUR',
   },
   discount: {
@@ -100,13 +107,13 @@ export const DEFAULT_PLAYBOOK: CommercialPlaybook = {
     neverPromise: [
       'posizionamento garantito',
       'numero di clienti',
-      'tempi di consegna non confermati',
+      'tempi diversi dalle 24 ore della proposta base senza conferma',
       'sconti non autorizzati',
       'funzionalità non in offerta',
     ],
   },
   humanEscalation: {
-    price: true,
+    price: false,
     discount: true,
     contracts: true,
     legalPrivacy: true,
@@ -177,8 +184,14 @@ export function mergePlaybook(raw: unknown): CommercialPlaybook {
       allowedFeatures: list(offer.allowedFeatures, DEFAULT_PLAYBOOK.offer.allowedFeatures),
     },
     pricing: {
-      mode: pricing.mode === 'fixed' || pricing.mode === 'range' || pricing.mode === 'hidden' ? pricing.mode : 'hidden',
-      aiMayCommunicate: bool(pricing.aiMayCommunicate, false),
+      mode:
+        pricing.mode === 'fixed' || pricing.mode === 'range' || pricing.mode === 'hidden'
+          ? pricing.mode
+          : DEFAULT_PLAYBOOK.pricing.mode,
+      aiMayCommunicate: bool(
+        pricing.aiMayCommunicate,
+        DEFAULT_PLAYBOOK.pricing.aiMayCommunicate,
+      ),
       min: num(pricing.min, DEFAULT_PLAYBOOK.pricing.min),
       max: num(pricing.max, DEFAULT_PLAYBOOK.pricing.max),
       currency: 'EUR',
@@ -202,7 +215,7 @@ export function mergePlaybook(raw: unknown): CommercialPlaybook {
       neverPromise: list(promise.neverPromise, DEFAULT_PLAYBOOK.promisePolicy.neverPromise),
     },
     humanEscalation: {
-      price: bool(human.price, true),
+      price: bool(human.price, DEFAULT_PLAYBOOK.humanEscalation.price),
       discount: bool(human.discount, true),
       contracts: bool(human.contracts, true),
       legalPrivacy: bool(human.legalPrivacy, true),

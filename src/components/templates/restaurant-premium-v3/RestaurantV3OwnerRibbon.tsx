@@ -7,6 +7,7 @@ type Props = {
   whatsappHref: string | null;
   siteHref: string | null;
   offerPrice?: string | null;
+  deliveryTime?: string;
 };
 
 export function RestaurantV3OwnerRibbon({
@@ -14,6 +15,7 @@ export function RestaurantV3OwnerRibbon({
   whatsappHref,
   siteHref,
   offerPrice = null,
+  deliveryTime = '24 ore',
 }: Props) {
   return (
     <aside className={styles.ribbon} aria-label="Anteprima dimostrativa">
@@ -21,7 +23,9 @@ export function RestaurantV3OwnerRibbon({
         <strong>
           {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ribbonTitle} · {businessName}
         </strong>
-        <span className={styles.ribbonMuted}>{ownerRibbonBody(offerPrice)}</span>
+        <span className={styles.ribbonMuted}>
+          {ownerRibbonBody(offerPrice, deliveryTime)}
+        </span>
       </p>
       <div className={styles.ribbonActions}>
         {whatsappHref ? (

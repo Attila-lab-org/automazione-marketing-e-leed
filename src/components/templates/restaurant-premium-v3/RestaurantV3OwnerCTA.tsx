@@ -5,18 +5,22 @@ import { ownerFinalBody } from '@/lib/templates/owner-commercial';
 type Props = {
   ownerCtaLabel: string;
   whatsappHref: string | null;
+  phoneHref: string | null;
   siteHref: string | null;
   businessName: string;
   offerPrice?: string | null;
+  deliveryTime?: string;
 };
 
 /** Owner-facing conversion only — never links to restaurant #contatti. */
 export function RestaurantV3OwnerCTA({
   ownerCtaLabel,
   whatsappHref,
+  phoneHref,
   siteHref,
   businessName,
   offerPrice = null,
+  deliveryTime = '24 ore',
 }: Props) {
   return (
     <section id="owner" className={styles.owner} aria-label="Proposta commerciale" data-reveal>
@@ -34,12 +38,17 @@ export function RestaurantV3OwnerCTA({
           </div>
         ) : null}
         <h2>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerHeadline}</h2>
-        <p>{ownerFinalBody(offerPrice)}</p>
+        <p>{ownerFinalBody(offerPrice, deliveryTime)}</p>
         <p className={styles.ownerMicro}>{RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerMicro}</p>
         <div className={styles.ownerActions}>
           {whatsappHref ? (
             <a className={`${styles.btn} ${styles.btnWhatsApp}`} href={whatsappHref}>
               {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaWhatsApp}
+            </a>
+          ) : null}
+          {phoneHref ? (
+            <a className={`${styles.btn} ${styles.btnOnDarkGhost}`} href={phoneHref}>
+              {RESTAURANT_PREMIUM_V3_CONCEPT_COPY.ownerCtaPhone}
             </a>
           ) : null}
           {siteHref ? (
@@ -48,11 +57,11 @@ export function RestaurantV3OwnerCTA({
             </a>
           ) : null}
         </div>
-        {whatsappHref ? (
+        {whatsappHref || phoneHref ? (
           <ol className={styles.ownerSteps}>
-            <li>WhatsApp con un tocco</li>
-            <li>Messaggio già pronto</li>
-            <li>Ti rispondiamo noi</li>
+            <li>Scrivi o chiama con un tocco</li>
+            <li>Consegna in {deliveryTime}</li>
+            <li>Assistenza diretta</li>
           </ol>
         ) : null}
       </div>

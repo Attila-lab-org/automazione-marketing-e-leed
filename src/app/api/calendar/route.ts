@@ -8,6 +8,7 @@ import {
   listCalendarEvents,
   listSlotsInRange,
 } from '@/lib/calendar';
+import { emailHtmlToText } from '@/lib/messaging/html-to-text';
 import type { CalendarEventType } from '@/lib/types/database';
 
 export const runtime = 'nodejs';
@@ -104,7 +105,10 @@ export const GET = withAdmin(async (request: Request) => {
                 .limit(Math.max(40, threads.length * 3));
               for (const message of messages ?? []) {
                 if (!previewByThread.has(message.thread_id) && message.body_snapshot) {
-                  previewByThread.set(message.thread_id, String(message.body_snapshot).slice(0, 160));
+                  previewByThread.set(
+                    message.thread_id,
+                    emailHtmlToText(String(message.body_snapshot)).slice(0, 160),
+                  );
                 }
               }
             }

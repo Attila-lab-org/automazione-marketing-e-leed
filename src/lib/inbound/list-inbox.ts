@@ -1,4 +1,5 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
+import { emailHtmlToText } from '@/lib/messaging/html-to-text';
 
 export type InboxThreadItem = {
   threadId: string;
@@ -145,7 +146,7 @@ export async function listInboxThreads(
       channel,
       channelLabel,
       contactHandle: contactByLead.get(t.lead_id) ?? null,
-      preview: latest?.body?.slice(0, 160) ?? null,
+      preview: latest?.body ? emailHtmlToText(latest.body).slice(0, 160) : null,
       businessStatus: lead?.business_status ?? 'NEW',
       needsAttention:
         t.status === 'NEEDS_REPLY' ||

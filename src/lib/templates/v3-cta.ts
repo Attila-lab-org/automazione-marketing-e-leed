@@ -13,7 +13,7 @@ export function resolveRestaurantCtaHref(args: {
   return '#contatti';
 }
 
-export type OwnerContactChannel = 'whatsapp' | 'site' | 'auto';
+export type OwnerContactChannel = 'whatsapp' | 'phone' | 'site' | 'auto';
 
 /**
  * Owner-facing CTA: explicit URL wins; otherwise public interest endpoint for the demo slug.
@@ -78,6 +78,26 @@ export function normalizeWhatsAppPhone(raw: string): string | null {
   }
   if (digits.length < 10 || digits.length > 15) return null;
   return digits;
+}
+
+/** Numero chiamabile ricavato da un numero semplice o da un link WhatsApp. */
+export function extractContactPhone(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  try {
+    if (/^https?:\/\//i.test(value)) {
+      const url = new URL(value);
+      const candidate =
+        url.searchParams.get('phone') ??
+        (url.hostname.toLowerCase().includes('wa.me')
+          ? url.pathname.split('/').filter(Boolean)[0] ?? null
+          : null);
+      return candidate ? normalizeWhatsAppPhone(candidate) : null;
+    }
+  } catch {
+    return null;
+  }
+  return normalizeWhatsAppPhone(value);
 }
 
 /**

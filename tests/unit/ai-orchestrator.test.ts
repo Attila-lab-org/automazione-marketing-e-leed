@@ -651,7 +651,7 @@ describe('telegram sales thread follow-up', () => {
     expect(sent.text).toBe('Bozza contestuale Attila');
   });
 
-  it('prezzo, sconto e legale restano HUMAN_ONLY anche sui canali automatici', () => {
+  it('il prezzo autorizzato può essere comunicato, sconto e legale restano HUMAN_ONLY', () => {
     const pricing = resolveResponseMode({
       classification: mockClassifyInbound('Quanto costa?'),
       playbook: DEFAULT_PLAYBOOK,
@@ -659,7 +659,7 @@ describe('telegram sales thread follow-up', () => {
       firstReply: false,
       channel: 'TELEGRAM',
     });
-    expect(pricing.mode).toBe('HUMAN_ONLY');
+    expect(pricing.mode).toBe('AUTO_ALLOWED');
 
     const discount = resolveResponseMode({
       classification: mockClassifyInbound('Me lo fai a 350?'),

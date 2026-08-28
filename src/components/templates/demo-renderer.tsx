@@ -28,7 +28,9 @@ export default function DemoRenderer({
   offerPrice,
   showOwnerBridge,
   whatsappEnabled,
+  phoneEnabled,
   siteEnabled,
+  deliveryTime,
 }: DemoRendererProps) {
   if (rendererKey === RESTAURANT_PREMIUM_V3_RENDERER_KEY) {
     return (
@@ -39,7 +41,9 @@ export default function DemoRenderer({
         offerPrice={offerPrice}
         showOwnerBridge={showOwnerBridge}
         whatsappEnabled={whatsappEnabled}
+        phoneEnabled={phoneEnabled}
         siteEnabled={siteEnabled}
+        deliveryTime={deliveryTime}
       />
     );
   }

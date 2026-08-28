@@ -24,6 +24,7 @@ export type ProviderStatusItem = {
 export type CommercialConfigItem = {
   id:
     | 'owner_whatsapp'
+    | 'owner_phone'
     | 'owner_contact_url'
     | 'owner_offer_price'
     | 'owner_show_bridge'
@@ -199,6 +200,15 @@ function commercialConfig(env: NodeJS.ProcessEnv): CommercialConfigItem[] {
       name: 'OWNER_WHATSAPP',
       status: st.whatsapp,
       detail: st.whatsapp === 'READY' ? 'configurato' : 'mancante — nessun CTA WhatsApp',
+    },
+    {
+      id: 'owner_phone',
+      name: 'OWNER_PHONE',
+      status: st.phone,
+      detail:
+        st.phone === 'READY'
+          ? 'numero collegato al pulsante Chiamami'
+          : 'mancante — usa OWNER_PHONE o OWNER_WHATSAPP',
     },
     {
       id: 'owner_contact_url',

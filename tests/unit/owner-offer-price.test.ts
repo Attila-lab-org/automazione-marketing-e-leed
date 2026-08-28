@@ -1,12 +1,12 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
   getOwnerOfferPrice,
+  getOwnerDeliveryTime,
   isOwnerBridgeEnabled,
   ownerFinalBody,
   ownerRibbonBody,
 } from '../../src/lib/templates/owner-commercial';
 import { buildWhatsAppUrl } from '../../src/lib/templates/v3-cta';
-import { RESTAURANT_PREMIUM_V3_CONCEPT_COPY } from '../../src/lib/templates/v3-assets';
 
 describe('OWNER_OFFER_PRICE', () => {
   const original = { ...process.env };
@@ -19,20 +19,13 @@ describe('OWNER_OFFER_PRICE', () => {
     process.env = { ...original };
   });
 
-  it('owner price missing → nessun 350€ in copy/WhatsApp', () => {
+  it('owner price missing → usa la proposta base da 350 €', () => {
     delete process.env.OWNER_OFFER_PRICE;
-    expect(getOwnerOfferPrice()).toBeNull();
-    expect(ownerFinalBody(null)).not.toMatch(/350/);
-    expect(ownerRibbonBody(null)).not.toMatch(/350/);
-    expect(JSON.stringify(RESTAURANT_PREMIUM_V3_CONCEPT_COPY)).not.toMatch(/350/);
-
-    const url = buildWhatsAppUrl({
-      phoneOrUrl: '3462689082',
-      businessName: 'Trattoria',
-      slug: 'trattoria',
-      offerPrice: null,
-    });
-    expect(decodeURIComponent(url!)).not.toMatch(/350/);
+    delete process.env.OWNER_DELIVERY_TIME;
+    expect(getOwnerOfferPrice()).toBe('350 €');
+    expect(getOwnerDeliveryTime()).toBe('24 ore');
+    expect(ownerFinalBody(getOwnerOfferPrice())).toContain('350 €');
+    expect(ownerRibbonBody(getOwnerOfferPrice())).toContain('24 ore');
   });
 
   it('owner price configured → prezzo disponibile', () => {

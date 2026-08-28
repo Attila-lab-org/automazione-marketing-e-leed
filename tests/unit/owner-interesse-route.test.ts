@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   buildWhatsAppUrl,
+  extractContactPhone,
   resolveOwnerCtaHref,
 } from '../../src/lib/templates/v3-cta';
 
@@ -64,7 +65,7 @@ describe('Owner interesse route — no hardcoded fallbacks', () => {
     expect(JSON.stringify(body)).not.toMatch(/attila-lab/);
   });
 
-  it('channel=whatsapp con OWNER_WHATSAPP → wa.me + messaggio (senza prezzo se non configurato)', async () => {
+  it('channel=whatsapp con OWNER_WHATSAPP → wa.me + proposta base', async () => {
     process.env.OWNER_WHATSAPP = '3462689082';
     delete process.env.OWNER_OFFER_PRICE;
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -77,8 +78,21 @@ describe('Owner interesse route — no hardcoded fallbacks', () => {
     expect(res.status).toBe(302);
     const loc = res.headers.get('location') ?? '';
     expect(loc.startsWith('https://wa.me/393462689082')).toBe(true);
-    expect(decodeURIComponent(loc)).not.toMatch(/350/);
+    expect(decodeURIComponent(loc)).toContain('350 €');
     expect(decodeURIComponent(loc)).toContain('trattoria duomo');
+  });
+
+  it('channel=phone usa OWNER_PHONE e apre la chiamata', async () => {
+    process.env.OWNER_PHONE = '+39 346 268 9082';
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const { GET } = await import('../../src/app/demo/[slug]/interesse/route');
+    const res = await GET(
+      new Request('http://localhost/demo/trattoria-duomo/interesse?channel=phone'),
+      { params: Promise.resolve({ slug: 'trattoria-duomo' }) },
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('tel:+393462689082');
   });
 
   it('OWNER_CONTACT_URL non http(s) → 503', async () => {
@@ -93,13 +107,17 @@ describe('Owner interesse route — no hardcoded fallbacks', () => {
 });
 
 describe('Owner CTA helpers', () => {
-  it('resolveOwnerCtaHref channel whatsapp/site', () => {
+  it('resolveOwnerCtaHref gestisce WhatsApp, telefono e sito', () => {
     expect(resolveOwnerCtaHref({ demoSlug: 'x', channel: 'whatsapp' })).toBe(
       '/demo/x/interesse?channel=whatsapp',
     );
     expect(resolveOwnerCtaHref({ demoSlug: 'x', channel: 'site' })).toBe(
       '/demo/x/interesse?channel=site',
     );
+    expect(resolveOwnerCtaHref({ demoSlug: 'x', channel: 'phone' })).toBe(
+      '/demo/x/interesse?channel=phone',
+    );
+    expect(extractContactPhone('https://wa.me/393462689082')).toBe('393462689082');
   });
 
   it('buildWhatsAppUrl precompila testo senza prezzo di default', () => {

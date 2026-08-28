@@ -9,7 +9,7 @@ export default function TemplatesPage() {
       <SectionSubnav items={[...CAMPAIGN_SUBNAV]} />
       <PageHeader
         title="Modelli"
-        description="I modelli sono la base grafica usata per creare le anteprime. Le anteprime già create non cambiano quando aggiorni un modello."
+        description="Controlla in un solo punto il sito dimostrativo, il messaggio email, l’offerta e le azioni proposte al cliente."
       />
       <TemplatesLibrary />
     </div>

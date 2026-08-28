@@ -40,6 +40,7 @@ const PROVIDER_NAMES: Record<string, string> = {
 
 const COMMERCIAL_NAMES: Record<string, string> = {
   owner_whatsapp: "Numero WhatsApp",
+  owner_phone: "Numero per le chiamate",
   owner_contact_url: "Pagina di contatto",
   owner_offer_price: "Prezzo dell’offerta",
   owner_show_bridge: "Sezione commerciale nelle anteprime",

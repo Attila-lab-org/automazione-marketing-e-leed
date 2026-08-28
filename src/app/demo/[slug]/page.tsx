@@ -2,9 +2,11 @@ import DemoRenderer from '@/components/templates/demo-renderer';
 import { loadDemoBySlug } from '@/lib/demos/load';
 import { resolveRendererKey, UnsupportedRendererError } from '@/lib/templates/registry';
 import {
+  getOwnerDeliveryTime,
   getOwnerOfferPrice,
   isOwnerBridgeEnabled,
   isOwnerContactConfigured,
+  isOwnerPhoneConfigured,
   isOwnerWhatsAppConfigured,
 } from '@/lib/templates/owner-commercial';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
@@ -60,8 +62,10 @@ export default async function PublicDemoPage({ params }: PageProps) {
         data={demo.data}
         demoSlug={demo.slug}
         offerPrice={getOwnerOfferPrice()}
+        deliveryTime={getOwnerDeliveryTime()}
         showOwnerBridge={isOwnerBridgeEnabled()}
         whatsappEnabled={isOwnerWhatsAppConfigured()}
+        phoneEnabled={isOwnerPhoneConfigured()}
         siteEnabled={isOwnerContactConfigured()}
       />
     </>
