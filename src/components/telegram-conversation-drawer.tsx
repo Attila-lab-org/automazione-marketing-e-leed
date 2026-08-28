@@ -136,8 +136,31 @@ export default function TelegramConversationDrawer({
                       onDone={onChanged}
                     />
                   )}
+                  <HandoffButton
+                    threadId={detail.threadId}
+                    action="archive"
+                    label="Archivia chat"
+                    confirmMessage="Archiviare questa chat? Sparisce dalle aperte, resta nell’archivio Telegram."
+                    onDone={async () => {
+                      await onChanged?.();
+                      onClose();
+                    }}
+                  />
                   </div>
-                ) : null}
+                ) : (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <HandoffButton
+                      threadId={detail.threadId}
+                      action="archive"
+                      label="Archivia conversazione"
+                      confirmMessage="Archiviare questa conversazione email?"
+                      onDone={async () => {
+                        await onChanged?.();
+                        onClose();
+                      }}
+                    />
+                  </div>
+                )}
               </section>
 
               {detail.channel === "EMAIL" ? (
@@ -397,7 +420,7 @@ function HandoffButton({
   onDone,
 }: {
   threadId: string;
-  action: "take_over" | "return_to_ai" | "stop";
+  action: "take_over" | "return_to_ai" | "stop" | "archive" | "unarchive";
   label: string;
   confirmMessage?: string;
   onDone?: () => void | Promise<void>;
@@ -436,6 +459,10 @@ function HandoffButton({
                     : "Attila è attivo. Questo messaggio richiede un controllo manuale."
                 : action === "take_over"
                   ? "Ora gestisci tu la conversazione."
+                  : action === "archive"
+                    ? "Conversazione archiviata."
+                    : action === "unarchive"
+                      ? "Conversazione riaperta."
                   : "Conversazione chiusa e automazione fermata.",
             );
             await onDone?.();

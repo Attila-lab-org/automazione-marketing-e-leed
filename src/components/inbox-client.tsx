@@ -66,9 +66,11 @@ function primaryStatus(item: InboxThreadItem): string {
 export default function InboxClient({
   channelScope = "all",
   initialThreads,
+  archivedView = false,
 }: {
-  channelScope?: "all" | "telegram";
+  channelScope?: "all" | "telegram" | "email";
   initialThreads?: InboxThreadItem[];
+  archivedView?: boolean;
 }) {
   const [threads, setThreads] = useState<InboxThreadItem[]>(initialThreads ?? []);
   const [loading, setLoading] = useState(initialThreads === undefined);
@@ -79,12 +81,13 @@ export default function InboxClient({
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [view, setView] = useState<InboxView>("all");
   const [channel, setChannel] = useState<ChannelFilter>(
-    channelScope === "telegram" ? "telegram" : "all",
+    channelScope === "telegram" ? "telegram" : channelScope === "email" ? "email" : "all",
   );
   const [reply, setReply] = useState<ReplyFilter>("all");
   const [urgency, setUrgency] = useState<UrgencyFilter>("all");
   const [query, setQuery] = useState("");
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
   const openThreadRef = useRef<string | null>(null);
   const conversationCache = useRef(new Map<string, InboxConversationDetail>());
   const conversationRequests = useRef(
@@ -92,12 +95,42 @@ export default function InboxClient({
   );
 
   async function refreshThreads() {
-    const response = await fetch("/api/inbox", { cache: "no-store" });
+    const params = new URLSearchParams();
+    if (channelScope === "telegram" || channelScope === "email") {
+      params.set("channel", channelScope);
+    }
+    if (archivedView) params.set("archived", "1");
+    const response = await fetch(`/api/inbox?${params.toString()}`, { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "Impossibile caricare i messaggi");
     const loadedThreads = (data.threads as InboxThreadItem[]) ?? [];
     setThreads(loadedThreads);
     return loadedThreads;
+  }
+
+  async function archiveThread(threadId: string, archive: boolean) {
+    setActionBusy(threadId);
+    try {
+      const response = await fetch("/api/inbox/handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId,
+          action: archive ? "archive" : "unarchive",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Operazione non riuscita");
+      await refreshThreads();
+      if (openThreadId === threadId) {
+        setOpenThreadId(null);
+        setConversation(null);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Operazione non riuscita");
+    } finally {
+      setActionBusy(null);
+    }
   }
 
   function loadConversation(
@@ -202,20 +235,26 @@ export default function InboxClient({
   const scopedThreads =
     channelScope === "telegram"
       ? threads.filter((thread) => thread.channel === "telegram")
-      : threads;
+      : channelScope === "email"
+        ? threads.filter((thread) => thread.channel === "email")
+        : threads;
 
   if (scopedThreads.length === 0) {
     return (
       <EmptyState
-        title="Nessuna conversazione"
+        title={archivedView ? "Nessuna chat archiviata" : "Nessuna conversazione"}
         description={
           channelScope === "telegram"
-            ? "Le conversazioni del bot compariranno qui appena arriva il primo messaggio."
-            : "Qui vedrai le risposte email e Telegram. Quando arriva un messaggio rilevante, compare in questa lista."
+            ? archivedView
+              ? "Quando archivi una chat Telegram, la trovi qui."
+              : "Le chat del bot compariranno qui al primo messaggio utile."
+            : channelScope === "email"
+              ? "Qui vedrai solo le risposte email dei clienti."
+              : "Qui vedrai le conversazioni da gestire."
         }
         nextAction={{
-          label: "Controlla i collegamenti",
-          href: "/settings",
+          label: channelScope === "telegram" ? "Configura Telegram" : "Controlla i collegamenti",
+          href: channelScope === "telegram" ? "/telegram#telegram-config" : "/settings",
         }}
       />
     );
@@ -224,18 +263,25 @@ export default function InboxClient({
   const views: Array<{ id: InboxView; label: string; description: string }> = [
     {
       id: "all",
-      label: "Tutte",
-      description: "Tutte le conversazioni email e Telegram, incluse quelle già gestite.",
+      label: archivedView ? "Archiviate" : "Aperte",
+      description:
+        channelScope === "telegram"
+          ? archivedView
+            ? "Chat Telegram chiuse."
+            : "Solo chat Telegram ancora aperte."
+          : channelScope === "email"
+            ? "Solo conversazioni email."
+            : "Conversazioni da gestire.",
     },
     {
       id: "manual",
       label: "Da rispondere",
-      description: "Richiedono una tua decisione o il takeover manuale.",
+      description: "Richiedono una tua decisione.",
     },
     {
       id: "ai",
-      label: "Gestiti dall’AI",
-      description: "Conversazioni sicure che Attila sta portando avanti.",
+      label: "Gestite da Attila",
+      description: "Conversazioni che Attila sta portando avanti.",
     },
   ];
   const counts = Object.fromEntries(
@@ -324,7 +370,7 @@ export default function InboxClient({
                 value={channel}
                 onChange={(value) => setChannel(value as ChannelFilter)}
                 options={[
-                  ["all", "Email + Telegram"],
+                  ["all", "Tutti"],
                   ["email", "Solo email"],
                   ["telegram", "Solo Telegram"],
                 ]}
@@ -383,6 +429,8 @@ export default function InboxClient({
                 key={thread.threadId}
                 item={thread}
                 expanded={expandedThreadId === thread.threadId}
+                archivedView={archivedView}
+                actionBusy={actionBusy === thread.threadId}
                 onToggle={() => {
                   prefetchConversation(thread.threadId);
                   setExpandedThreadId((current) =>
@@ -391,6 +439,7 @@ export default function InboxClient({
                 }}
                 onPrefetch={() => prefetchConversation(thread.threadId)}
                 onOpen={() => void openConversation(thread.threadId)}
+                onArchive={() => void archiveThread(thread.threadId, !archivedView)}
               />
             ))}
           </ul>
@@ -423,15 +472,21 @@ export default function InboxClient({
 function InboxRow({
   item,
   expanded,
+  archivedView,
+  actionBusy,
   onToggle,
   onPrefetch,
   onOpen,
+  onArchive,
 }: {
   item: InboxThreadItem;
   expanded: boolean;
+  archivedView: boolean;
+  actionBusy: boolean;
   onToggle: () => void;
   onPrefetch: () => void;
   onOpen: () => void;
+  onArchive: () => void;
 }) {
   return (
     <li>
@@ -446,15 +501,15 @@ function InboxRow({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold text-stone-900">{item.leadName}</span>
-            <span
-              className={
-                item.channel === "telegram"
-                  ? "rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-800"
-                  : "rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800"
-              }
-            >
-              {item.channel === "telegram" ? "Telegram" : "Email"}
-            </span>
+            {item.channel === "telegram" ? (
+              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-800">
+                Telegram
+              </span>
+            ) : item.channel === "email" ? (
+              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800">
+                Email
+              </span>
+            ) : null}
             <span
               className={
                 item.humanRequiredReason || item.assignedMode === "HUMAN"
@@ -503,13 +558,38 @@ function InboxRow({
               <p className="mt-1 font-medium text-stone-800">{item.nextStep ?? primaryStatus(item)}</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onOpen}
-            className="mt-4 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
-          >
-            Apri cronologia completa
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onOpen}
+              className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
+            >
+              Apri conversazione
+            </button>
+            <button
+              type="button"
+              disabled={actionBusy}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (
+                  !archivedView &&
+                  !window.confirm(
+                    `Archiviare la conversazione con ${item.leadName}? La togli dalle chat aperte.`,
+                  )
+                ) {
+                  return;
+                }
+                onArchive();
+              }}
+              className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+            >
+              {actionBusy
+                ? "Attendi…"
+                : archivedView
+                  ? "Riapri chat"
+                  : "Archivia"}
+            </button>
+          </div>
         </div>
       ) : null}
     </li>

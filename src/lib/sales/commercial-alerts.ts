@@ -8,223 +8,270 @@ export type CommercialAlert = {
   href: string;
   createdAt: string;
   leadName?: string | null;
+  priority: 'high' | 'normal';
+  channel: 'telegram' | 'email' | 'campaign' | 'any';
 };
 
-const EVENT_COPY: Record<string, { title: string; reason: (msg: string) => string }> = {
-  INBOUND_MESSAGE_RECEIVED: {
-    title: 'Nuovo contatto',
-    reason: () => 'È arrivato un messaggio: Attila lo ha classificato.',
-  },
-  TELEGRAM_REPLY_SENT: {
-    title: 'Risposta automatica inviata',
-    reason: () => 'I controlli di sicurezza sono passati e Attila ha risposto.',
-  },
-  TELEGRAM_SEND_GUARD_BLOCKED: {
-    title: 'Bozza bloccata',
-    reason: (msg) => msg || 'Invio automatico bloccato: serve il tuo controllo.',
-  },
-  TELEGRAM_REPLY_SKIPPED: {
-    title: 'Bozza bloccata',
-    reason: (msg) => msg || 'Nessun invio automatico: bozza o policy da controllare.',
-  },
-  OPERATOR_ALERT: {
-    title: 'Richiesta urgente',
-    reason: (msg) => msg || 'Attila chiede la tua attenzione.',
-  },
-  FOLLOWUP_DRAFT_PREPARED: {
-    title: 'Follow-up da approvare',
-    reason: () => 'Bozza personalizzata pronta nella coda di controllo.',
-  },
-  APPOINTMENT_BOOKED: {
-    title: 'Appuntamento accettato',
-    reason: () => 'Il cliente ha accettato una chiamata.',
-  },
+export type ListCommercialAlertsOptions = {
+  limit?: number;
+  /** Solo avvisi rilevanti per Telegram. */
+  channel?: 'telegram' | 'all';
 };
 
-function humanizeKind(kind: string, message: string): { title: string; reason: string } {
-  if (kind.includes('price') || /prezzo/i.test(message)) {
-    return { title: 'Richiesta prezzo', reason: message || 'Il cliente ha chiesto del prezzo.' };
+function stripJargon(text: string): string {
+  return text
+    .replace(/\b(HUMAN_ONLY|HUMAN_REQUIRED|APPROVAL_REQUIRED|DRAFT_ONLY|AUTO_ALLOWED)\b/gi, '')
+    .replace(/\bAttila:\s*/gi, '')
+    .replace(/\s*[—–-]\s*/g, ' — ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[\s—–-]+|[\s—–-]+$/g, '')
+    .trim();
+}
+
+function humanizeOperatorMessage(message: string): { title: string; reason: string; priority: 'high' | 'normal' } {
+  const clean = stripJargon(message);
+  if (/prezzo|pricing|sconto/i.test(message)) {
+    return {
+      title: 'Serve te sul prezzo',
+      reason: clean || 'Il cliente parla di prezzo: meglio rispondere tu.',
+      priority: 'high',
+    };
   }
-  if (kind.includes('interest') || /interess/i.test(message)) {
-    return { title: 'Cliente interessato', reason: message || 'Segnale di interesse chiaro.' };
+  if (/interess|ecommerce|sito/i.test(message)) {
+    return {
+      title: 'Cliente interessato',
+      reason: clean || 'Ha mostrato interesse: continua tu la conversazione.',
+      priority: 'high',
+    };
   }
-  if (kind.includes('draft') || kind.includes('telegram_draft')) {
-    return { title: 'Bozza bloccata', reason: message || 'Serve la tua conferma prima di inviare.' };
+  if (/call|chiamata|appuntamento/i.test(message)) {
+    return {
+      title: 'Chiamata in gioco',
+      reason: clean || 'Sta valutando una chiamata.',
+      priority: 'high',
+    };
   }
-  const mapped = EVENT_COPY[kind];
-  if (mapped) return { title: mapped.title, reason: mapped.reason(message) };
   return {
-    title: 'Aggiornamento commerciale',
-    reason: message || 'Attila ha aggiornato la conversazione.',
+    title: 'Serve il tuo intervento',
+    reason: clean || 'Attila ha messo in pausa l’automatico su questa chat.',
+    priority: 'high',
   };
 }
 
-function hrefForEvent(eventType: string, data: Record<string, unknown>): string {
-  if (eventType === 'FOLLOWUP_DRAFT_PREPARED') return '/review';
+function hrefForEvent(eventType: string, data: Record<string, unknown>, channel: CommercialAlert['channel']): string {
+  if (eventType === 'FOLLOWUP_DRAFT_PREPARED' || eventType === 'followup_due') return '/review';
   const threadId = typeof data.threadId === 'string' ? data.threadId : null;
-  if (threadId) return `/inbox?thread=${encodeURIComponent(threadId)}`;
-  if (eventType.startsWith('TELEGRAM')) return '/telegram';
-  return '/overview';
+  if (threadId) {
+    return channel === 'telegram'
+      ? `/telegram?thread=${encodeURIComponent(threadId)}`
+      : `/inbox?thread=${encodeURIComponent(threadId)}`;
+  }
+  if (channel === 'telegram' || eventType.startsWith('TELEGRAM')) return '/telegram';
+  if (channel === 'campaign') return '/campaigns';
+  return '/inbox';
+}
+
+function dedupeKey(alert: CommercialAlert): string {
+  return `${alert.kind}:${alert.leadName ?? ''}:${alert.href}`;
 }
 
 export async function listCommercialAlerts(
   admin: AppSupabaseClient,
   workspaceId: string,
-  limit = 12,
+  options: ListCommercialAlertsOptions = {},
 ): Promise<CommercialAlert[]> {
-  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: logs } = await admin
-    .from('activity_log')
-    .select('id, event_type, message, data, occurred_at, lead_id')
-    .eq('workspace_id', workspaceId)
-    .in('event_type', [
-      'INBOUND_MESSAGE_RECEIVED',
-      'TELEGRAM_REPLY_SENT',
-      'TELEGRAM_SEND_GUARD_BLOCKED',
-      'TELEGRAM_REPLY_SKIPPED',
-      'OPERATOR_ALERT',
-      'FOLLOWUP_DRAFT_PREPARED',
-    ])
-    .gte('occurred_at', since)
-    .order('occurred_at', { ascending: false })
-    .limit(40);
-
-  const { data: salesEvents } = await admin
-    .from('sales_thread_events')
-    .select('id, event_type, payload, created_at, thread_id')
-    .eq('workspace_id', workspaceId)
-    .in('event_type', ['APPOINTMENT_BOOKED', 'INBOUND_CLASSIFIED', 'AI_REPLY_DRAFT'])
-    .gte('created_at', since)
-    .order('created_at', { ascending: false })
-    .limit(40);
-
-  const leadIds = [
-    ...new Set([
-      ...(logs ?? []).map((row) => row.lead_id).filter(Boolean),
-      ...(((salesEvents ?? [])
-        .map((row) => {
-          const payload =
-            row.payload && typeof row.payload === 'object'
-              ? (row.payload as Record<string, unknown>)
-              : {};
-          return typeof payload.leadId === 'string' ? payload.leadId : null;
-        })
-        .filter(Boolean) as string[])),
-    ]),
-  ] as string[];
-
-  const { data: leads } = leadIds.length
-    ? await admin.from('leads').select('id, name').in('id', leadIds)
-    : { data: [] as { id: string; name: string }[] };
-  const leadById = new Map((leads ?? []).map((l) => [l.id, l.name]));
+  const limit = options.limit ?? 5;
+  const channelFilter = options.channel ?? 'all';
+  const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
 
   const alerts: CommercialAlert[] = [];
 
-  for (const row of logs ?? []) {
-    const data =
-      row.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>) : {};
-    const kind =
-      typeof data.kind === 'string' ? data.kind : row.event_type;
-    // Skip noisy skips that are just "follow-up no auto"
-    if (
-      row.event_type === 'TELEGRAM_REPLY_SKIPPED' &&
-      typeof data.reason === 'string' &&
-      data.reason === 'FOLLOWUP_NO_AUTO_REPLY'
-    ) {
-      continue;
-    }
-    const copy = humanizeKind(kind, row.message ?? '');
+  // 1) Thread che richiedono davvero l'operatore (fonte primaria, non il log rumoroso)
+  let threadQuery = admin
+    .from('message_threads')
+    .select('id, lead_id, channel, human_required_reason, priority, commercial_state, updated_at')
+    .eq('workspace_id', workspaceId)
+    .or('assigned_mode.eq.HUMAN,status.eq.NEEDS_REPLY,priority.eq.HOT')
+    .order('updated_at', { ascending: false })
+    .limit(12);
+  if (channelFilter === 'telegram') {
+    threadQuery = threadQuery.eq('channel', 'TELEGRAM');
+  }
+  const { data: threads } = await threadQuery;
+  const threadLeadIds = [...new Set((threads ?? []).map((t) => t.lead_id).filter(Boolean))];
+  const { data: threadLeads } = threadLeadIds.length
+    ? await admin.from('leads').select('id, name').in('id', threadLeadIds)
+    : { data: [] as { id: string; name: string }[] };
+  const threadLeadById = new Map((threadLeads ?? []).map((l) => [l.id, l.name]));
+
+  for (const thread of threads ?? []) {
+    const reasonRaw = thread.human_required_reason ?? thread.commercial_state ?? '';
+    const copy = humanizeOperatorMessage(String(reasonRaw));
+    const channel: CommercialAlert['channel'] =
+      thread.channel === 'TELEGRAM' ? 'telegram' : 'email';
     alerts.push({
-      id: `log:${row.id}`,
-      kind,
+      id: `thread:${thread.id}`,
+      kind: 'needs_you',
       title: copy.title,
       reason: copy.reason,
-      href: hrefForEvent(row.event_type, data),
-      createdAt: row.occurred_at,
-      leadName: row.lead_id ? leadById.get(row.lead_id) ?? null : null,
+      href:
+        channel === 'telegram'
+          ? `/telegram?thread=${encodeURIComponent(thread.id)}`
+          : `/inbox?thread=${encodeURIComponent(thread.id)}`,
+      createdAt: thread.updated_at,
+      leadName: threadLeadById.get(thread.lead_id) ?? null,
+      priority: thread.priority === 'HOT' ? 'high' : copy.priority,
+      channel,
     });
   }
 
-  for (const row of salesEvents ?? []) {
-    const payload =
-      row.payload && typeof row.payload === 'object'
-        ? (row.payload as Record<string, unknown>)
-        : {};
-    if (row.event_type === 'APPOINTMENT_BOOKED') {
+  // 2) Appuntamenti accettati di recente
+  const { data: booked } = await admin
+    .from('sales_thread_events')
+    .select('id, payload, created_at, thread_id')
+    .eq('workspace_id', workspaceId)
+    .eq('event_type', 'APPOINTMENT_BOOKED')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  if (booked?.length) {
+    const threadIds = booked.map((b) => b.thread_id).filter(Boolean);
+    const { data: bookedThreads } = threadIds.length
+      ? await admin
+          .from('message_threads')
+          .select('id, lead_id, channel')
+          .in('id', threadIds)
+      : { data: [] as { id: string; lead_id: string; channel: string }[] };
+    const bookedByThread = new Map((bookedThreads ?? []).map((t) => [t.id, t]));
+    const bookedLeadIds = [...new Set((bookedThreads ?? []).map((t) => t.lead_id))];
+    const { data: bookedLeads } = bookedLeadIds.length
+      ? await admin.from('leads').select('id, name').in('id', bookedLeadIds)
+      : { data: [] as { id: string; name: string }[] };
+    const bookedLeadById = new Map((bookedLeads ?? []).map((l) => [l.id, l.name]));
+
+    for (const row of booked) {
+      const thread = bookedByThread.get(row.thread_id);
+      if (channelFilter === 'telegram' && thread?.channel !== 'TELEGRAM') continue;
+      const channel: CommercialAlert['channel'] =
+        thread?.channel === 'TELEGRAM' ? 'telegram' : 'any';
       alerts.push({
-        id: `sales:${row.id}`,
+        id: `booked:${row.id}`,
         kind: 'appointment_accepted',
-        title: 'Appuntamento accettato',
-        reason: 'Il cliente ha confermato la chiamata.',
-        href: row.thread_id
-          ? `/inbox?thread=${encodeURIComponent(row.thread_id)}`
-          : '/calendar',
+        title: 'Appuntamento fissato',
+        reason: 'Il cliente ha accettato la chiamata.',
+        href: hrefForEvent('APPOINTMENT_BOOKED', { threadId: row.thread_id }, channel),
         createdAt: row.created_at,
-        leadName: null,
+        leadName: thread ? bookedLeadById.get(thread.lead_id) ?? null : null,
+        priority: 'high',
+        channel,
       });
-      continue;
     }
-    if (row.event_type === 'INBOUND_CLASSIFIED') {
-      const intent = typeof payload.intent === 'string' ? payload.intent : '';
-      const pricing = payload.pricing === true;
-      if (pricing || intent === 'quote_request') {
+  }
+
+  // 3) Follow-up da preparare (solo overview / all, non sulla pagina Telegram)
+  if (channelFilter !== 'telegram') {
+    const nowIso = new Date().toISOString();
+    const { data: dueFollowups } = await admin
+      .from('campaign_leads')
+      .select('id, campaign_id, lead_id, sequence_step, next_action_at, updated_at')
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'SENT')
+      .gte('sequence_step', 1)
+      .lte('next_action_at', nowIso)
+      .order('next_action_at', { ascending: true })
+      .limit(4);
+
+    if (dueFollowups?.length) {
+      const fLeadIds = [...new Set(dueFollowups.map((r) => r.lead_id))];
+      const { data: fLeads } = await admin.from('leads').select('id, name').in('id', fLeadIds);
+      const fLeadById = new Map((fLeads ?? []).map((l) => [l.id, l.name]));
+      for (const row of dueFollowups) {
         alerts.push({
-          id: `sales:${row.id}`,
-          kind: 'price_request',
-          title: 'Richiesta prezzo',
-          reason: 'Il cliente ha chiesto informazioni sul prezzo.',
-          href: row.thread_id
-            ? `/inbox?thread=${encodeURIComponent(row.thread_id)}`
-            : '/inbox',
-          createdAt: row.created_at,
-          leadName: null,
+          id: `followup:${row.id}`,
+          kind: 'followup_due',
+          title: 'Follow-up da preparare',
+          reason: `Sollecito ${row.sequence_step} pronto: prepara la bozza e approvala.`,
+          href: `/campaigns/${row.campaign_id}`,
+          createdAt: row.next_action_at ?? row.updated_at,
+          leadName: fLeadById.get(row.lead_id) ?? null,
+          priority: 'normal',
+          channel: 'campaign',
         });
-      } else if (intent === 'call_accept' || payload.bookingAccepted === true) {
+      }
+    }
+
+    const { data: reviewFollowups } = await admin
+      .from('campaign_leads')
+      .select('id, campaign_id, lead_id, sequence_step, updated_at')
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'REVIEW')
+      .gte('sequence_step', 1)
+      .order('updated_at', { ascending: false })
+      .limit(4);
+    if (reviewFollowups?.length) {
+      const rLeadIds = [...new Set(reviewFollowups.map((r) => r.lead_id))];
+      const { data: rLeads } = await admin.from('leads').select('id, name').in('id', rLeadIds);
+      const rLeadById = new Map((rLeads ?? []).map((l) => [l.id, l.name]));
+      for (const row of reviewFollowups) {
         alerts.push({
-          id: `sales:${row.id}`,
-          kind: 'client_interested',
-          title: 'Cliente interessato',
-          reason: 'Segnale chiaro di interesse a una chiamata.',
-          href: row.thread_id
-            ? `/inbox?thread=${encodeURIComponent(row.thread_id)}`
-            : '/inbox',
-          createdAt: row.created_at,
-          leadName: null,
+          id: `review-fu:${row.id}`,
+          kind: 'followup_review',
+          title: 'Follow-up da approvare',
+          reason: 'Bozza pronta nella coda di controllo.',
+          href: '/review',
+          createdAt: row.updated_at,
+          leadName: rLeadById.get(row.lead_id) ?? null,
+          priority: 'normal',
+          channel: 'campaign',
         });
       }
     }
   }
 
-  // Follow-ups due (not yet prepared)
-  const nowIso = new Date().toISOString();
-  const { data: dueFollowups } = await admin
-    .from('campaign_leads')
-    .select('id, campaign_id, lead_id, sequence_step, next_action_at, updated_at')
-    .eq('workspace_id', workspaceId)
-    .eq('status', 'SENT')
-    .gte('sequence_step', 1)
-    .lte('next_action_at', nowIso)
-    .order('next_action_at', { ascending: true })
-    .limit(8);
-
-  if (dueFollowups?.length) {
-    const fLeadIds = [...new Set(dueFollowups.map((r) => r.lead_id))];
-    const { data: fLeads } = await admin.from('leads').select('id, name').in('id', fLeadIds);
-    const fLeadById = new Map((fLeads ?? []).map((l) => [l.id, l.name]));
-    for (const row of dueFollowups) {
+  // 4) Risposte Telegram inviate di recente (solo segnale positivo, max 1-2)
+  if (channelFilter === 'telegram' || channelFilter === 'all') {
+    const { data: sent } = await admin
+      .from('activity_log')
+      .select('id, message, data, occurred_at, lead_id')
+      .eq('workspace_id', workspaceId)
+      .eq('event_type', 'TELEGRAM_REPLY_SENT')
+      .gte('occurred_at', since)
+      .order('occurred_at', { ascending: false })
+      .limit(2);
+    const sentLeadIds = [...new Set((sent ?? []).map((s) => s.lead_id).filter(Boolean))] as string[];
+    const { data: sentLeads } = sentLeadIds.length
+      ? await admin.from('leads').select('id, name').in('id', sentLeadIds)
+      : { data: [] as { id: string; name: string }[] };
+    const sentLeadById = new Map((sentLeads ?? []).map((l) => [l.id, l.name]));
+    for (const row of sent ?? []) {
+      const data =
+        row.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>) : {};
       alerts.push({
-        id: `followup:${row.id}`,
-        kind: 'followup_due',
-        title: 'Follow-up da approvare',
-        reason: `Follow-up ${row.sequence_step} pronto da preparare e controllare.`,
-        href: `/campaigns/${row.campaign_id}`,
-        createdAt: row.next_action_at ?? row.updated_at,
-        leadName: fLeadById.get(row.lead_id) ?? null,
+        id: `sent:${row.id}`,
+        kind: 'telegram_sent',
+        title: 'Risposta inviata',
+        reason: 'Attila ha risposto in automatico protetto.',
+        href: hrefForEvent('TELEGRAM_REPLY_SENT', data, 'telegram'),
+        createdAt: row.occurred_at,
+        leadName: row.lead_id ? sentLeadById.get(row.lead_id) ?? null : null,
+        priority: 'normal',
+        channel: 'telegram',
       });
     }
   }
 
-  return alerts
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
-    .slice(0, limit);
+  const seen = new Set<string>();
+  const deduped: CommercialAlert[] = [];
+  for (const alert of alerts.sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority === 'high' ? -1 : 1;
+    return String(b.createdAt).localeCompare(String(a.createdAt));
+  })) {
+    const key = dedupeKey(alert);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(alert);
+    if (deduped.length >= limit) break;
+  }
+  return deduped;
 }

@@ -17,6 +17,11 @@ type TelegramStatus = {
   warning?: string | null;
 };
 
+type Props = {
+  /** Se true, il pulsante Configura scrolla alla sezione locale invece di /telegram. */
+  configHref?: string;
+};
+
 function modeCopy(mode: TelegramOperationalMode | undefined, enabled: boolean) {
   if (!enabled || mode === "stopped") {
     return {
@@ -27,19 +32,19 @@ function modeCopy(mode: TelegramOperationalMode | undefined, enabled: boolean) {
   }
   if (mode === "manual") {
     return {
-      title: "Telegram in gestione manuale",
-      body: "Attila ascolta e prepara le bozze: nessun invio automatico.",
+      title: "Gestione manuale",
+      body: "Ascolta e prepara bozze: nessun invio automatico.",
       active: true,
     };
   }
   return {
-    title: "Telegram in automatico protetto",
-    body: "Attila risponde alle conversazioni sicure. Appuntamento solo dopo interesse esplicito.",
+    title: "Automatico protetto",
+    body: "Risponde alle chat sicure. Chiamata solo dopo interesse esplicito.",
     active: true,
   };
 }
 
-export default function TelegramInboxStatus() {
+export default function TelegramInboxStatus({ configHref = "#telegram-config" }: Props) {
   const [status, setStatus] = useState<TelegramStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -78,31 +83,58 @@ export default function TelegramInboxStatus() {
   if (!status) return null;
 
   const copy = modeCopy(status.operationalMode, status.settings.enabled);
+  const stats = status.stats;
+  const showStats =
+    Boolean(stats) &&
+    (stats!.sent24h > 0 || stats!.draftsPending > 0 || stats!.errors24h > 0 || stats!.urgent > 0);
 
   return (
     <section
       className={
         copy.active
-          ? "flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-          : "flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          ? "flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          : "flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
       }
     >
-      <div>
-        <p className={copy.active ? "text-sm font-semibold text-emerald-900" : "text-sm font-semibold text-amber-900"}>
+      <div className="min-w-0">
+        <p
+          className={
+            copy.active
+              ? "text-sm font-semibold text-emerald-950"
+              : "text-sm font-semibold text-amber-950"
+          }
+        >
           {copy.title}
         </p>
-        <p className={copy.active ? "text-xs text-emerald-800" : "text-xs text-amber-800"}>
+        <p
+          className={
+            copy.active ? "mt-0.5 text-xs text-emerald-900/80" : "mt-0.5 text-xs text-amber-900/80"
+          }
+        >
           {!status.settings.enabled && !status.connection.ready
             ? "Completa prima il collegamento del bot nelle Impostazioni."
             : copy.body}
         </p>
-        {status.stats ? (
-          <p className="mt-1 text-xs text-stone-600">
-            Inviate {status.stats.sent24h} · bozze {status.stats.draftsPending} · errori{" "}
-            {status.stats.errors24h} · urgenti {status.stats.urgent}
-          </p>
+        {showStats ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {[
+              { label: "Inviate", value: stats!.sent24h },
+              { label: "Bozze", value: stats!.draftsPending },
+              { label: "Errori", value: stats!.errors24h },
+              { label: "Urgenti", value: stats!.urgent },
+            ]
+              .filter((item) => item.value > 0)
+              .map((item) => (
+                <span
+                  key={item.label}
+                  className="rounded-md bg-white/70 px-2 py-0.5 text-[11px] font-medium text-stone-700 ring-1 ring-stone-200/80"
+                >
+                  {item.label} {item.value}
+                </span>
+              ))}
+          </div>
         ) : null}
-        {feedback ? <p className="mt-1 text-xs font-medium">{feedback}</p> : null}
+        {feedback ? <p className="mt-1 text-xs font-medium text-stone-800">{feedback}</p> : null}
       </div>
       <div className="flex shrink-0 gap-2">
         {!status.settings.enabled && status.connection.ready ? (
@@ -116,7 +148,7 @@ export default function TelegramInboxStatus() {
           </button>
         ) : null}
         <a
-          href="/telegram"
+          href={configHref}
           className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-800"
         >
           Configura

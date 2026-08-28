@@ -28,24 +28,48 @@ export type InboxThreadItem = {
   hasInboundReply: boolean;
 };
 
+export type ListInboxOptions = {
+  /** Filtra per canale. Default: all. */
+  channel?: 'telegram' | 'email' | 'all';
+  /** Se false (default) esclude le conversazioni ARCHIVED. */
+  includeArchived?: boolean;
+  limit?: number;
+};
+
 /**
- * Conversazioni da gestire: priorità ai thread inbound social (senza campagna)
- * e alle email con NEEDS_REPLY.
+ * Conversazioni da gestire.
+ * Per Telegram passa channel:'telegram' e includeArchived solo nella vista archivio.
  */
 export async function listInboxThreads(
   admin: AppSupabaseClient,
   workspaceId: string,
-  limit = 200,
+  options: ListInboxOptions | number = {},
 ): Promise<InboxThreadItem[]> {
-  const { data: threads, error } = await admin
+  const opts: ListInboxOptions =
+    typeof options === 'number' ? { limit: options } : options;
+  const limit = opts.limit ?? 200;
+  const channelFilter = opts.channel ?? 'all';
+  const includeArchived = opts.includeArchived === true;
+
+  let query = admin
     .from('message_threads')
     .select(
       'id, lead_id, subject, status, unread_count, last_message_at, campaign_id, channel, commercial_state, assigned_mode, priority, sentiment, next_step, next_step_at, human_required_reason, leads!message_threads_lead_id_fkey(id, name, business_status)',
     )
     .eq('workspace_id', workspaceId)
     .order('last_message_at', { ascending: false, nullsFirst: false })
-    .limit(limit);
+    .limit(Math.min(400, Math.max(limit * 2, limit)));
 
+  if (!includeArchived) {
+    query = query.neq('status', 'ARCHIVED');
+  }
+  if (channelFilter === 'telegram') {
+    query = query.eq('channel', 'TELEGRAM');
+  } else if (channelFilter === 'email') {
+    query = query.eq('channel', 'EMAIL');
+  }
+
+  const { data: threads, error } = await query;
   if (error) throw new Error(`Inbox: ${error.message}`);
   if (!threads?.length) return [];
 
@@ -111,29 +135,30 @@ export async function listInboxThreads(
   const contactByLead = new Map((contacts ?? []).map((c) => [c.lead_id, c.value]));
   const campaignById = new Map((campaigns ?? []).map((campaign) => [campaign.id, campaign.name]));
 
-  return threads.map((t) => {
+  const mapped = threads.map((t) => {
     const lead = Array.isArray(t.leads) ? t.leads[0] : t.leads;
     const latest = latestByThread.get(t.id);
     const sourceType = sourceByLead.get(t.lead_id);
+    const channelFromDb =
+      t.channel === 'TELEGRAM' ? 'telegram' : t.channel === 'EMAIL' ? 'email' : null;
     const isTelegram =
+      channelFromDb === 'telegram' ||
       sourceType === 'TELEGRAM_INBOUND' ||
       latest?.provider === 'telegram' ||
       (t.campaign_id == null && (t.subject ?? '').startsWith('Telegram'));
 
-    const channel: InboxThreadItem['channel'] = isTelegram
-      ? 'telegram'
-      : latest?.provider === 'resend' || latest?.provider === 'email'
-        ? 'email'
-        : t.campaign_id
+    const channel: InboxThreadItem['channel'] = channelFromDb
+      ? channelFromDb
+      : isTelegram
+        ? 'telegram'
+        : latest?.provider === 'resend' || latest?.provider === 'email'
           ? 'email'
-          : 'unknown';
+          : t.campaign_id
+            ? 'email'
+            : 'unknown';
 
     const channelLabel =
-      channel === 'telegram'
-        ? 'Telegram'
-        : channel === 'email'
-          ? 'Email'
-          : 'Canale';
+      channel === 'telegram' ? 'Telegram' : channel === 'email' ? 'Email' : 'Canale';
 
     return {
       threadId: t.id,
@@ -167,9 +192,23 @@ export async function listInboxThreads(
           : null,
       hasInboundReply: inboundThreadIds.has(t.id),
     };
-  }).sort(
-    (a, b) =>
-      new Date(b.lastMessageAt ?? 0).getTime() -
-      new Date(a.lastMessageAt ?? 0).getTime(),
-  );
+  });
+
+  const filtered =
+    channelFilter === 'telegram'
+      ? mapped.filter((t) => t.channel === 'telegram')
+      : channelFilter === 'email'
+        ? mapped.filter((t) => t.channel === 'email')
+        : mapped;
+
+  const withArchiveFilter = includeArchived
+    ? filtered.filter((t) => t.status === 'ARCHIVED')
+    : filtered.filter((t) => t.status !== 'ARCHIVED');
+
+  return withArchiveFilter
+    .sort(
+      (a, b) =>
+        new Date(b.lastMessageAt ?? 0).getTime() - new Date(a.lastMessageAt ?? 0).getTime(),
+    )
+    .slice(0, limit);
 }

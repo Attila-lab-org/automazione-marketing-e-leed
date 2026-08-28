@@ -21,6 +21,7 @@ const CAMPAIGN_STATUS: Record<string, string> = {
   PAUSED: "In pausa",
   COMPLETED: "Completata",
   STOPPED: "Fermata",
+  ARCHIVED: "Archiviata",
 };
 
 const CAMPAIGN_MODE: Record<string, string> = {
@@ -40,12 +41,45 @@ export default function CampaignsClient() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  async function load() {
+    const response = await fetch("/api/campaigns");
+    const data = await response.json();
+    setCampaigns(data.campaigns ?? []);
+  }
 
   useEffect(() => {
-    fetch("/api/campaigns")
-      .then((r) => r.json())
-      .then((data) => setCampaigns(data.campaigns ?? []));
+    void load();
   }, []);
+
+  async function archiveCampaign(campaign: Campaign) {
+    if (
+      !window.confirm(
+        `Archiviare «${campaign.name}»? Sparisce dall’elenco attivo. I follow-up restano fermi.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(campaign.id);
+    setFeedback(null);
+    try {
+      const response = await fetch(`/api/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "archive" }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Archiviazione fallita");
+      setFeedback(`Campagna «${campaign.name}» archiviata.`);
+      await load();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Errore");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   const categories = useMemo(
     () => [...new Set(campaigns.flatMap((campaign) => campaign.categories))].sort(),
@@ -70,6 +104,11 @@ export default function CampaignsClient() {
 
   return (
     <div className="space-y-6">
+      {feedback ? (
+        <p className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
+          {feedback}
+        </p>
+      ) : null}
       <section className="flex flex-col gap-4 rounded-xl border border-amber-200 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-semibold text-stone-900">Vuoi creare una nuova campagna?</h2>
@@ -180,12 +219,20 @@ export default function CampaignsClient() {
                     Dettaglio
                   </Link>
                   <Link
-                    href="/review-queue"
-                    title="Vai agli elementi da controllare prima dell'invio."
+                    href="/follow-ups"
+                    title="Vai ai follow-up di questa e altre campagne."
                     className="text-xs font-semibold text-amber-700 hover:underline"
                   >
-                    Da controllare →
+                    Follow-up
                   </Link>
+                  <button
+                    type="button"
+                    disabled={busyId === c.id}
+                    onClick={() => void archiveCampaign(c)}
+                    className="text-xs font-semibold text-stone-500 hover:text-red-700 disabled:opacity-50"
+                  >
+                    {busyId === c.id ? "…" : "Archivia"}
+                  </button>
                 </div>
               </li>
             ))}

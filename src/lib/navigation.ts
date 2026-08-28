@@ -4,15 +4,26 @@ export const LEAD_SUBNAV = [
 ] as const;
 
 export const CAMPAIGN_SUBNAV = [
-  { href: "/campaigns", label: "Campagne", description: "Prepara e controlla gruppi di invii." },
-  { href: "/review-queue", label: "Da controllare", description: "Controlla demo e messaggi prima dell'invio." },
-  { href: "/demos", label: "Anteprime", description: "Vedi i siti dimostrativi creati per le attività." },
-  { href: "/templates", label: "Modelli", description: "Vedi i modelli usati per creare le anteprime." },
+  { href: "/campaigns", label: "Campagne", description: "Prepara e controlla i gruppi di invio email." },
+  { href: "/review-queue", label: "Da controllare", description: "Anteprime, email e follow-up da approvare." },
+  { href: "/follow-ups", label: "Follow-up", description: "Solleciti +3/+7 giorni da preparare o approvare." },
+  { href: "/demos", label: "Anteprime", description: "Siti dimostrativi creati per le attività." },
+  { href: "/templates", label: "Modelli", description: "Modelli usati per le anteprime." },
 ] as const;
 
-export const MESSAGE_SUBNAV = [
-  { href: "/inbox", label: "Tutti i messaggi", description: "Email e Telegram, raggruppati per cliente." },
+/** Solo posta email: Telegram ha la propria sezione. */
+export const MAIL_SUBNAV = [
+  { href: "/inbox", label: "Posta email", description: "Risposte e conversazioni email dei clienti." },
   { href: "/calendar", label: "Calendario", description: "Appuntamenti, scadenze e slot disponibili." },
+] as const;
+
+/** @deprecated usa MAIL_SUBNAV */
+export const MESSAGE_SUBNAV = MAIL_SUBNAV;
+
+export const TELEGRAM_SUBNAV = [
+  { href: "/telegram", label: "Chat aperte", description: "Conversazioni Telegram da gestire." },
+  { href: "/telegram?view=archived", label: "Archiviate", description: "Chat chiuse o archiviate." },
+  { href: "/telegram#telegram-config", label: "Configurazione", description: "Bot, modalità e parole chiave." },
 ] as const;
 
 export const SETTINGS_SUBNAV = [

@@ -17,6 +17,7 @@ export const GET = withAdmin(async () => {
     .from('campaigns')
     .select('id, name, status, mode, delivery_mode, test_recipient, created_at')
     .eq('workspace_id', workspace.id)
+    .neq('status', 'ARCHIVED')
     .order('created_at', { ascending: false });
   if (error) return NextResponse.json({ error: error.message, campaigns: [] }, { status: 500 });
   const campaignIds = (data ?? []).map((campaign) => campaign.id);

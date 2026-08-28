@@ -14,7 +14,7 @@ export default function OverviewPage() {
 
       <CommercialInsightsCard />
 
-      <OperatorAlerts />
+      <OperatorAlerts channel="all" title="Da fare ora" limit={5} />
 
       <section aria-label="KPI principali">
         <h2 className="mb-3 text-sm font-semibold text-stone-800">Situazione in breve</h2>

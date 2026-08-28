@@ -1,15 +1,15 @@
 import PageHeader from "@/components/page-header";
 import SectionSubnav from "@/components/section-subnav";
 import CalendarClient from "@/components/calendar-client";
-import { MESSAGE_SUBNAV } from "@/lib/navigation";
+import { MAIL_SUBNAV } from "@/lib/navigation";
 
 export default function CalendarPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <SectionSubnav items={[...MESSAGE_SUBNAV]} />
+      <SectionSubnav items={[...MAIL_SUBNAV]} />
       <PageHeader
         title="Calendario"
-        description="Vedi gli appuntamenti della settimana, apri la conversazione collegata e aggiungi solo ciò che serve."
+        description="Appuntamenti e slot. Le chat restano in Posta o Telegram."
       />
       <CalendarClient />
     </div>

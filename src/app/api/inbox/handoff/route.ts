@@ -13,7 +13,7 @@ export const POST = withAdmin(async (request: Request) => {
   }
   const body = (await request.json()) as {
     threadId?: string;
-    action?: 'take_over' | 'return_to_ai' | 'stop';
+    action?: 'take_over' | 'return_to_ai' | 'stop' | 'archive' | 'unarchive';
   };
   if (!body.threadId || !body.action) {
     return NextResponse.json({ error: 'threadId e action obbligatori' }, { status: 400 });
@@ -86,6 +86,31 @@ export const POST = withAdmin(async (request: Request) => {
       .eq('id', body.threadId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     await stopLeadSequences(admin, workspace.id, currentThread.lead_id);
+  }
+  if (body.action === 'archive') {
+    const { error } = await admin
+      .from('message_threads')
+      .update({
+        status: 'ARCHIVED',
+        unread_count: 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('workspace_id', workspace.id)
+      .eq('id', body.threadId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, status: 'ARCHIVED' });
+  }
+  if (body.action === 'unarchive') {
+    const { error } = await admin
+      .from('message_threads')
+      .update({
+        status: 'OPEN',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('workspace_id', workspace.id)
+      .eq('id', body.threadId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, status: 'OPEN' });
   }
   return NextResponse.json({ ok: true, assignedMode: body.action === 'take_over' ? 'HUMAN' : undefined });
 });
