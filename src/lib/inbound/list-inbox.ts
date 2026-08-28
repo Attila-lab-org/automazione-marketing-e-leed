@@ -86,7 +86,12 @@ export async function listInboxThreads(
 
   const latestByThread = new Map<
     string,
-    { provider: string; body: string; direction: string }
+    {
+      provider: string;
+      body: string;
+      direction: 'INBOUND' | 'OUTBOUND';
+      at: string | null;
+    }
   >();
   const inboundThreadIds = new Set<string>();
   for (const m of messages ?? []) {
@@ -96,6 +101,7 @@ export async function listInboxThreads(
         provider: m.provider,
         body: m.body_snapshot,
         direction: m.direction,
+        at: m.sent_at ?? m.created_at,
       });
     }
   }
@@ -135,7 +141,7 @@ export async function listInboxThreads(
       subject: t.subject,
       status: t.status,
       unreadCount: t.unread_count ?? 0,
-      lastMessageAt: t.last_message_at,
+      lastMessageAt: latest?.at ?? t.last_message_at,
       channel,
       channelLabel,
       contactHandle: contactByLead.get(t.lead_id) ?? null,
@@ -160,5 +166,9 @@ export async function listInboxThreads(
           : null,
       hasInboundReply: inboundThreadIds.has(t.id),
     };
-  });
+  }).sort(
+    (a, b) =>
+      new Date(b.lastMessageAt ?? 0).getTime() -
+      new Date(a.lastMessageAt ?? 0).getTime(),
+  );
 }

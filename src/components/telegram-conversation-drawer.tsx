@@ -33,6 +33,18 @@ export default function TelegramConversationDrawer({
     return () => window.removeEventListener("keydown", close);
   }, [onClose]);
 
+  const latestMessage = detail?.messages[detail.messages.length - 1];
+  const customerIsWaiting = latestMessage?.direction === "INBOUND";
+  const draftNeedsReview =
+    detail?.aiDraft?.mode === "APPROVAL_REQUIRED" ||
+    detail?.aiDraft?.mode === "DRAFT_ONLY" ||
+    detail?.aiDraft?.mode === "HUMAN_ONLY";
+  const operatorActionRequired =
+    detail?.assignedMode === "HUMAN" ||
+    Boolean(detail?.humanRequiredReason) ||
+    customerIsWaiting ||
+    draftNeedsReview;
+
   return (
     <div className="fixed inset-0 z-50">
       <button
@@ -85,7 +97,7 @@ export default function TelegramConversationDrawer({
             <>
               <section
                 className={
-                  detail.assignedMode === "HUMAN" || detail.humanRequiredReason
+                  operatorActionRequired
                     ? "rounded-xl border border-amber-300 bg-amber-50 p-4"
                     : "rounded-xl border border-emerald-200 bg-emerald-50 p-4"
                 }
@@ -94,16 +106,21 @@ export default function TelegramConversationDrawer({
                   Cosa succede adesso
                 </p>
                 <p className="mt-1 text-base font-semibold text-stone-900">
-                  {detail.assignedMode === "HUMAN" || detail.humanRequiredReason
-                    ? "Serve una decisione"
+                  {customerIsWaiting && detail.channel === "EMAIL"
+                    ? "Il cliente ha risposto — verifica la bozza"
+                    : operatorActionRequired
+                      ? "Serve una tua decisione"
                     : "Attila sta gestendo la conversazione"}
                 </p>
                 <p className="mt-1 text-sm text-stone-700">
-                  {detail.humanRequiredReason ??
-                    detail.nextStep ??
-                    "Non devi fare nulla. Puoi prendere il controllo quando vuoi."}
+                  {customerIsWaiting && detail.channel === "EMAIL"
+                    ? "Attila ha preparato una risposta. Puoi correggerla prima di inviarla."
+                    : detail.humanRequiredReason ??
+                      detail.nextStep ??
+                      "Non devi fare nulla. Puoi prendere il controllo quando vuoi."}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                {detail.channel !== "EMAIL" ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
                   {detail.assignedMode === "HUMAN" ? (
                     <HandoffButton
                       threadId={detail.threadId}
@@ -119,21 +136,21 @@ export default function TelegramConversationDrawer({
                       onDone={onChanged}
                     />
                   )}
-                </div>
+                  </div>
+                ) : null}
               </section>
 
               {detail.channel === "EMAIL" ? (
-                <ManualEmailReply threadId={detail.threadId} />
-              ) : null}
-
-              {detail.aiDraft?.text ? (
-                <details className="rounded-xl border border-stone-200 bg-white p-4">
-                  <summary className="cursor-pointer text-sm font-semibold text-stone-900">
-                    Vedi la risposta suggerita da Attila
-                  </summary>
-                  <p className="mt-3 text-sm text-stone-600">{detail.aiDraft.understanding}</p>
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-stone-900">{detail.aiDraft.text}</p>
-                </details>
+                <ManualEmailReply
+                  key={`${detail.threadId}:${customerIsWaiting ? detail.aiDraft?.text ?? "waiting" : "answered"}`}
+                  threadId={detail.threadId}
+                  initialText={customerIsWaiting ? detail.aiDraft?.text ?? "" : ""}
+                  aiUnderstanding={
+                    customerIsWaiting ? detail.aiDraft?.understanding ?? null : null
+                  }
+                  customerIsWaiting={customerIsWaiting}
+                  onSent={onChanged}
+                />
               ) : null}
 
               {(detail.appointment || detail.nextDeadline) ? (
@@ -217,11 +234,27 @@ export default function TelegramConversationDrawer({
                           : "mr-8 rounded-xl border border-stone-200 bg-white p-3"
                       }
                     >
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <span
+                          className={
+                            message.direction === "INBOUND"
+                              ? "rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-900"
+                              : "text-[11px] font-bold uppercase tracking-wide text-sky-800"
+                          }
+                        >
+                          {message.direction === "INBOUND"
+                            ? "Risposta del cliente"
+                            : "Messaggio inviato"}
+                        </span>
+                        <span className="text-[11px] text-stone-500">
+                          {formatDate(message.sentAt)}
+                        </span>
+                      </div>
                       <p className="whitespace-pre-wrap text-sm text-stone-900">
                         {message.body}
                       </p>
                       <p className="mt-1 text-[11px] text-stone-500">
-                        {message.deliveryLabel} · {formatDate(message.sentAt)}
+                        {message.deliveryLabel}
                       </p>
                       {message.contextLabel ? (
                         <p className="mt-0.5 text-[11px] text-stone-400">
@@ -266,8 +299,20 @@ export default function TelegramConversationDrawer({
   );
 }
 
-function ManualEmailReply({ threadId }: { threadId: string }) {
-  const [text, setText] = useState("");
+function ManualEmailReply({
+  threadId,
+  initialText,
+  aiUnderstanding,
+  customerIsWaiting,
+  onSent,
+}: {
+  threadId: string;
+  initialText: string;
+  aiUnderstanding: string | null;
+  customerIsWaiting: boolean;
+  onSent?: () => void | Promise<void>;
+}) {
+  const [text, setText] = useState(initialText);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -287,6 +332,7 @@ function ManualEmailReply({ threadId }: { threadId: string }) {
       if (!response.ok) throw new Error(data.error ?? "Invio non riuscito");
       setText("");
       setMessage("Risposta inviata e salvata nella conversazione.");
+      void Promise.resolve(onSent?.()).catch(() => undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Invio non riuscito");
     } finally {
@@ -295,17 +341,36 @@ function ManualEmailReply({ threadId }: { threadId: string }) {
   }
 
   return (
-    <section className="rounded-xl border border-stone-300 bg-white p-4">
-      <h3 className="text-sm font-semibold text-stone-900">Rispondi tu</h3>
-      <p className="mt-1 text-xs text-stone-500">
-        Usa questo campo per i casi che richiedono una decisione manuale.
+    <section className="rounded-xl border border-amber-300 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-amber-800">
+            {initialText ? "Bozza preparata da Attila" : "Risposta manuale"}
+          </p>
+          <h3 className="mt-0.5 text-base font-semibold text-stone-900">
+            {customerIsWaiting ? "Controlla e invia la risposta" : "Scrivi una risposta"}
+          </h3>
+        </div>
+        {initialText ? (
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+            Da approvare
+          </span>
+        ) : null}
+      </div>
+      {aiUnderstanding ? (
+        <p className="mt-3 rounded-lg bg-stone-50 px-3 py-2 text-sm text-stone-700">
+          <span className="font-semibold">Attila ha capito:</span> {aiUnderstanding}
+        </p>
+      ) : null}
+      <p className="mt-3 text-xs text-stone-500">
+        Leggi la bozza, modificala liberamente e inviala solo quando è corretta.
       </p>
       <textarea
         value={text}
         onChange={(event) => setText(event.target.value)}
-        rows={4}
+        rows={7}
         placeholder="Scrivi la risposta al cliente…"
-        className="mt-3 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-600"
+        className="mt-3 w-full rounded-lg border border-stone-300 px-3 py-3 text-sm leading-6 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
       />
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs text-stone-400">{text.length}/4000</span>
@@ -313,9 +378,9 @@ function ManualEmailReply({ threadId }: { threadId: string }) {
           type="button"
           disabled={busy || !text.trim() || text.length > 4000}
           onClick={() => void send()}
-          className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+          className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-stone-950 hover:bg-amber-400 disabled:opacity-40"
         >
-          {busy ? "Invio…" : "Invia risposta"}
+          {busy ? "Invio in corso…" : "Approva e invia al cliente"}
         </button>
       </div>
       {message ? <p className="mt-2 text-xs font-medium text-emerald-700">{message}</p> : null}

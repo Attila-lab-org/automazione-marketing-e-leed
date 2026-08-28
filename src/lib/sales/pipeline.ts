@@ -193,10 +193,16 @@ export function resolveResponseMode(args: {
   ) {
     return { mode: 'AUTO_ALLOWED', reason: 'autonomy_auto_intent' };
   }
-  if (args.channel === 'TELEGRAM' || args.channel === 'EMAIL') {
+  if (args.channel === 'EMAIL') {
+    return {
+      mode: 'APPROVAL_REQUIRED',
+      reason: 'email_operator_review',
+    };
+  }
+  if (args.channel === 'TELEGRAM') {
     return {
       mode: 'AUTO_ALLOWED',
-      reason: args.channel === 'TELEGRAM' ? 'telegram_conversation' : 'email_conversation',
+      reason: 'telegram_conversation',
     };
   }
   if (args.firstReply) return { mode: args.playbook.autonomy.firstReplyMode, reason: 'first_reply' };
@@ -476,6 +482,23 @@ export async function processSalesInbound(args: {
     mode = 'AUTO_ALLOWED';
     critic = critic ? { ...critic, verdict: 'PASS' } : critic;
   }
+  const finalHumanRequired = mode !== 'AUTO_ALLOWED' || takeoverActive;
+  await args.admin
+    .from('message_threads')
+    .update({
+      commercial_state: state,
+      assigned_mode: finalHumanRequired ? 'HUMAN' : 'AI',
+      status: finalHumanRequired ? 'NEEDS_REPLY' : 'OPEN',
+      human_required_reason: finalHumanRequired
+        ? takeoverActive
+          ? 'Takeover umano attivo'
+          : mode === 'APPROVAL_REQUIRED'
+            ? 'Bozza pronta: verifica, modifica se necessario e invia'
+            : resolved.reason
+        : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', args.threadId);
 
   await persistSalesReplyDraft({
     admin: args.admin,
@@ -506,6 +529,6 @@ export async function processSalesInbound(args: {
     state,
     mode,
     draft: draftText,
-    humanRequired,
+    humanRequired: finalHumanRequired,
   };
 }

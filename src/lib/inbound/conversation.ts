@@ -1,6 +1,7 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { loadLatestSalesDraft, type PersistedSalesDraft } from '@/lib/sales/reply-persist';
 import { getActiveAppointmentForLead, getNextDeadlineForLead } from '@/lib/calendar';
+import { emailHtmlToText } from '@/lib/messaging/html-to-text';
 
 export type InboxConversationMessage = {
   id: string;
@@ -87,6 +88,26 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
+function readableMessageBody(
+  body: string,
+  direction: 'INBOUND' | 'OUTBOUND',
+  provider: string,
+): string {
+  let text = /<[a-z][\s\S]*>/i.test(body) ? emailHtmlToText(body) : body.trim();
+  if (direction === 'INBOUND' && provider === 'resend') {
+    text =
+      text.split(
+        /\n(?:Il giorno[\s\S]{0,500}?ha\s+scritto:|On[\s\S]{0,500}?wrote:|Da:[^\n]+\n(?:Inviato|Sent):|-{2,}\s*Original Message\s*-{2,})/i,
+      )[0] ?? text;
+    text = text
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('>'))
+      .join('\n')
+      .trim();
+  }
+  return text || 'Messaggio senza testo';
+}
+
 export async function getInboxConversation(
   admin: AppSupabaseClient,
   workspaceId: string,
@@ -171,6 +192,14 @@ export async function getInboxConversation(
   const latestOutbound = [...(messages ?? [])]
     .reverse()
     .find((message) => message.direction === 'OUTBOUND');
+  const latestInbound = [...(messages ?? [])]
+    .reverse()
+    .find((message) => message.direction === 'INBOUND');
+  const outboundAfterLatestInbound =
+    Boolean(latestOutbound) &&
+    (!latestInbound ||
+      new Date(latestOutbound?.sent_at ?? latestOutbound?.created_at ?? 0).getTime() >
+        new Date(latestInbound.sent_at ?? latestInbound.created_at).getTime());
 
   let replyStatus: InboxConversationDetail['replyStatus'] = {
     state: 'NOT_SENT',
@@ -178,12 +207,19 @@ export async function getInboxConversation(
     detail: null,
     occurredAt: null,
   };
-  if (latestOutbound) {
+  if (latestOutbound && outboundAfterLatestInbound) {
     replyStatus = {
       state: 'SENT',
       label: 'Risposta inviata',
       detail: null,
       occurredAt: latestOutbound.sent_at ?? latestOutbound.created_at,
+    };
+  } else if (latestInbound) {
+    replyStatus = {
+      state: 'NOT_SENT',
+      label: 'Cliente in attesa di risposta',
+      detail: null,
+      occurredAt: latestInbound.sent_at ?? latestInbound.created_at,
     };
   } else if (latestReplyEvent?.event_type === 'TELEGRAM_REPLY_FAILED') {
     const data = asRecord(latestReplyEvent.data);
@@ -231,7 +267,11 @@ export async function getInboxConversation(
     messages: (messages ?? []).map((message) => ({
       id: message.id,
       direction: message.direction,
-      body: message.body_snapshot,
+      body: readableMessageBody(
+        message.body_snapshot,
+        message.direction,
+        message.provider,
+      ),
       sentAt: message.sent_at ?? message.created_at,
       providerMessageId: message.provider_message_id,
       deliveryLabel:

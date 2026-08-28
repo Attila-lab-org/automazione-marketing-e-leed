@@ -106,7 +106,7 @@ export function criticSalesReply(
   if (/€|euro|prezzo|costa /i.test(body) && !flags.pricingAllowed) {
     ungrounded.push('prezzo comunicato fuori policy');
   }
-  if (/sconto|350|scontat/i.test(body) && !flags.discountAllowed) {
+  if (/sconto|scontat/i.test(body) && !flags.discountAllowed) {
     ungrounded.push('sconto non autorizzato');
   }
   if (/garantiamo|sicuro al 100|domani è online/i.test(body)) {

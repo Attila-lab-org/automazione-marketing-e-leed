@@ -178,7 +178,7 @@ describe('sales conversation', () => {
     expect(
       resolveResponseMode({ classification, playbook, autonomy: null, firstReply: false, channel: 'EMAIL' })
         .mode,
-    ).toBe('AUTO_ALLOWED');
+    ).toBe('APPROVAL_REQUIRED');
     expect(
       mockDraftReply({
         classification,

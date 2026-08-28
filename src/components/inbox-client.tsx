@@ -45,6 +45,7 @@ function inboxViewFor(item: InboxThreadItem): InboxView {
     item.assignedMode === "HUMAN" ||
     Boolean(item.humanRequiredReason) ||
     item.status === "NEEDS_REPLY" ||
+    item.latestDirection === "INBOUND" ||
     item.commercialState === "HUMAN_REQUIRED"
   ) {
     return "manual";
@@ -53,6 +54,7 @@ function inboxViewFor(item: InboxThreadItem): InboxView {
 }
 
 function primaryStatus(item: InboxThreadItem): string {
+  if (item.latestDirection === "INBOUND") return "Il cliente ha risposto";
   if (item.humanRequiredReason || item.assignedMode === "HUMAN") return "Serve una tua risposta";
   if (item.commercialState === "CALL_BOOKED") return "Appuntamento fissato";
   if (item.commercialState === "FOLLOW_UP_LATER") return "In attesa";

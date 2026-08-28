@@ -120,13 +120,6 @@ export async function persistEmailReply(args: {
   }
   const fromMatch = args.inbound.from.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
   const from = (fromMatch?.[0] ?? args.inbound.from).toLowerCase();
-  const { data: lead } = await args.admin
-    .from('leads')
-    .select('id')
-    .eq('workspace_id', args.workspaceId)
-    .eq('normalized_email', from)
-    .maybeSingle();
-  if (!lead) return { ok: false, reason: 'LEAD_NOT_FOUND' };
 
   if (args.inbound.providerMessageId) {
     const { data: dup } = await args.admin
@@ -141,20 +134,32 @@ export async function persistEmailReply(args: {
   const conversation = await findEmailConversationThread(
     args.admin,
     args.workspaceId,
-    lead.id,
+    from,
+    args.inbound.subject,
   );
+  const { data: fallbackLead } = conversation
+    ? { data: null }
+    : await args.admin
+        .from('leads')
+        .select('id')
+        .eq('workspace_id', args.workspaceId)
+        .eq('normalized_email', from)
+        .maybeSingle();
+  const leadId = conversation?.leadId ?? fallbackLead?.id;
+  if (!leadId) return { ok: false, reason: 'LEAD_NOT_FOUND' };
   const threadId =
     conversation?.threadId ??
     (await ensureInboundThread(
       args.admin,
       args.workspaceId,
-      lead.id,
+      leadId,
       args.inbound.subject ?? 'Email inbound',
     ));
+  const receivedAt = new Date().toISOString();
   await args.admin.from('messages').insert({
     workspace_id: args.workspaceId,
     thread_id: threadId,
-    lead_id: lead.id,
+    lead_id: leadId,
     direction: 'INBOUND',
     provider: 'resend',
     provider_message_id: args.inbound.providerMessageId ? `in:${args.inbound.providerMessageId}` : null,
@@ -163,31 +168,45 @@ export async function persistEmailReply(args: {
     subject: args.inbound.subject,
     body_snapshot: args.inbound.text,
     sequence_step: 0,
-    sent_at: new Date().toISOString(),
+    sent_at: receivedAt,
   });
+  const { data: threadState } = await args.admin
+    .from('message_threads')
+    .select('unread_count')
+    .eq('id', threadId)
+    .maybeSingle();
+  await args.admin
+    .from('message_threads')
+    .update({
+      last_message_at: receivedAt,
+      unread_count: (threadState?.unread_count ?? 0) + 1,
+      status: 'NEEDS_REPLY',
+      updated_at: receivedAt,
+    })
+    .eq('id', threadId);
 
   // Una risposta reale interrompe sempre i follow-up freddi. Da qui in poi
   // prosegue la conversazione AI sul medesimo thread della campagna.
-  await stopLeadFollowups(args.admin, args.workspaceId, lead.id);
+  await stopLeadFollowups(args.admin, args.workspaceId, leadId);
 
   const sales = await processSalesInbound({
     admin: args.admin,
     workspaceId: args.workspaceId,
     threadId,
-    leadId: lead.id,
+    leadId,
     text: args.inbound.text,
     channel: 'EMAIL',
     env: args.env,
   });
   if (sales.classification.unsubscribe) {
-    await suppressLeadEmail(args.admin, args.workspaceId, lead.id, 'UNSUBSCRIBE');
-    await stopLeadSequences(args.admin, args.workspaceId, lead.id);
+    await suppressLeadEmail(args.admin, args.workspaceId, leadId, 'UNSUBSCRIBE');
+    await stopLeadSequences(args.admin, args.workspaceId, leadId);
   } else if (sales.classification.notInterested) {
-    await stopLeadSequences(args.admin, args.workspaceId, lead.id);
+    await stopLeadSequences(args.admin, args.workspaceId, leadId);
   } else if (sales.classification.followUpLater) {
     const at = new Date();
     at.setMonth(at.getMonth() + 1);
-    await scheduleFollowUpLater(args.admin, args.workspaceId, lead.id, threadId, at);
+    await scheduleFollowUpLater(args.admin, args.workspaceId, leadId, threadId, at);
   }
 
   if (
@@ -202,7 +221,7 @@ export async function persistEmailReply(args: {
       admin: args.admin,
       workspaceId: args.workspaceId,
       threadId,
-      leadId: lead.id,
+      leadId,
       campaignLeadId: conversation?.campaignLeadId ?? null,
       recipient: from,
       subject: args.inbound.subject ?? conversation?.previousSubject ?? null,

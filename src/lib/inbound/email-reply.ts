@@ -54,29 +54,43 @@ function conversationPolicy(now: string, approvedByHuman: boolean): PolicyEvalua
 export async function findEmailConversationThread(
   admin: AppSupabaseClient,
   workspaceId: string,
-  leadId: string,
+  recipient: string,
+  inboundSubject: string | null,
 ): Promise<{
   threadId: string;
+  leadId: string;
   campaignLeadId: string | null;
   previousSubject: string | null;
   previousProviderMessageId: string | null;
 } | null> {
   const { data } = await admin
     .from('messages')
-    .select('thread_id, campaign_lead_id, subject, provider_message_id')
+    .select('thread_id, lead_id, campaign_lead_id, subject, provider_message_id')
     .eq('workspace_id', workspaceId)
-    .eq('lead_id', leadId)
     .eq('provider', 'resend')
     .eq('direction', 'OUTBOUND')
+    .ilike('actual_delivery_recipient', recipient)
     .order('sent_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!data) return null;
+    .limit(50);
+  const normalizedInboundSubject = (inboundSubject ?? '')
+    .trim()
+    .replace(/^(re:\s*)+/i, '')
+    .toLocaleLowerCase();
+  const match = (data ?? []).find(
+    (message) =>
+      Boolean(normalizedInboundSubject) &&
+      (message.subject ?? '')
+        .trim()
+        .replace(/^(re:\s*)+/i, '')
+        .toLocaleLowerCase() === normalizedInboundSubject,
+  );
+  if (!match) return null;
   return {
-    threadId: data.thread_id,
-    campaignLeadId: data.campaign_lead_id,
-    previousSubject: data.subject,
-    previousProviderMessageId: data.provider_message_id,
+    threadId: match.thread_id,
+    leadId: match.lead_id,
+    campaignLeadId: match.campaign_lead_id,
+    previousSubject: match.subject,
+    previousProviderMessageId: match.provider_message_id,
   };
 }
 

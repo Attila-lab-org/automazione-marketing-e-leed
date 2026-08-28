@@ -511,6 +511,15 @@ describe('sales reply wiring', () => {
     expect(critic.verdict).not.toBe('PASS');
   });
 
+  it('critic non scambia il prezzo minimo configurato per uno sconto', () => {
+    const critic = criticSalesReply(
+      'L’investimento previsto è tra 350 e 1000 euro.',
+      ['Range autorizzato'],
+      { pricingAllowed: true, discountAllowed: false },
+    );
+    expect(critic.verdict).toBe('PASS');
+  });
+
   it('Telegram prospect usa la bozza AI, non il template legacy, se l’agente è attivo', () => {
     const chosen = selectTelegramReplyText({
       salesAgentSucceeded: true,
@@ -606,7 +615,7 @@ describe('telegram sales thread follow-up', () => {
     expect(telegramRequiresKeywordDiscovery(true, null)).toBe(false);
   });
 
-  it('Telegram ed email rispondono in automatico al contesto, non per keyword', () => {
+  it('Telegram risponde automaticamente, mentre email prepara una bozza da approvare', () => {
     const info = mockClassifyInbound('Ciao, mi interessa capire se potete aiutarci');
     const telegram = resolveResponseMode({
       classification: info,
@@ -625,8 +634,8 @@ describe('telegram sales thread follow-up', () => {
       firstReply: true,
       channel: 'EMAIL',
     });
-    expect(email.mode).toBe('AUTO_ALLOWED');
-    expect(email.reason).toBe('email_conversation');
+    expect(email.mode).toBe('APPROVAL_REQUIRED');
+    expect(email.reason).toBe('email_operator_review');
 
     const sent = selectTelegramReplyText({
       salesAgentSucceeded: true,
