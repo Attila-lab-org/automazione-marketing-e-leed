@@ -19,7 +19,7 @@ export default async function TelegramPage({
   await requireAdminSession();
   const params = searchParams ? await searchParams : {};
   if (params.view === "archived") {
-    redirect("/archive?tab=telegram");
+    redirect("/archive");
   }
 
   const admin = createAdminSupabaseClient(process.env);
