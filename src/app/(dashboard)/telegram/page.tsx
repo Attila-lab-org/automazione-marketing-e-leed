@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import PageHeader from "@/components/page-header";
 import SectionSubnav from "@/components/section-subnav";
 import TelegramControlPanel from "@/components/telegram-control-panel";
@@ -17,62 +18,46 @@ export default async function TelegramPage({
 }) {
   await requireAdminSession();
   const params = searchParams ? await searchParams : {};
-  const archivedView = params.view === "archived";
+  if (params.view === "archived") {
+    redirect("/archive?tab=telegram");
+  }
 
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
   const threads = await listInboxThreads(admin, workspace.id, {
     channel: "telegram",
-    includeArchived: archivedView,
+    includeArchived: false,
   });
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <SectionSubnav items={[...TELEGRAM_SUBNAV]} />
       <PageHeader
-        title={archivedView ? "Chat archiviate" : "Telegram"}
-        description={
-          archivedView
-            ? "Conversazioni chiuse. Puoi riaprirle se il cliente scrive di nuovo."
-            : "Solo chat Telegram aperte. Avvia il bot, rispondi e archivia quando hai finito."
-        }
+        title="Telegram"
+        description="Solo chat Telegram aperte. Avvia il bot, rispondi e archivia quando hai finito."
       />
 
-      {!archivedView ? (
-        <>
-          <TelegramInboxStatus configHref="#telegram-config" />
-          <OperatorAlerts channel="telegram" title="Serve te" limit={4} />
-        </>
-      ) : null}
+      <TelegramInboxStatus configHref="#telegram-config" />
+      <OperatorAlerts channel="telegram" title="Serve te" limit={4} />
 
       <section>
         <div className="mb-3">
-          <h2 className="text-base font-semibold text-stone-900">
-            {archivedView ? "Archivio" : "Chat aperte"}
-          </h2>
+          <h2 className="text-base font-semibold text-stone-900">Chat aperte</h2>
           <p className="text-sm text-stone-500">
-            {archivedView
-              ? "Niente email qui: solo Telegram archiviati."
-              : "Niente email qui. Archivia le chat chiuse per tenere pulita la lista."}
+            Niente email qui. Le chat archiviate sono nella sezione Archivio.
           </p>
         </div>
-        <InboxClient
-          channelScope="telegram"
-          initialThreads={threads}
-          archivedView={archivedView}
-        />
+        <InboxClient channelScope="telegram" initialThreads={threads} />
       </section>
 
-      {!archivedView ? (
-        <details id="telegram-config" className="scroll-mt-24 rounded-xl border border-stone-200 bg-white">
-          <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-stone-900">
-            Configurazione bot
-          </summary>
-          <div className="border-t border-stone-100 p-5">
-            <TelegramControlPanel />
-          </div>
-        </details>
-      ) : null}
+      <details id="telegram-config" className="scroll-mt-24 rounded-xl border border-stone-200 bg-white">
+        <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-stone-900">
+          Configurazione bot
+        </summary>
+        <div className="border-t border-stone-100 p-5">
+          <TelegramControlPanel />
+        </div>
+      </details>
     </div>
   );
 }

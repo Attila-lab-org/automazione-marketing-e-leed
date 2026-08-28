@@ -17,7 +17,11 @@ function matches(href: string, pathname: string, search: string) {
     if (path === "/leads") return !search || search === "?";
     return true;
   }
-  return search.replace(/^\?/, "") === query;
+  const current = search.replace(/^\?/, "");
+  if (path === "/archive" && (!current || current === "tab=telegram") && query === "tab=telegram") {
+    return true;
+  }
+  return current === query;
 }
 
 function SectionSubnavInner({ items }: { items: SectionSubnavItem[] }) {

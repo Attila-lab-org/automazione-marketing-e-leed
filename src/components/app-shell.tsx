@@ -75,6 +75,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: navIcon("M21 3 3.7 10.1c-1.2.5-1.1 1.2-.2 1.5l4.4 1.4 1.7 5.2c.3.9.8 1 1.4.4l2.5-2.4 4.7 3.5c.9.6 1.6.3 1.8-.8L22 4.3c.2-1.1-.2-1.6-1-1.3ZM8 13l9-6"),
   },
   {
+    href: "/archive",
+    label: "Archivio",
+    description: "Chat e campagne archiviate, da riaprire se serve.",
+    match: ["/archive"],
+    icon: navIcon("M4 7h16v2H4V7Zm2 4h12v9a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-9Zm3-6h6l1 2H8l1-2Z"),
+  },
+  {
     href: "/calendar",
     label: "Calendario",
     description: "Appuntamenti, scadenze e slot disponibili.",
@@ -109,6 +116,7 @@ const SECTION_LABELS: Record<string, string> = {
   demos: "Anteprime",
   templates: "Modelli",
   inbox: "Posta",
+  archive: "Archivio",
   "follow-ups": "Follow-up",
   calendar: "Calendario",
   automations: "Automazioni",

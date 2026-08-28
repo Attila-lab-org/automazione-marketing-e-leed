@@ -72,7 +72,7 @@ export default function CampaignsClient() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Archiviazione fallita");
-      setFeedback(`Campagna «${campaign.name}» archiviata.`);
+      setFeedback(`Campagna «${campaign.name}» archiviata. La trovi in Archivio → Campagne.`);
       await load();
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "Errore");

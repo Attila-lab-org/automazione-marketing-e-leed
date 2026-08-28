@@ -21,7 +21,7 @@ export default async function InboxPage() {
       <SectionSubnav items={[...MAIL_SUBNAV]} />
       <PageHeader
         title="Posta email"
-        description="Qui trovi solo le conversazioni email. Telegram ha una sezione dedicata."
+        description="Solo conversazioni email aperte. Quelle archiviate sono in Archivio."
       />
       <InboxClient channelScope="email" initialThreads={threads} />
     </div>

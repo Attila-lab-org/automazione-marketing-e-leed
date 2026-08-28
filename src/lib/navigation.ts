@@ -9,11 +9,13 @@ export const CAMPAIGN_SUBNAV = [
   { href: "/follow-ups", label: "Follow-up", description: "Solleciti +3/+7 giorni da preparare o approvare." },
   { href: "/demos", label: "Anteprime", description: "Siti dimostrativi creati per le attività." },
   { href: "/templates", label: "Modelli", description: "Modelli usati per le anteprime." },
+  { href: "/archive?tab=campaigns", label: "Archivio", description: "Campagne archiviate." },
 ] as const;
 
 /** Solo posta email: Telegram ha la propria sezione. */
 export const MAIL_SUBNAV = [
   { href: "/inbox", label: "Posta email", description: "Risposte e conversazioni email dei clienti." },
+  { href: "/archive?tab=email", label: "Archivio", description: "Conversazioni email archiviate." },
   { href: "/calendar", label: "Calendario", description: "Appuntamenti, scadenze e slot disponibili." },
 ] as const;
 
@@ -22,8 +24,14 @@ export const MESSAGE_SUBNAV = MAIL_SUBNAV;
 
 export const TELEGRAM_SUBNAV = [
   { href: "/telegram", label: "Chat aperte", description: "Conversazioni Telegram da gestire." },
-  { href: "/telegram?view=archived", label: "Archiviate", description: "Chat chiuse o archiviate." },
+  { href: "/archive?tab=telegram", label: "Archivio", description: "Chat chiuse o archiviate." },
   { href: "/telegram#telegram-config", label: "Configurazione", description: "Bot, modalità e parole chiave." },
+] as const;
+
+export const ARCHIVE_SUBNAV = [
+  { href: "/archive?tab=telegram", label: "Chat Telegram", description: "Conversazioni Telegram archiviate." },
+  { href: "/archive?tab=email", label: "Posta email", description: "Conversazioni email archiviate." },
+  { href: "/archive?tab=campaigns", label: "Campagne", description: "Campagne archiviate." },
 ] as const;
 
 export const SETTINGS_SUBNAV = [

@@ -307,6 +307,25 @@ export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
     });
     return NextResponse.json({ ok: true, status: 'ARCHIVED' });
   }
+  if (body.action === 'unarchive') {
+    const { error } = await admin
+      .from('campaigns')
+      .update({ status: 'PAUSED', updated_at: new Date().toISOString() })
+      .eq('workspace_id', workspace.id)
+      .eq('id', id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    await admin.from('activity_log').insert({
+      workspace_id: workspace.id,
+      actor_type: 'USER',
+      entity_type: 'campaign',
+      entity_id: id,
+      category: 'DECISION',
+      event_type: 'CAMPAIGN_UNARCHIVED',
+      message: 'Campagna ripristinata dall’archivio',
+      data: { status: 'PAUSED' },
+    });
+    return NextResponse.json({ ok: true, status: 'PAUSED' });
+  }
   if (body.action === 'delete') {
     const { data: campaign } = await admin
       .from('campaigns')

@@ -7,18 +7,20 @@ import { ensureDefaultWorkspace } from '@/lib/workspace';
 
 export const runtime = 'nodejs';
 
-export const GET = withAdmin(async () => {
+export const GET = withAdmin(async (request: Request) => {
   if (!isSupabaseConfigured(process.env) || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json({ error: 'Supabase non configurato', campaigns: [] }, { status: 503 });
   }
+  const archivedOnly = new URL(request.url).searchParams.get('archived') === '1';
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
-  const { data, error } = await admin
+  let query = admin
     .from('campaigns')
-    .select('id, name, status, mode, delivery_mode, test_recipient, created_at')
+    .select('id, name, status, mode, delivery_mode, test_recipient, created_at, updated_at')
     .eq('workspace_id', workspace.id)
-    .neq('status', 'ARCHIVED')
     .order('created_at', { ascending: false });
+  query = archivedOnly ? query.eq('status', 'ARCHIVED') : query.neq('status', 'ARCHIVED');
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message, campaigns: [] }, { status: 500 });
   const campaignIds = (data ?? []).map((campaign) => campaign.id);
   const { data: memberships } = campaignIds.length
