@@ -21,8 +21,7 @@ export const MAIL_SUBNAV = [
 export const MESSAGE_SUBNAV = MAIL_SUBNAV;
 
 export const TELEGRAM_SUBNAV = [
-  { href: "/telegram", label: "Chat aperte", description: "Conversazioni Telegram da gestire." },
-  { href: "/telegram#telegram-config", label: "Configurazione", description: "Bot, modalità e parole chiave." },
+  { href: "/telegram", label: "Chat e controllo", description: "Accendi, spegni e gestisci le conversazioni." },
 ] as const;
 
 export const SETTINGS_SUBNAV = [

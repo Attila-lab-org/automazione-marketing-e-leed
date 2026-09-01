@@ -12,6 +12,7 @@ import SmartDataTable, {
 } from "@/components/smart-data-table";
 import type { LeadRow, QualificationStatus } from "@/lib/types/database";
 import type { QualificationReason } from "@/lib/domain/discovery-qualification";
+import { DISCOVERY_CATEGORIES } from "@/lib/leads/discovery-categories";
 
 type DiscoverResponse = {
   found?: number;
@@ -72,43 +73,6 @@ const CATEGORY_GROUPS: Array<{
     values: ["meal_takeaway", "sandwich_shop", "deli"],
   },
   { label: "Agriturismi", values: ["farmstay"] },
-];
-
-const DISCOVERY_CATEGORIES = [
-  "Ristoranti",
-  "Pizzerie",
-  "Bar ed enoteche",
-  "Agriturismi",
-  "Gelaterie",
-  "Pasticcerie",
-  "Hotel",
-  "Bed & Breakfast",
-  "Agenzie immobiliari",
-  "Studi legali",
-  "Commercialisti",
-  "Dentisti",
-  "Fisioterapisti",
-  "Cliniche private",
-  "Farmacie",
-  "Parrucchieri",
-  "Barbieri",
-  "Centri estetici",
-  "Spa",
-  "Palestre",
-  "Personal trainer",
-  "Scuole di danza",
-  "Officine auto",
-  "Concessionarie",
-  "Imprese edili",
-  "Idraulici",
-  "Elettricisti",
-  "Fotografi",
-  "Wedding planner",
-  "Negozi di abbigliamento",
-  "Arredamento",
-  "Agenzie di viaggio",
-  "Scuole di formazione",
-  "Consulenti aziendali",
 ];
 
 function categoryLabel(raw: string | null): string {
@@ -204,10 +168,8 @@ export default function LeadsBrowser({
   const [selectedLead, setSelectedLead] = useState<LeadView | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
   const [category, setCategory] = useState("Ristoranti");
   const [location, setLocation] = useState("Milano");
-  const [maxResults, setMaxResults] = useState(20);
   const [searching, setSearching] = useState(false);
   const [resultBanner, setResultBanner] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -398,7 +360,7 @@ export default function LeadsBrowser({
         body: JSON.stringify({
           category: category.trim(),
           location: location.trim(),
-          maxResults,
+          maxResults: 20,
         }),
       });
       const raw = await res.text();
@@ -417,8 +379,7 @@ export default function LeadsBrowser({
         throw new Error(`Discovery fallita (HTTP ${res.status})`);
       }
       if (!res.ok) throw new Error(data.error ?? "Discovery fallita");
-      setResultBanner(data.message ?? "Discovery completata");
-      setModalOpen(false);
+      setResultBanner(data.message ?? "Ricerca completata");
       setLoading(true);
       setReloadToken((n) => n + 1);
     } catch (err) {
@@ -426,12 +387,6 @@ export default function LeadsBrowser({
     } finally {
       setSearching(false);
     }
-  }
-
-  function openDiscoverModal() {
-    if (filterCategory) setCategory(filterCategory);
-    if (filterCity) setLocation(filterCity);
-    setModalOpen(true);
   }
 
   function resetFilters() {
@@ -586,52 +541,85 @@ export default function LeadsBrowser({
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          {resultBanner ? (
-            <p className="text-sm text-stone-700">{resultBanner}</p>
-          ) : (
-            <p className="text-sm text-stone-500">
-              Le attività sono ordinate dalla più interessante. Da questa pagina non parte nessuna email.
+      <form
+        onSubmit={onDiscover}
+        className="rounded-xl border border-stone-200 bg-white p-4"
+      >
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-stone-900">Cerca su Google</h2>
+            <p className="mt-0.5 text-xs text-stone-500">
+              Scegli settore e città, poi avvia la ricerca. I risultati si aggiungono all’elenco sotto.
             </p>
-          )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              title="Inserisci a mano un’attività che conosci già."
+              onClick={() => setManualOpen(true)}
+              className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
+            >
+              Aggiungi a mano
+            </button>
+            <button
+              type="button"
+              title="Ricalcola il punteggio di tutte le attività usando i dati disponibili."
+              onClick={() => void onRequalify()}
+              disabled={searching}
+              className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 disabled:opacity-60"
+            >
+              Ricalcola punteggi
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="mt-4 grid gap-3 md:grid-cols-[1.2fr_1fr_auto]">
+          <label className="text-sm font-medium text-stone-700">
+            Settore
+            <input
+              required
+              list="discovery-category-options"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="Es. Ristoranti"
+              disabled={searching}
+              className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+            />
+            <datalist id="discovery-category-options">
+              {DISCOVERY_CATEGORIES.map((item) => (
+                <option key={item} value={item} />
+              ))}
+            </datalist>
+          </label>
+          <label className="text-sm font-medium text-stone-700">
+            Città o zona
+            <input
+              required
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Es. Milano"
+              disabled={searching}
+              className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+            />
+          </label>
           <button
-            type="button"
-            title="Inserisci a mano un’attività che conosci già."
-            onClick={() => setManualOpen(true)}
-            className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
-          >
-            Aggiungi attività
-          </button>
-          <button
-            type="button"
-            title="Ricalcola il punteggio di tutte le attività usando i dati disponibili."
-            onClick={() => void onRequalify()}
+            type="submit"
             disabled={searching}
-            className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 disabled:opacity-60"
+            className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60 md:self-end"
           >
-            Riqualifica tutti
-          </button>
-          <button
-            type="button"
-            title="Cerca nuove attività su Google per categoria e località."
-            onClick={openDiscoverModal}
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
-          >
-            Cerca nuove attività
+            {searching ? "Cerco…" : "Avvia ricerca"}
           </button>
         </div>
-      </div>
+        {resultBanner ? (
+          <p className="mt-3 text-sm text-stone-700">{resultBanner}</p>
+        ) : null}
+      </form>
 
       <div className="rounded-xl border border-stone-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-stone-800">Filtra le attività salvate</h2>
             <p className="mt-0.5 text-xs text-stone-500">
-              Questi filtri cambiano soltanto l’elenco qui sotto. La ricerca di nuove attività
-              usa invece i dati inseriti nella finestra «Cerca nuove attività».
+              Questi filtri cambiano soltanto l’elenco già salvato. La ricerca Google sta nel riquadro sopra.
             </p>
           </div>
           <button
@@ -739,7 +727,7 @@ export default function LeadsBrowser({
         <div className="rounded-xl border border-dashed border-stone-300 bg-white px-6 py-10 text-center">
           <p className="text-sm font-medium text-stone-800">Nessuna attività</p>
           <p className="mt-1 text-sm text-stone-500">
-            Usa «Cerca attività» per trovare fino a 50 attività e valutarle automaticamente.
+            Usa «Avvia ricerca» qui sopra per trovare nuove attività su Google.
           </p>
         </div>
       ) : (
@@ -802,98 +790,6 @@ export default function LeadsBrowser({
               ))
             )}
           </ul>
-        </div>
-      ) : null}
-
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            aria-label="Chiudi"
-            className="absolute inset-0 bg-stone-900/40"
-            onClick={() => !searching && setModalOpen(false)}
-          />
-          <form
-            onSubmit={onDiscover}
-            className="relative w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl"
-          >
-            <h2 className="text-lg font-semibold text-stone-900">Cerca attività</h2>
-            <p className="mt-1 text-sm text-stone-500">
-              Questa è una nuova ricerca su Google. Se avevi filtrato settore o città, li abbiamo
-              copiati qui come punto di partenza. Puoi cambiarli prima di cercare.
-            </p>
-
-            <label className="mt-5 block text-sm font-medium text-stone-700">
-              Settore da cercare
-              <input
-                required
-                list="discovery-category-options"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Esempio: Ristoranti"
-                title="Scegli un settore oppure scrivine uno diverso."
-                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
-                disabled={searching}
-              />
-              <datalist id="discovery-category-options">
-                {DISCOVERY_CATEGORIES.map((item) => (
-                  <option key={item} value={item} />
-                ))}
-              </datalist>
-            </label>
-            <label className="mt-4 block text-sm font-medium text-stone-700">
-              Città o zona della nuova ricerca
-              <input
-                required
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="Esempio: Milano centro"
-                title="Google cercherà nuove attività soltanto in questa città o zona."
-                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
-                disabled={searching}
-              />
-            </label>
-            <label className="mt-4 block text-sm font-medium text-stone-700">
-              Numero massimo risultati (1–50)
-              <input
-                type="number"
-                min={1}
-                max={50}
-                value={maxResults}
-                onChange={(e) =>
-                  setMaxResults(
-                    Math.min(50, Math.max(1, Number(e.target.value) || 1)),
-                  )
-                }
-                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
-                disabled={searching}
-              />
-            </label>
-            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Cercherò <strong>{category || "il settore indicato"}</strong> in{" "}
-              <strong>{location || "la località indicata"}</strong>.
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                title="Chiudi senza avviare la ricerca."
-                disabled={searching}
-                onClick={() => setModalOpen(false)}
-                className="rounded-lg px-4 py-2 text-sm text-stone-600 hover:bg-stone-100"
-              >
-                Annulla
-              </button>
-              <button
-                type="submit"
-                title="Avvia la ricerca con i criteri inseriti."
-                disabled={searching}
-                className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-              >
-                {searching ? "Ricerca in corso..." : "Cerca"}
-              </button>
-            </div>
-          </form>
         </div>
       ) : null}
 

@@ -1,7 +1,8 @@
 import PageHeader from "@/components/page-header";
-import DashboardStats from "@/components/dashboard-stats";
+import TelegramPowerControl from "@/components/telegram-power-control";
+import GoogleSearchControl from "@/components/google-search-control";
 import OperatorAlerts from "@/components/operator-alerts";
-import CommercialInsightsCard from "@/components/commercial-insights-card";
+import DashboardStats from "@/components/dashboard-stats";
 import RecentCommunicationsCard from "@/components/recent-communications-card";
 
 export default function OverviewPage() {
@@ -9,10 +10,13 @@ export default function OverviewPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
         title="Controllo"
-        description="Qui vedi soltanto cosa conta e cosa richiede la tua attenzione."
+        description="Da qui accendi Telegram e cerchi attività su Google. Il resto sta nelle sezioni a sinistra."
       />
 
-      <CommercialInsightsCard />
+      <section className="grid gap-4 lg:grid-cols-2">
+        <TelegramPowerControl showChatLink />
+        <GoogleSearchControl redirectToLeads />
+      </section>
 
       <OperatorAlerts channel="all" title="Da fare ora" limit={5} />
 

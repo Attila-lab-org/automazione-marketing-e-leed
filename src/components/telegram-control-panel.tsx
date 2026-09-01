@@ -123,31 +123,6 @@ export default function TelegramControlPanel() {
     }
   }
 
-  async function changeRunning(action: "start" | "stop") {
-    if (!settings) return;
-    if (action === "start" && !(await save(false))) return;
-    setBusy(true);
-    setError(null);
-    setFeedback(null);
-    try {
-      const response = await fetch("/api/settings/telegram", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      const data = (await response.json()) as ApiResponse & { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Operazione fallita");
-      setSettings(data.settings);
-      setConnection(data.connection);
-      setStats(data.stats ?? stats);
-      setFeedback(data.warning ?? data.message ?? "Operazione completata.");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Operazione fallita");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (error && !settings) {
     return (
       <section className="rounded-xl border border-red-200 bg-red-50 p-4">
@@ -177,32 +152,16 @@ export default function TelegramControlPanel() {
               ? "Attila ascolta e risponde automaticamente alle conversazioni sicure. Appuntamento solo dopo interesse esplicito."
               : mode === "manual"
                 ? "Attila ascolta e prepara le bozze: tu decidi se inviare. Nessun invio automatico."
-                : "Telegram è fermo. Premi “Avvia Telegram” per ascoltare le chat collegate."}
+                : "Telegram è fermo. Usa Accendi in alto in questa pagina o in Controllo."}
           </p>
           <p className="mt-1 max-w-2xl text-xs text-stone-500">
             Non può cercare in tutto Telegram: aggiungi il bot ai gruppi da monitorare e
             consentigli di leggere i messaggi tramite BotFather.
           </p>
         </div>
-        {settings.enabled ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => changeRunning("stop")}
-            className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50"
-          >
-            {busy ? "Attendi…" : "Ferma Telegram"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={busy || !connection.ready}
-            onClick={() => changeRunning("start")}
-            className="shrink-0 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {busy ? "Attendi…" : "Avvia Telegram"}
-          </button>
-        )}
+        <p className="shrink-0 text-sm text-stone-500">
+          Accendi e spegni dal riquadro in alto.
+        </p>
       </div>
 
       {stats ? (

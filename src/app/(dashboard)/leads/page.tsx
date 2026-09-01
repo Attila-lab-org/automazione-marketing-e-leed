@@ -18,7 +18,7 @@ export default async function LeadsPage({
         description={
           opportunita
             ? "Qui trovi i contatti più interessanti. Selezionali per creare una campagna."
-            : "1. Cerca su Google. 2. Seleziona i contatti. 3. Crea la campagna. Puoi eliminare quelli che non vuoi usare."
+            : "In alto cerchi su Google. Poi selezioni i contatti e crei la campagna."
         }
       />
       <LeadsBrowser view={opportunita ? "opportunita" : "tutti"} />

@@ -45,7 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/leads",
     label: "Contatti",
-    description: "Cerca possibili clienti, selezionali o eliminali.",
+    description: "Cerca su Google, seleziona i contatti, crea la campagna.",
     match: ["/leads", "/segments"],
     icon: navIcon(
       "M16 19c0-2.2-1.8-4-4-4s-4 1.8-4 4M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7 8c0-1.7-.9-3.2-2.3-3.8M17 8.5a2.5 2.5 0 0 1-1.5 2.3M5 19c0-1.7.9-3.2 2.3-3.8M7 8.5a2.5 2.5 0 0 0 1.5 2.3",
@@ -70,7 +70,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/telegram",
     label: "Telegram",
-    description: "Solo chat Telegram aperte, bot e configurazione.",
+    description: "Accendi o spegni il bot e gestisci le chat.",
     match: ["/telegram"],
     icon: navIcon("M21 3 3.7 10.1c-1.2.5-1.1 1.2-.2 1.5l4.4 1.4 1.7 5.2c.3.9.8 1 1.4.4l2.5-2.4 4.7 3.5c.9.6 1.6.3 1.8-.8L22 4.3c.2-1.1-.2-1.6-1-1.3ZM8 13l9-6"),
   },
