@@ -12,6 +12,7 @@ import { composeOrchestratorReply } from './compose-orchestrator';
 import { registeredNowWriteCapabilities, registeredReadCapabilities, type OperatorAssistMode } from './capabilities';
 import {
   emptyEntityRefs,
+  extractOperatorPreference,
   mergeEntityRefs,
   resolveOrdinalSelection,
   resolveOperatorEnvelope,
@@ -134,7 +135,33 @@ export async function* runOperatorTurn(
   if (input.envelope.entityType === 'event' && input.envelope.entityId) {
     prevRefs = { ...prevRefs, lastEventId: input.envelope.entityId };
   }
+  const rememberedPreference = extractOperatorPreference(input.question);
+  if (rememberedPreference) {
+    prevRefs = {
+      ...prevRefs,
+      preferences: [
+        ...prevRefs.preferences.filter(
+          (item) => item.toLocaleLowerCase('it-IT') !== rememberedPreference.toLocaleLowerCase('it-IT'),
+        ),
+        rememberedPreference,
+      ].slice(-8),
+    };
+  }
   const envelope = resolveOperatorEnvelope(input.question, input.envelope, prevRefs, fallbackIntent);
+
+  if (rememberedPreference) {
+    const reply = `Va bene, lo terrò a mente: ${rememberedPreference}.`;
+    yield { type: 'delta', text: reply };
+    yield {
+      type: 'done',
+      reply,
+      actions: [],
+      run: null,
+      persisted: false,
+      refs: prevRefs,
+    };
+    return;
+  }
 
   if (input.writes?.goalCommand) {
     const goalWrite = await input.writes.goalCommand(input.question);
@@ -183,7 +210,7 @@ export async function* runOperatorTurn(
     const planned = await provider.answerOperator(
       {
         question: input.question,
-        history: (input.history ?? []).slice(-8),
+        history: (input.history ?? []).slice(-20),
         refs: prevRefs,
         envelope,
         assistMode,
@@ -499,6 +526,7 @@ export async function* runOperatorTurn(
       const composedAi = await provider.composeOperatorAnswer(
         {
           question: input.question,
+          history: (input.history ?? []).slice(-20),
           plan,
           traces: traces.map((t) => ({ name: t.name, ok: t.ok, result: t.result })),
           writeSummaries: writes.map((w) => w.summary),
@@ -517,6 +545,7 @@ export async function* runOperatorTurn(
         ? composedAi.output.reply
         : composeOrchestratorReply({
             question: input.question,
+            history: (input.history ?? []).slice(-20),
             plan,
             traces: traces.map((t) => ({ name: t.name, ok: t.ok, result: t.result })),
             writeSummaries: writes.map((w) => w.summary),
@@ -526,6 +555,7 @@ export async function* runOperatorTurn(
   } catch {
     replyText = composeOrchestratorReply({
       question: input.question,
+      history: (input.history ?? []).slice(-20),
       plan,
       traces: traces.map((t) => ({ name: t.name, ok: t.ok, result: t.result })),
       writeSummaries: writes.map((w) => w.summary),
@@ -538,6 +568,13 @@ export async function* runOperatorTurn(
     /demo|anteprim|propost[ae] visiv|siti? dimostrativ/i.test(input.question) &&
     writes.some((write) => write.tool === 'prepare_campaign');
   if (demoBatchRequested && deterministic.reply) {
+    replyText = deterministic.reply;
+  }
+  if (
+    deterministic.reply &&
+    (deterministic.actions.some((action) => action.type === 'open_page') ||
+      /bozza|cosa (?:hai|ha) scritt|cosa scrive|testo (?:della )?risposta/i.test(input.question))
+  ) {
     replyText = deterministic.reply;
   }
   // Preferisci il testo grounded quando la reply AI non riporta i numeri/dati tool

@@ -1,15 +1,12 @@
 import CampaignsClient from "@/components/campaigns-client";
 import PageHeader from "@/components/page-header";
-import SectionSubnav from "@/components/section-subnav";
-import { CAMPAIGN_SUBNAV } from "@/lib/navigation";
 
 export default function CampaignsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <SectionSubnav items={[...CAMPAIGN_SUBNAV]} />
       <PageHeader
-        title="Campagne"
-        description="Qui gestisci solo gli invii email a gruppi di contatti. Telegram e la posta hanno sezioni separate."
+        title="Invii email"
+        description="Prepara, controlla e segui le email inviate ai contatti."
       />
 
       <CampaignsClient />

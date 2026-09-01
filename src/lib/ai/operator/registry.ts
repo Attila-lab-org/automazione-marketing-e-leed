@@ -153,6 +153,7 @@ export type ConversationHit = {
   status: string;
   assignedMode?: string | null;
   messages?: Array<{ direction: string; body: string; at: string }>;
+  aiDraft?: { understanding: string; text: string } | null;
 };
 
 export type CalendarEventHit = {

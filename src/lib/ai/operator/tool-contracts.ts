@@ -19,7 +19,9 @@ export type ToolContract = {
     | 'Abilita policy'
     | 'Metti in pausa'
     | 'Conferma azione'
-    | 'Conferma risposta';
+    | 'Conferma risposta'
+    | 'Sì, accendi Telegram'
+    | 'Sì, spegni Telegram';
   auditPropose?: string;
   auditExecute?: string;
 };

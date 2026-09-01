@@ -112,7 +112,12 @@ describe('calendar slot selection', () => {
       },
     ];
     expect(
-      listClosestAvailableSlots(slots, '2026-08-29T10:00:00.000Z', 2).map(
+      listClosestAvailableSlots(
+        slots,
+        '2026-08-29T10:00:00.000Z',
+        2,
+        '2026-08-28T12:07:00.000Z',
+      ).map(
         (slot) => slot.id,
       ),
     ).toEqual(['vicino', 'lontano']);

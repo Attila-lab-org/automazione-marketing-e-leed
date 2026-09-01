@@ -26,8 +26,8 @@ export default function DashboardStats() {
 
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <KpiCard label="Possibili clienti" value={String(stats?.leadsTotal ?? "—")} tooltip="Tutti i contatti presenti nella tua lista." drilldownHref="/leads" />
-      <KpiCard label="Campagne attive" value={String(stats?.campaignsActive ?? "—")} tooltip="Campagne che stanno preparando contenuti o hanno invii in corso." drilldownHref="/campaigns" />
+      <KpiCard label="Contatti" value={String(stats?.leadsTotal ?? "—")} tooltip="Tutti i contatti presenti nella tua lista." drilldownHref="/leads" />
+      <KpiCard label="Invii attivi" value={String(stats?.campaignsActive ?? "—")} tooltip="Invii email in preparazione o già in corso." drilldownHref="/campaigns" />
       <KpiCard label="Risposte" value={String(stats?.replies ?? "—")} tooltip="Numero di risposte ricevute dai clienti." drilldownHref="/inbox" />
       <KpiCard label="Clienti interessati" value={String(stats?.hotInterested ?? "—")} tooltip="Attività che hanno mostrato interesse o sono vicine alla conversione." drilldownHref="/leads" accent="amber" />
     </div>

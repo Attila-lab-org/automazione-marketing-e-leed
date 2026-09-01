@@ -333,6 +333,16 @@ export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
       prepareKind: 'none',
     },
     {
+      id: 'conversation',
+      class: 'READ',
+      score: scoreCues(q, ['bozza', 'cosa scrive', 'cosa hai scritto', 'testo risposta', 'conversaz', 'messagg']),
+      tools: input.refs.lastThreadId
+        ? [call('get_conversation', { threadId: input.refs.lastThreadId })]
+        : [call('list_conversations')],
+      goal: 'Mostrare conversazione e bozza direttamente in chat',
+      prepareKind: 'none',
+    },
+    {
       id: 'personalize',
       class: 'PREPARE',
       score: scoreCues(q, [

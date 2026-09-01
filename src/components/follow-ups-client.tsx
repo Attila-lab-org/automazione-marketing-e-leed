@@ -39,7 +39,14 @@ export default function FollowUpsClient() {
   }
 
   useEffect(() => {
-    void load();
+    void fetch("/api/follow-ups", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? "Caricamento fallito");
+        setItems(data.items ?? []);
+      })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Errore"))
+      .finally(() => setLoading(false));
   }, []);
 
   async function prepare(item: FollowupItem) {

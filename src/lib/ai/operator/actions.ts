@@ -2,6 +2,21 @@ import { z } from 'zod';
 
 export const operatorActionSchema = z.discriminatedUnion('type', [
   z.object({
+    type: z.literal('open_page'),
+    page: z.enum([
+      'overview',
+      'leads',
+      'inbox',
+      'telegram-messages',
+      'campaigns',
+      'calendar',
+      'archive',
+      'telegram',
+      'settings',
+    ]),
+    label: z.string().min(1).max(40),
+  }),
+  z.object({
     type: z.literal('open_campaign'),
     campaignId: z.string().uuid(),
     label: z.literal('Apri campagna'),
@@ -56,6 +71,8 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
       z.literal('Metti in pausa'),
       z.literal('Conferma azione'),
       z.literal('Conferma risposta'),
+      z.literal('Sì, accendi Telegram'),
+      z.literal('Sì, spegni Telegram'),
     ]),
   }),
   z.object({
@@ -88,6 +105,29 @@ export const OPERATOR_REPLY_JSON_SCHEMA = {
       type: 'array',
       items: {
         anyOf: [
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              type: { type: 'string', enum: ['open_page'] },
+              page: {
+                type: 'string',
+                enum: [
+                  'overview',
+                  'leads',
+                  'inbox',
+                  'telegram-messages',
+                  'campaigns',
+                  'calendar',
+                  'archive',
+                  'telegram',
+                  'settings',
+                ],
+              },
+              label: { type: 'string' },
+            },
+            required: ['type', 'page', 'label'],
+          },
           {
             type: 'object',
             additionalProperties: false,
@@ -147,6 +187,18 @@ export const OPERATOR_REPLY_JSON_SCHEMA = {
 
 export function hrefForAction(action: OperatorAction): string {
   switch (action.type) {
+    case 'open_page':
+      return {
+        overview: '/overview',
+        leads: '/leads',
+        inbox: '/inbox',
+        'telegram-messages': '/inbox?channel=telegram',
+        campaigns: '/campaigns',
+        calendar: '/calendar',
+        archive: '/archive',
+        telegram: '/telegram',
+        settings: '/settings',
+      }[action.page];
     case 'open_campaign':
       return `/campaigns/${action.campaignId}`;
     case 'show_leads': {

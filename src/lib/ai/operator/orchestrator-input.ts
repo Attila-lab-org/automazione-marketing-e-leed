@@ -16,6 +16,7 @@ export type OperatorAnswerInput = {
 
 export type OperatorComposeInput = {
   question: string;
+  history: OperatorHistoryItem[];
   plan: OperatorPlan;
   traces: Array<{ name: string; ok: boolean; result: unknown }>;
   writeSummaries: string[];

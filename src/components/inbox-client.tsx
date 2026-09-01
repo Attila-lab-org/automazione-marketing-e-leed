@@ -66,15 +66,17 @@ function primaryStatus(item: InboxThreadItem): string {
 export default function InboxClient({
   channelScope = "all",
   initialThreads,
+  initialError = null,
   archivedView = false,
 }: {
   channelScope?: "all" | "telegram" | "email";
   initialThreads?: InboxThreadItem[];
+  initialError?: string | null;
   archivedView?: boolean;
 }) {
   const [threads, setThreads] = useState<InboxThreadItem[]>(initialThreads ?? []);
   const [loading, setLoading] = useState(initialThreads === undefined);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [conversation, setConversation] = useState<InboxConversationDetail | null>(null);
   const [conversationLoading, setConversationLoading] = useState(false);
@@ -86,7 +88,6 @@ export default function InboxClient({
   const [reply, setReply] = useState<ReplyFilter>("all");
   const [urgency, setUrgency] = useState<UrgencyFilter>("all");
   const [query, setQuery] = useState("");
-  const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const openThreadRef = useRef<string | null>(null);
   const conversationCache = useRef(new Map<string, InboxConversationDetail>());
@@ -202,6 +203,10 @@ export default function InboxClient({
           const params = new URLSearchParams(window.location.search);
           const threadId = params.get("thread");
           const leadId = params.get("lead");
+          const requestedChannel = params.get("channel");
+          if (channelScope === "all" && (requestedChannel === "email" || requestedChannel === "telegram")) {
+            setChannel(requestedChannel);
+          }
           if (threadId) {
             void openConversation(threadId);
           } else if (leadId) {
@@ -428,15 +433,8 @@ export default function InboxClient({
               <InboxRow
                 key={thread.threadId}
                 item={thread}
-                expanded={expandedThreadId === thread.threadId}
                 archivedView={archivedView}
                 actionBusy={actionBusy === thread.threadId}
-                onToggle={() => {
-                  prefetchConversation(thread.threadId);
-                  setExpandedThreadId((current) =>
-                    current === thread.threadId ? null : thread.threadId,
-                  );
-                }}
                 onPrefetch={() => prefetchConversation(thread.threadId)}
                 onOpen={() => void openConversation(thread.threadId)}
                 onArchive={() => void archiveThread(thread.threadId, !archivedView)}
@@ -471,32 +469,27 @@ export default function InboxClient({
 
 function InboxRow({
   item,
-  expanded,
   archivedView,
   actionBusy,
-  onToggle,
   onPrefetch,
   onOpen,
   onArchive,
 }: {
   item: InboxThreadItem;
-  expanded: boolean;
   archivedView: boolean;
   actionBusy: boolean;
-  onToggle: () => void;
   onPrefetch: () => void;
   onOpen: () => void;
   onArchive: () => void;
 }) {
   return (
-    <li>
+    <li className="flex items-stretch gap-2 p-2">
       <button
         type="button"
-        onClick={onToggle}
+        onClick={onOpen}
         onMouseEnter={onPrefetch}
         onFocus={onPrefetch}
-        aria-expanded={expanded}
-        className="flex w-full flex-col gap-3 px-4 py-4 text-left hover:bg-stone-50 sm:flex-row sm:items-center sm:justify-between"
+        className="flex min-w-0 flex-1 flex-col gap-3 rounded-lg px-3 py-3 text-left hover:bg-stone-50 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -521,7 +514,7 @@ function InboxRow({
             </span>
           </div>
           {item.campaignName ? (
-            <p className="text-xs font-medium text-stone-500">Campagna: {item.campaignName}</p>
+            <p className="text-xs font-medium text-stone-500">Invio email: {item.campaignName}</p>
           ) : null}
           <p className="line-clamp-2 text-sm text-stone-600">
             {item.preview ?? item.subject ?? "Nessun messaggio"}
@@ -529,69 +522,25 @@ function InboxRow({
         </div>
         <div className="shrink-0 text-xs text-stone-500 sm:text-right">
           <p>{formatWhen(item.lastMessageAt)}</p>
-          <p className="mt-1 font-semibold text-stone-800">
-            {expanded ? "Riduci ↑" : "Espandi ↓"}
-          </p>
+          <p className="mt-1 font-semibold text-stone-800">Apri →</p>
         </div>
       </button>
-      {expanded ? (
-        <div className="border-t border-stone-100 bg-stone-50 px-4 py-4">
-          <div className="grid gap-3 text-sm sm:grid-cols-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">Ultimo movimento</p>
-              <p className="mt-1 font-medium text-stone-800">
-                {item.latestDirection === "INBOUND"
-                  ? "Il cliente ha risposto"
-                  : item.latestDirection === "OUTBOUND"
-                    ? "Hai inviato l’ultimo messaggio"
-                    : "Nessun movimento"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">Priorità</p>
-              <p className="mt-1 font-medium text-stone-800">
-                {item.priority === "HOT" || item.priority === "HIGH" ? "Urgente" : "Normale"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">Prossimo passo</p>
-              <p className="mt-1 font-medium text-stone-800">{item.nextStep ?? primaryStatus(item)}</p>
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onOpen}
-              className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
-            >
-              Apri conversazione
-            </button>
-            <button
-              type="button"
-              disabled={actionBusy}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (
-                  !archivedView &&
-                  !window.confirm(
-                    `Archiviare la conversazione con ${item.leadName}? La togli dalle chat aperte.`,
-                  )
-                ) {
-                  return;
-                }
-                onArchive();
-              }}
-              className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-            >
-              {actionBusy
-                ? "Attendi…"
-                : archivedView
-                  ? "Riapri chat"
-                  : "Archivia"}
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <button
+        type="button"
+        disabled={actionBusy}
+        onClick={() => {
+          if (
+            !archivedView &&
+            !window.confirm(`Archiviare la conversazione con ${item.leadName}?`)
+          ) {
+            return;
+          }
+          onArchive();
+        }}
+        className="self-center rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50 disabled:opacity-50"
+      >
+        {actionBusy ? "…" : archivedView ? "Riapri" : "Archivia"}
+      </button>
     </li>
   );
 }

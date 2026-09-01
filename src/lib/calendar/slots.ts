@@ -204,9 +204,10 @@ export function listClosestAvailableSlots(
   slots: SlotLike[],
   targetIso: string,
   limit = 3,
+  nowIso?: string,
 ): SlotLike[] {
   const target = new Date(targetIso).getTime();
-  const now = Date.now();
+  const now = nowIso ? new Date(nowIso).getTime() : Date.now();
   return slots
     .filter((slot) => slot.status === 'AVAILABLE')
     .filter((slot) => new Date(slot.starts_at).getTime() >= now)

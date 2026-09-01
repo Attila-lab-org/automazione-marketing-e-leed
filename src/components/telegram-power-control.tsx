@@ -181,9 +181,14 @@ export default function TelegramPowerControl({
       {feedback ? <p className="mt-3 text-sm text-stone-700">{feedback}</p> : null}
 
       {showChatLink ? (
-        <Link href="/telegram" className="mt-4 inline-block text-sm font-medium text-stone-900 underline">
-          Vai alle chat
-        </Link>
+        <div className="mt-4 flex flex-wrap gap-4 text-sm font-medium">
+          <Link href="/inbox?channel=telegram" className="text-stone-900 underline">
+            Messaggi Telegram
+          </Link>
+          <Link href="/telegram#telegram-config" className="text-stone-600 underline">
+            Configura bot
+          </Link>
+        </div>
       ) : null}
     </section>
   );

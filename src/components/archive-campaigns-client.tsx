@@ -33,7 +33,10 @@ export default function ArchiveCampaignsClient() {
   }
 
   useEffect(() => {
-    void load();
+    void fetch("/api/campaigns?archived=1")
+      .then((response) => response.json())
+      .then((data) => setCampaigns(data.campaigns ?? []))
+      .finally(() => setLoading(false));
   }, []);
 
   async function restore(campaign: Campaign) {

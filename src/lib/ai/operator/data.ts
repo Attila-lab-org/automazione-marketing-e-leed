@@ -428,6 +428,12 @@ export function createSupabaseOperatorData(
           body: (m.body ?? '').slice(0, 400),
           at: m.sentAt,
         })),
+        aiDraft: detail.aiDraft
+          ? {
+              understanding: detail.aiDraft.understanding.slice(0, 400),
+              text: detail.aiDraft.text.slice(0, 1200),
+            }
+          : null,
       };
     },
 

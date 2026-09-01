@@ -70,7 +70,7 @@ export const POST = withAdmin(async (request: Request) => {
     content: message,
   });
   const prior = await listOperatorMessages(admin, workspace.id, sessionId);
-  const history = prior.slice(-8).map((row) => ({
+  const history = prior.slice(-20).map((row) => ({
     role: row.role,
     content: row.content.slice(0, 2000),
   }));

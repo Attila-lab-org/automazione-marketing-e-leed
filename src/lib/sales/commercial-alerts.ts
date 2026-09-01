@@ -59,14 +59,14 @@ function humanizeOperatorMessage(message: string): { title: string; reason: stri
 }
 
 function hrefForEvent(eventType: string, data: Record<string, unknown>, channel: CommercialAlert['channel']): string {
-  if (eventType === 'FOLLOWUP_DRAFT_PREPARED' || eventType === 'followup_due') return '/review';
+  if (eventType === 'FOLLOWUP_DRAFT_PREPARED' || eventType === 'followup_due') return '/review-queue';
   const threadId = typeof data.threadId === 'string' ? data.threadId : null;
   if (threadId) {
     return channel === 'telegram'
-      ? `/telegram?thread=${encodeURIComponent(threadId)}`
+      ? `/inbox?channel=telegram&thread=${encodeURIComponent(threadId)}`
       : `/inbox?thread=${encodeURIComponent(threadId)}`;
   }
-  if (channel === 'telegram' || eventType.startsWith('TELEGRAM')) return '/telegram';
+  if (channel === 'telegram' || eventType.startsWith('TELEGRAM')) return '/inbox?channel=telegram';
   if (channel === 'campaign') return '/campaigns';
   return '/inbox';
 }
@@ -219,7 +219,7 @@ export async function listCommercialAlerts(
           kind: 'followup_review',
           title: 'Follow-up da approvare',
           reason: 'Bozza pronta nella coda di controllo.',
-          href: '/review',
+          href: '/review-queue',
           createdAt: row.updated_at,
           leadName: rLeadById.get(row.lead_id) ?? null,
           priority: 'normal',

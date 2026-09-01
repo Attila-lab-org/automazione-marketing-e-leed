@@ -12,7 +12,11 @@ import SmartDataTable, {
 } from "@/components/smart-data-table";
 import type { LeadRow, QualificationStatus } from "@/lib/types/database";
 import type { QualificationReason } from "@/lib/domain/discovery-qualification";
-import { DISCOVERY_CATEGORIES } from "@/lib/leads/discovery-categories";
+import SectorSelect from "@/components/sector-select";
+import {
+  DISCOVERY_CATEGORIES,
+  discoveryCategoryLabel,
+} from "@/lib/leads/discovery-categories";
 
 type DiscoverResponse = {
   found?: number;
@@ -50,40 +54,6 @@ const STATUS_STYLE: Record<QualificationStatus, string> = {
   LOW_PRIORITY: "border-stone-200 bg-stone-100 text-stone-500",
   REJECTED: "border-red-200 bg-red-50 text-red-700",
 };
-
-const CATEGORY_GROUPS: Array<{
-  label: string;
-  values: string[];
-}> = [
-  {
-    label: "Ristoranti",
-    values: [
-      "restaurant",
-      "italian_restaurant",
-      "mediterranean_restaurant",
-      "seafood_restaurant",
-      "family_restaurant",
-      "fusion_restaurant",
-    ],
-  },
-  { label: "Pizzerie", values: ["pizza_restaurant"] },
-  { label: "Bar ed enoteche", values: ["bar", "wine_bar"] },
-  {
-    label: "Cibo da asporto",
-    values: ["meal_takeaway", "sandwich_shop", "deli"],
-  },
-  { label: "Agriturismi", values: ["farmstay"] },
-];
-
-function categoryLabel(raw: string | null): string {
-  const value = raw?.trim().toLowerCase() ?? "";
-  if (!value) return "Altro settore";
-  const group = CATEGORY_GROUPS.find((item) => item.values.includes(value));
-  if (group) return group.label;
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
 
 function cityLabel(raw: string | null): string {
   const value = raw?.trim().replace(/\s+/g, " ") ?? "";
@@ -124,7 +94,7 @@ function toView(lead: LeadRow): LeadView {
   return {
     id: lead.id,
     name: lead.name,
-    category: categoryLabel(lead.category),
+    category: discoveryCategoryLabel(lead.category),
     city: cityLabel(lead.city),
     website: lead.website_url ?? undefined,
     email: lead.email ?? undefined,
@@ -168,8 +138,8 @@ export default function LeadsBrowser({
   const [selectedLead, setSelectedLead] = useState<LeadView | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [category, setCategory] = useState("Ristoranti");
-  const [location, setLocation] = useState("Milano");
+  const [category, setCategory] = useState("");
+  const [location, setLocation] = useState("");
   const [searching, setSearching] = useState(false);
   const [resultBanner, setResultBanner] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -436,7 +406,7 @@ export default function LeadsBrowser({
   function openCampaignModal(selected: LeadView[]) {
     const dateLabel = new Date().toLocaleDateString("it-IT");
     setCampaignLeads(selected);
-    setCampaignName(`Campagna ${dateLabel}`);
+    setCampaignName(`Invio email ${dateLabel}`);
     setCampaignMode("MANUAL");
     setDeliveryMode("TEST");
     setTestRecipient("");
@@ -447,7 +417,7 @@ export default function LeadsBrowser({
     e.preventDefault();
     if (!campaignLeads.length || !campaignName.trim()) return;
     if (deliveryMode === "TEST" && !testRecipient.trim()) {
-      setResultBanner("Campagna di prova: inserisci l’indirizzo che deve ricevere le email.");
+      setResultBanner("Invio di prova: inserisci l’indirizzo che deve ricevere le email.");
       return;
     }
     setCreatingCampaign(true);
@@ -466,11 +436,11 @@ export default function LeadsBrowser({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Creazione campagna fallita");
+      if (!res.ok) throw new Error(data.error ?? "Creazione invio email fallita");
       const campaignId = data.campaignId as string | undefined;
       setResultBanner(
         data.message ??
-          `Campagna creata con ${data.leadCount ?? campaignLeads.length} attività. Preparazione avviata.`,
+          `Invio creato con ${data.leadCount ?? campaignLeads.length} contatti. Preparazione avviata.`,
       );
       setCampaignModalOpen(false);
       if (campaignId) {
@@ -479,7 +449,7 @@ export default function LeadsBrowser({
         router.push("/review-queue");
       }
     } catch (err) {
-      setResultBanner(err instanceof Error ? err.message : "Creazione campagna fallita");
+      setResultBanner(err instanceof Error ? err.message : "Creazione invio email fallita");
       setCreatingCampaign(false);
     }
   }
@@ -547,9 +517,9 @@ export default function LeadsBrowser({
       >
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-stone-900">Cerca su Google</h2>
+            <h2 className="text-sm font-semibold text-stone-900">Cerca nuovi contatti su Google</h2>
             <p className="mt-0.5 text-xs text-stone-500">
-              Scegli settore e città, poi avvia la ricerca. I risultati si aggiungono all’elenco sotto.
+              I risultati vengono aggiunti direttamente ai contatti.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -575,20 +545,7 @@ export default function LeadsBrowser({
         <div className="mt-4 grid gap-3 md:grid-cols-[1.2fr_1fr_auto]">
           <label className="text-sm font-medium text-stone-700">
             Settore
-            <input
-              required
-              list="discovery-category-options"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="Es. Ristoranti"
-              disabled={searching}
-              className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
-            />
-            <datalist id="discovery-category-options">
-              {DISCOVERY_CATEGORIES.map((item) => (
-                <option key={item} value={item} />
-              ))}
-            </datalist>
+            <SectorSelect value={category} onChange={setCategory} disabled={searching} />
           </label>
           <label className="text-sm font-medium text-stone-700">
             Città o zona
@@ -603,14 +560,21 @@ export default function LeadsBrowser({
           </label>
           <button
             type="submit"
-            disabled={searching}
+            disabled={searching || !category}
             className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60 md:self-end"
           >
             {searching ? "Cerco…" : "Avvia ricerca"}
           </button>
         </div>
         {resultBanner ? (
-          <p className="mt-3 text-sm text-stone-700">{resultBanner}</p>
+          <p
+            role="status"
+            className={`mt-3 text-sm ${
+              /errore|fallit|impossibile/i.test(resultBanner) ? "text-red-700" : "text-emerald-700"
+            }`}
+          >
+            {resultBanner}
+          </p>
         ) : null}
       </form>
 
@@ -725,9 +689,13 @@ export default function LeadsBrowser({
         <p className="text-sm text-stone-500">Caricamento attività…</p>
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-stone-300 bg-white px-6 py-10 text-center">
-          <p className="text-sm font-medium text-stone-800">Nessuna attività</p>
+          <p className="text-sm font-medium text-stone-800">
+            {rows.length ? "Nessun contatto corrisponde ai filtri" : "Nessun contatto"}
+          </p>
           <p className="mt-1 text-sm text-stone-500">
-            Usa «Avvia ricerca» qui sopra per trovare nuove attività su Google.
+            {rows.length
+              ? "Azzera i filtri per rivedere tutti i contatti salvati."
+              : "Usa la ricerca Google qui sopra oppure aggiungi un contatto a mano."}
           </p>
         </div>
       ) : (
@@ -741,7 +709,7 @@ export default function LeadsBrowser({
           onRowClick={(lead) => setSelectedLead(lead)}
           bulkActions={[
             {
-              label: "Crea campagna con i selezionati",
+              label: "Crea invio email",
               onApply: (rows) => openCampaignModal(rows),
             },
             {
@@ -805,7 +773,7 @@ export default function LeadsBrowser({
             onSubmit={onCreateCampaign}
             className="relative w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl"
           >
-            <h2 className="text-lg font-semibold text-stone-900">Crea campagna</h2>
+            <h2 className="text-lg font-semibold text-stone-900">Crea invio email</h2>
             <p className="mt-1 text-sm text-stone-500">
               {campaignLeads.length} attività selezionat
               {campaignLeads.length === 1 ? "o" : "i"} · preparazione automatica
@@ -827,14 +795,14 @@ export default function LeadsBrowser({
                 ),
             ) ? (
               <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                Alcuni settori selezionati non hanno ancora un modello demo dedicato. La campagna
-                verrà creata, ma quei contatti potrebbero richiedere un modello compatibile prima
+                Alcuni settori selezionati non hanno ancora un modello demo dedicato. L’invio
+                verrà creato, ma quei contatti potrebbero richiedere un modello compatibile prima
                 della preparazione.
               </p>
             ) : null}
 
             <label className="mt-5 block text-sm font-medium text-stone-700">
-              Nome campagna
+              Nome invio
               <input
                 required
                 value={campaignName}
@@ -912,7 +880,7 @@ export default function LeadsBrowser({
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
-                title="Chiudi senza creare la campagna."
+                title="Chiudi senza creare l’invio."
                 disabled={creatingCampaign}
                 onClick={() => setCampaignModalOpen(false)}
                 className="rounded-lg px-4 py-2 text-sm text-stone-600 hover:bg-stone-100"
@@ -921,11 +889,11 @@ export default function LeadsBrowser({
               </button>
               <button
                 type="submit"
-                title="Crea la campagna con le attività selezionate. Non invia ancora email."
+                title="Crea l’invio con i contatti selezionati. Non invia ancora email."
                 disabled={creatingCampaign}
                 className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
-                {creatingCampaign ? "Creazione…" : "Crea campagna"}
+                {creatingCampaign ? "Creazione…" : "Crea invio email"}
               </button>
             </div>
           </form>
@@ -946,7 +914,7 @@ export default function LeadsBrowser({
           >
             <h2 className="text-lg font-semibold text-stone-900">Aggiungi un’attività</h2>
             <p className="mt-1 text-sm text-stone-500">
-              L’attività sarà aggiunta alla lista. Potrai poi creare l’anteprima e inserirla in una campagna.
+              L’attività sarà aggiunta ai Contatti e potrà essere inclusa in un invio email.
             </p>
             <label className="mt-4 block text-sm font-medium text-stone-700">
               Nome attività
@@ -961,19 +929,19 @@ export default function LeadsBrowser({
               />
             </label>
             <label className="mt-3 block text-sm font-medium text-stone-700">
-              Categoria
+              Settore
               <input
                 required
-                list="manual-category-options"
+                list="manual-sector-options"
                 value={manualForm.category}
-                onChange={(e) =>
-                  setManualForm((f) => ({ ...f, category: e.target.value }))
+                onChange={(event) =>
+                  setManualForm((form) => ({ ...form, category: event.target.value }))
                 }
-                placeholder="Scrivi qualsiasi settore"
+                placeholder="Scrivi o scegli il settore"
                 className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 disabled={manualBusy}
               />
-              <datalist id="manual-category-options">
+              <datalist id="manual-sector-options">
                 {DISCOVERY_CATEGORIES.map((item) => (
                   <option key={item} value={item} />
                 ))}

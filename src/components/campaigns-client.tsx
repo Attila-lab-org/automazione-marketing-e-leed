@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import EmptyState from "@/components/empty-state";
+import { discoveryCategoryLabel } from "@/lib/leads/discovery-categories";
 
 type Campaign = {
   id: string;
@@ -24,18 +25,6 @@ const CAMPAIGN_STATUS: Record<string, string> = {
   ARCHIVED: "Archiviata",
 };
 
-const CAMPAIGN_MODE: Record<string, string> = {
-  MANUAL: "Controllo manuale",
-  SCORE_BASED: "In base al punteggio",
-  FULL_AUTO: "Completamente automatica",
-};
-
-function categoryLabel(value: string): string {
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("it-IT"));
-}
-
 export default function CampaignsClient() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [query, setQuery] = useState("");
@@ -43,21 +32,35 @@ export default function CampaignsClient() {
   const [status, setStatus] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function load() {
-    const response = await fetch("/api/campaigns");
+    const response = await fetch("/api/campaigns", { cache: "no-store" });
     const data = await response.json();
-    setCampaigns(data.campaigns ?? []);
+    if (!response.ok) throw new Error(data.error ?? "Impossibile caricare gli invii email");
+    const loaded = data.campaigns ?? [];
+    setCampaigns(loaded);
+    return loaded;
   }
 
   useEffect(() => {
-    void load();
+    void fetch("/api/campaigns", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? "Impossibile caricare gli invii email");
+        setCampaigns(data.campaigns ?? []);
+      })
+      .catch((reason) =>
+        setLoadError(reason instanceof Error ? reason.message : "Impossibile caricare gli invii email"),
+      )
+      .finally(() => setLoading(false));
   }, []);
 
   async function archiveCampaign(campaign: Campaign) {
     if (
       !window.confirm(
-        `Archiviare «${campaign.name}»? Sparisce dall’elenco attivo. I follow-up restano fermi.`,
+        `Archiviare l’invio «${campaign.name}»? Sparisce dall’elenco attivo. I solleciti restano fermi.`,
       )
     ) {
       return;
@@ -72,7 +75,7 @@ export default function CampaignsClient() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Archiviazione fallita");
-      setFeedback(`Campagna «${campaign.name}» archiviata. La trovi nella sezione Archivio.`);
+      setFeedback(`Invio «${campaign.name}» archiviato. Lo trovi nella sezione Archivio.`);
       await load();
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "Errore");
@@ -109,27 +112,19 @@ export default function CampaignsClient() {
           {feedback}
         </p>
       ) : null}
-      <section className="flex flex-col gap-4 rounded-xl border border-amber-200 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="font-semibold text-stone-900">Vuoi creare una nuova campagna?</h2>
-          <p className="mt-1 text-sm text-stone-600">
-            Cerca i possibili clienti, seleziona quelli giusti e premi “Crea campagna”.
-          </p>
-        </div>
-        <Link
-          href="/leads"
-          className="shrink-0 rounded-lg bg-stone-900 px-4 py-2 text-center text-sm font-semibold text-white hover:bg-stone-800"
-        >
-          Cerca e seleziona contatti
-        </Link>
-      </section>
+      {loading ? <p className="text-sm text-stone-500">Caricamento invii email…</p> : null}
+      {loadError ? (
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </p>
+      ) : null}
 
-      {campaigns.length ? (
+      {!loading && !loadError && campaigns.length ? (
         <>
         <section className="rounded-xl border border-stone-200 bg-white p-4">
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-end">
             <label className="text-xs font-semibold text-stone-600">
-              Cerca campagna
+              Cerca invio
               <input
                 type="search"
                 value={query}
@@ -147,7 +142,7 @@ export default function CampaignsClient() {
               >
                 <option value="">Tutte le categorie</option>
                 {categories.map((item) => (
-                  <option key={item} value={item}>{categoryLabel(item)}</option>
+                  <option key={item} value={item}>{discoveryCategoryLabel(item)}</option>
                 ))}
               </select>
             </label>
@@ -179,51 +174,50 @@ export default function CampaignsClient() {
             ) : <span />}
           </div>
         </section>
-        <section className="rounded-xl border border-stone-200 bg-white">
+        <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+          <div className="border-b border-stone-100 px-5 py-3">
+            <h2 className="text-sm font-semibold text-stone-900">Invii email creati</h2>
+            <p className="text-xs text-stone-500">Ogni riga è un gruppo di invio, non una singola attività Google.</p>
+          </div>
           <ul className="divide-y divide-stone-100">
             {visibleCampaigns.map((c) => (
-              <li key={c.id} className="flex items-center justify-between px-5 py-4 text-sm">
-                <div>
-                  <Link
-                    href={`/campaigns/${c.id}`}
-                    title="Apri la campagna e controlla stato, attività e invii."
-                    className="font-semibold text-stone-900 hover:text-amber-800 hover:underline"
-                  >
-                    {c.name}
-                  </Link>
-                  <p className="text-xs text-stone-500">
-                    {CAMPAIGN_MODE[c.mode] ?? c.mode} · {CAMPAIGN_STATUS[c.status] ?? c.status}
-                    {c.delivery_mode === "TEST" ? " · PROVA" : ""} ·{" "}
-                    {new Date(c.created_at).toLocaleString("it-IT")}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-600">
-                      {c.lead_count} {c.lead_count === 1 ? "contatto" : "contatti"}
+              <li key={c.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/campaigns/${c.id}`}
+                      title="Apri e controlla destinatari, messaggi e stato."
+                      className="font-semibold text-stone-900 hover:underline"
+                    >
+                      {c.name}
+                    </Link>
+                    <span className="rounded-full bg-stone-900 px-2 py-0.5 text-[11px] font-semibold text-white">
+                      {CAMPAIGN_STATUS[c.status] ?? c.status}
                     </span>
-                    {c.categories.slice(0, 3).map((item) => (
-                      <span key={item} className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-                        {categoryLabel(item)}
+                    {c.delivery_mode === "TEST" ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                        Prova
                       </span>
-                    ))}
-                    {c.categories.length > 3 ? (
-                      <span className="text-[11px] text-stone-500">+{c.categories.length - 3}</span>
                     ) : null}
                   </div>
+                  <p className="mt-1 text-sm text-stone-600">
+                    {c.lead_count} {c.lead_count === 1 ? "destinatario" : "destinatari"}
+                    {" · "}
+                    {c.status === "DRAFT"
+                      ? "Prossimo passo: prepara e controlla i messaggi"
+                      : c.status === "ACTIVE"
+                        ? "Invio in corso"
+                        : c.status === "PAUSED"
+                          ? "In pausa"
+                          : "Invio chiuso o fermo"}
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex shrink-0 items-center gap-3">
                   <Link
                     href={`/campaigns/${c.id}`}
-                    title="Apri tutti i dettagli della campagna."
-                    className="text-xs font-semibold text-stone-600 hover:underline"
+                    className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-semibold text-white"
                   >
-                    Dettaglio
-                  </Link>
-                  <Link
-                    href="/follow-ups"
-                    title="Vai ai follow-up di questa e altre campagne."
-                    className="text-xs font-semibold text-amber-700 hover:underline"
-                  >
-                    Follow-up
+                    Apri invio
                   </Link>
                   <button
                     type="button"
@@ -239,18 +233,18 @@ export default function CampaignsClient() {
           </ul>
           {visibleCampaigns.length === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-stone-500">
-              Nessuna campagna corrisponde ai filtri scelti.
+              Nessun invio corrisponde ai filtri scelti.
             </p>
           ) : null}
         </section>
         </>
-      ) : (
+      ) : !loading && !loadError ? (
         <EmptyState
-          title="Nessuna campagna"
-          description="Crea la prima campagna selezionando le attività più interessanti dalla pagina Attività."
-          nextAction={{ label: "Apri attività", href: "/leads" }}
+          title="Nessun invio email creato"
+          description="Apri Contatti, seleziona i destinatari e crea il primo invio email."
+          nextAction={{ label: "Vai ai contatti", href: "/leads" }}
         />
-      )}
+      ) : null}
     </div>
   );
 }

@@ -275,8 +275,8 @@ export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
       prepared: true,
       queued: false,
       sequenceStep: campaignLead.sequence_step,
-      href: '/review',
-      message: 'Bozza personalizzata pronta nella coda di controllo. Approvala lì per inviare.',
+      href: '/review-queue',
+      message: 'Bozza personalizzata pronta. Controllala e approvala per inviare.',
     });
   }
   if (body.action === 'pause') {

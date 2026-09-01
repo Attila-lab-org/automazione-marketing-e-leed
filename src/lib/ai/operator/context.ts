@@ -17,6 +17,7 @@ export type OperatorEntityRefs = {
   lastReviewContext: boolean;
   lastOperation: string | null;
   lastDemoProposal: DemoPersonalization | null;
+  preferences: string[];
 };
 
 export function emptyEntityRefs(): OperatorEntityRefs {
@@ -32,6 +33,7 @@ export function emptyEntityRefs(): OperatorEntityRefs {
     lastReviewContext: false,
     lastOperation: null,
     lastDemoProposal: null,
+    preferences: [],
   };
 }
 
@@ -74,12 +76,38 @@ export function parseEntityRefs(raw: unknown): OperatorEntityRefs {
     lastReviewContext: nested.lastReviewContext === true,
     lastOperation: typeof nested.lastOperation === 'string' ? nested.lastOperation.slice(0, 80) : null,
     lastDemoProposal: parseDemoProposal(nested.lastDemoProposal),
+    preferences: Array.isArray(nested.preferences)
+      ? nested.preferences
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => item.trim().slice(0, 180))
+          .filter(Boolean)
+          .slice(-8)
+      : [],
   };
 }
 
 function parseDemoProposal(raw: unknown): DemoPersonalization | null {
   const parsed = demoPersonalizationSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
+}
+
+export function extractOperatorPreference(question: string): string | null {
+  const clean = question.trim().replace(/\s+/g, ' ');
+  if (!clean || /password|parola d['’]?ordine|token|api key|chiave segreta|credenzial/i.test(clean)) {
+    return null;
+  }
+  const patterns = [
+    /(?:ricordati|ricorda) che (.+)$/i,
+    /(?:io )?preferisco (.+)$/i,
+    /chiamami (.+)$/i,
+    /voglio che tu (.+)$/i,
+    /non voglio che tu? ?(.+)$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = clean.match(pattern)?.[1]?.trim();
+    if (match) return match.slice(0, 180);
+  }
+  return null;
 }
 
 export function needsCampaignReferent(question: string, intent: OperatorIntent): boolean {
@@ -136,6 +164,7 @@ export function mergeEntityRefs(
     lastReviewContext: prev.lastReviewContext,
     lastOperation: prev.lastOperation,
     lastDemoProposal: prev.lastDemoProposal,
+    preferences: [...prev.preferences],
   };
 
   const writeCampaign = writes.find(

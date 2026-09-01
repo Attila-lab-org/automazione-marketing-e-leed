@@ -47,6 +47,7 @@ function norm(text: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\b(?:telegeram|telegramm+|telgram|telegran|telegam)\b/g, 'telegram')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -349,6 +350,13 @@ export async function proposeOrExecuteOps(args: {
   if (isConfirmTier(contract.tier)) {
     const preview = await buildOpsPreview(args);
     if (!preview.ok) return preview;
+    if (preview.data.alreadyInRequestedState === true) return preview;
+    const confirmLabel =
+      args.action === 'start_telegram'
+        ? 'Sì, accendi Telegram'
+        : args.action === 'stop_telegram'
+          ? 'Sì, spegni Telegram'
+          : contract.humanConfirmLabel ?? 'Conferma azione';
     const pending = await createPendingAction(args.admin, {
       workspaceId: args.workspaceId,
       tool: toolName,
@@ -376,7 +384,7 @@ export async function proposeOrExecuteOps(args: {
         ...preview.data,
         pendingActionId: pending.id,
         needsConfirmation: true,
-        confirmLabel: contract.humanConfirmLabel ?? 'Conferma azione',
+        confirmLabel,
       },
     };
   }
@@ -404,13 +412,30 @@ async function buildOpsPreview(args: {
         data: { missing: connection.missing },
       };
     }
+    const current = await getTelegramInboundSettings(args.admin, args.workspaceId);
+    if (args.action === 'start_telegram' && current.enabled) {
+      return {
+        tool: 'set_telegram_runtime',
+        ok: true,
+        summary: 'Telegram è già acceso.',
+        data: { alreadyInRequestedState: true, href: '/telegram' },
+      };
+    }
+    if (args.action === 'stop_telegram' && !current.enabled) {
+      return {
+        tool: 'set_telegram_runtime',
+        ok: true,
+        summary: 'Telegram è già spento.',
+        data: { alreadyInRequestedState: true, href: '/telegram' },
+      };
+    }
     return {
       tool: 'set_telegram_runtime',
       ok: true,
       summary:
         args.action === 'start_telegram'
-          ? 'Sto per avviare Telegram (webhook + ascolto).'
-          : 'Sto per fermare Telegram.',
+          ? 'Telegram è spento. Vuoi che lo accenda in modalità automatica protetta?'
+          : 'Telegram è acceso. Vuoi che lo spenga?',
       data: { runtimeAction: args.action === 'start_telegram' ? 'start' : 'stop' },
     };
   }
@@ -822,7 +847,7 @@ export async function executeOpsActionNow(args: {
         tool: 'list_manual_followups',
         ok: true,
         summary: 'Non ci sono follow-up da approvare in questo momento.',
-        data: { items: [], href: '/review' },
+        data: { items: [], href: '/review-queue' },
       };
     }
     const lines = due
@@ -836,7 +861,7 @@ export async function executeOpsActionNow(args: {
       tool: 'list_manual_followups',
       ok: true,
       summary: `Follow-up da approvare (${due.length}):\n${lines}\nApri la coda di controllo per leggere, modificare e approvare.`,
-      data: { items: due, href: '/review', count: due.length },
+      data: { items: due, href: '/review-queue', count: due.length },
     };
   }
 

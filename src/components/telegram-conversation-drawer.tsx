@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import type { InboxConversationDetail } from "@/lib/inbound/conversation";
 
 function formatDate(value: string | null): string {
@@ -53,11 +52,11 @@ export default function TelegramConversationDrawer({
         onClick={onClose}
         className="absolute inset-0 bg-stone-900/40"
       />
-      <aside
+      <section
         role="dialog"
         aria-modal="true"
         aria-label="Dettagli conversazione"
-        className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-stone-200 bg-stone-50 shadow-2xl"
+        className="absolute inset-0 flex flex-col bg-stone-50 sm:inset-4 sm:mx-auto sm:max-w-4xl sm:overflow-hidden sm:rounded-2xl sm:border sm:border-stone-200"
       >
         <header className="flex items-start justify-between gap-4 border-b border-stone-200 bg-white px-5 py-4">
           <div>
@@ -72,7 +71,7 @@ export default function TelegramConversationDrawer({
                 href={`/campaigns/${detail.campaignId}`}
                 className="mt-1 block text-xs font-medium text-sky-700 hover:underline"
               >
-                Campagna: {detail.campaignName}
+                Invio email: {detail.campaignName}
               </a>
             ) : null}
           </div>
@@ -146,6 +145,16 @@ export default function TelegramConversationDrawer({
                       onClose();
                     }}
                   />
+                  {detail.contact.telegramUrl || detail.chat.telegramUrl ? (
+                    <a
+                      href={detail.contact.telegramUrl ?? detail.chat.telegramUrl ?? "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md bg-stone-900 px-3 py-2 text-xs font-semibold text-white"
+                    >
+                      Apri su Telegram
+                    </a>
+                  ) : null}
                   </div>
                 ) : (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -162,19 +171,6 @@ export default function TelegramConversationDrawer({
                   </div>
                 )}
               </section>
-
-              {detail.channel === "EMAIL" ? (
-                <ManualEmailReply
-                  key={`${detail.threadId}:${customerIsWaiting ? detail.aiDraft?.text ?? "waiting" : "answered"}`}
-                  threadId={detail.threadId}
-                  initialText={customerIsWaiting ? detail.aiDraft?.text ?? "" : ""}
-                  aiUnderstanding={
-                    customerIsWaiting ? detail.aiDraft?.understanding ?? null : null
-                  }
-                  customerIsWaiting={customerIsWaiting}
-                  onSent={onChanged}
-                />
-              ) : null}
 
               {(detail.appointment || detail.nextDeadline) ? (
                 <details className="rounded-xl border border-sky-200 bg-sky-50 p-4">
@@ -205,50 +201,12 @@ export default function TelegramConversationDrawer({
                   </div>
                 </details>
               ) : null}
-              {detail.channel !== "EMAIL" ? (
-              <section className="grid gap-3 sm:grid-cols-2">
-                <InfoCard title="Contatto">
-                  <p className="font-medium text-stone-900">{detail.contact.displayName}</p>
-                  <p className="text-stone-600">{detail.contact.handle ?? "Username non disponibile"}</p>
-                  {detail.contact.telegramUrl ? (
-                    <a
-                      href={detail.contact.telegramUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block font-medium text-sky-700 hover:underline"
-                    >
-                      Apri su Telegram →
-                    </a>
-                  ) : null}
-                </InfoCard>
-                <InfoCard title={detail.chat.isGroup ? "Gruppo" : "Chat"}>
-                  <p className="font-medium text-stone-900">
-                    {detail.chat.title ??
-                      (detail.chat.isGroup ? "Gruppo senza titolo" : "Chat privata")}
-                  </p>
-                  <p className="text-stone-600">
-                    {detail.chat.username ? `@${detail.chat.username}` : `ID ${detail.chat.id ?? "—"}`}
-                  </p>
-                  {detail.chat.telegramUrl ? (
-                    <a
-                      href={detail.chat.telegramUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block font-medium text-sky-700 hover:underline"
-                    >
-                      Apri gruppo →
-                    </a>
-                  ) : null}
-                </InfoCard>
-              </section>
-              ) : null}
-
               <section className="space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                  Messaggi ({detail.messages.length})
+                  Conversazione · {detail.messages.length} messaggi
                 </h3>
                 {detail.messages.length ? (
-                  [...detail.messages].reverse().map((message) => (
+                  detail.messages.map((message) => (
                     <div
                       key={message.id}
                       className={
@@ -291,6 +249,19 @@ export default function TelegramConversationDrawer({
                 )}
               </section>
 
+              {detail.channel === "EMAIL" ? (
+                <ManualEmailReply
+                  key={`${detail.threadId}:${customerIsWaiting ? detail.aiDraft?.text ?? "waiting" : "answered"}`}
+                  threadId={detail.threadId}
+                  initialText={customerIsWaiting ? detail.aiDraft?.text ?? "" : ""}
+                  aiUnderstanding={
+                    customerIsWaiting ? detail.aiDraft?.understanding ?? null : null
+                  }
+                  customerIsWaiting={customerIsWaiting}
+                  onSent={onChanged}
+                />
+              ) : null}
+
               <details className="rounded-xl border border-stone-200 bg-white p-4">
                 <summary className="cursor-pointer text-sm font-semibold text-stone-800">
                   Dettagli tecnici e azioni avanzate
@@ -317,11 +288,10 @@ export default function TelegramConversationDrawer({
             </>
           ) : null}
         </div>
-      </aside>
+      </section>
     </div>
   );
 }
-
 function ManualEmailReply({
   threadId,
   initialText,
@@ -515,22 +485,5 @@ function CalendarActionButton({
     >
       {label}
     </button>
-  );
-}
-
-function InfoCard({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-stone-200 bg-white p-4 text-sm">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
-        {title}
-      </h3>
-      {children}
-    </div>
   );
 }

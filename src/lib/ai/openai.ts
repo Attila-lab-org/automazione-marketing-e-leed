@@ -388,6 +388,7 @@ export class OpenAICommercialProvider implements AICommercialProvider {
         'Una richiesta di produrre più demo o anteprime è PREPARE/prepareKind=campaign anche se non usa la parola campagna: per esempio prepara 10 demo, mi servono dieci proposte visive, scegli le migliori attività e crea le anteprime. Chiama search_leads con quantità, città e categoria dedotte. Se città o categoria non sono indicate, seleziona i lead migliori disponibili: non obbligare l’utente a parlare per comandi.',
         'Per una campagna TEST esplicita chiama search_leads. Se mancano città/lead, usa refs.lastLeadIds/lastLeadId se presenti; altrimenti clarification. La richiesta batch di demo è l’eccezione: può usare automaticamente i migliori lead disponibili. MAI campagna con 0 lead.',
         'Comprendi italiano naturale, typo e referenti (questa, il terzo).',
+        'Le preferenze esplicite in refs.preferences sono memoria dell’operatore: rispettale come stile e priorità, mai come autorizzazione a inviare o compiere azioni rischiose.',
       ].join(' '),
       user: JSON.stringify({
         question: input.question,
@@ -438,12 +439,14 @@ export class OpenAICommercialProvider implements AICommercialProvider {
       zodSchema: operatorFinalReplySchema,
       system: [
         'Componi una risposta italiana breve e naturale per l’operatore.',
+        'Adatta tono, nome e livello di dettaglio alle preferenze esplicite e alla cronologia. Sii personale ma non fingere di sapere ciò che non è stato detto.',
         'Cita solo tool riusciti. Non dichiarare successi senza result ok.',
         'Non menzionare ID lunghi. Non promettere invii. Non inventare numeri.',
         'citedTools deve essere un sottoinsieme dei tool riusciti.',
       ].join(' '),
       user: JSON.stringify({
         question: input.question,
+        history: (input.history ?? []).slice(-20),
         plan: input.plan,
         succeededTools: succeeded,
         traces: input.traces.map((t) => ({

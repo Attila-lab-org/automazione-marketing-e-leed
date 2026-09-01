@@ -4,8 +4,8 @@ import { applyPlaybookCommand, detectOperatorOpsAction } from '../../src/lib/ai/
 import { parseEuropeRomeDateTime, formatEuropeRome } from '../../src/lib/ai/operator/time';
 import { planOperatorTurnMock } from '../../src/lib/ai/operator/semantic-plan';
 import { envelopeFromPath } from '../../src/lib/ai/operator/envelope';
-import { emptyEntityRefs } from '../../src/lib/ai/operator/context';
-import { composeOperatorReply } from '../../src/lib/ai/operator/compose';
+import { emptyEntityRefs, extractOperatorPreference } from '../../src/lib/ai/operator/context';
+import { composeOperatorReply, navigationActionForQuestion } from '../../src/lib/ai/operator/compose';
 import { createMemoryOperatorData } from '../../src/lib/ai/operator/data';
 import { collectOperatorTurn } from '../../src/lib/ai/operator/turn';
 import type { PersistAiRun } from '../../src/lib/ai/persist';
@@ -34,11 +34,30 @@ describe('ops detection', () => {
     expect(detectOperatorOpsAction('aggiungi disponibilità domani alle 15:00')).toBe('create_slot');
     expect(detectOperatorOpsAction('annulla appuntamento')).toBe('cancel_appointment');
     expect(detectOperatorOpsAction('ferma automazione')).toBe('stop_automation');
+    expect(detectOperatorOpsAction('fai partire telegeram')).toBe('start_telegram');
     expect(
       detectOperatorOpsAction(
         'modalità autonoma, prezzo minimo 700, prezzo standard 1000, sconto massimo 15',
       ),
     ).toBe('update_playbook');
+  });
+
+  it('ricorda solo preferenze esplicite e non segreti', () => {
+    expect(extractOperatorPreference('Ricordati che preferisco risposte brevi')).toBe(
+      'preferisco risposte brevi',
+    );
+    expect(extractOperatorPreference('Ricordati che la password è abc')).toBeNull();
+  });
+
+  it('apre direttamente le sezioni richieste', () => {
+    expect(navigationActionForQuestion('Apri i messaggi Telegram')).toMatchObject({
+      type: 'open_page',
+      page: 'telegram-messages',
+    });
+    expect(navigationActionForQuestion('Portami ai contatti')).toMatchObject({
+      type: 'open_page',
+      page: 'leads',
+    });
   });
 
   it('traduce un comando semplice in regole commerciali editabili', () => {
@@ -165,6 +184,43 @@ describe('daily commercial briefing', () => {
       envelope: { route: '/overview', entityType: 'none', entityId: null },
     });
     expect(plan.toolCalls.some((tool) => tool.name === 'get_daily_briefing')).toBe(true);
+  });
+});
+
+describe('bozze visibili in chat', () => {
+  it('mostra il testo preparato senza dichiararlo inviato', () => {
+    const reply = composeOperatorReply(
+      'fammi vedere la bozza della risposta',
+      { route: '/inbox', entityType: 'thread', entityId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      [
+        {
+          name: 'get_conversation',
+          result: {
+            threadId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            leadName: 'Cliente Demo',
+            status: 'OPEN',
+            messages: [],
+            aiDraft: {
+              understanding: 'Chiede informazioni sul servizio.',
+              text: 'Buongiorno, le spiego volentieri come funziona.',
+            },
+          },
+        },
+      ],
+      [],
+      {
+        kind: 'READ',
+        city: null,
+        category: null,
+        limit: 8,
+        deliveryMode: null,
+        campaignHint: null,
+        leadLimitRequested: false,
+        writeVerb: null,
+      },
+    );
+    expect(reply.reply).toContain('Bozza pronta (non inviata)');
+    expect(reply.reply).toContain('Buongiorno, le spiego volentieri');
   });
 });
 

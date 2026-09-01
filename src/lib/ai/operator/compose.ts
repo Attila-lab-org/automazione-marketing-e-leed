@@ -10,6 +10,40 @@ function metricText(metric: DailyReport['metrics'][keyof DailyReport['metrics']]
   return String(metric.value);
 }
 
+export function navigationActionForQuestion(question: string): OperatorAction | null {
+  const q = question
+    .toLocaleLowerCase('it-IT')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\b(?:telegeram|telegramm+|telgram|telegran|telegam)\b/g, 'telegram');
+  if (!/\b(apri|vai|portami|portami alla|portami agli|mostrami la pagina)\b/.test(q)) return null;
+  if (/telegram/.test(q)) {
+    return /messagg|chat|conversaz/.test(q)
+      ? { type: 'open_page', page: 'telegram-messages', label: 'Apri messaggi Telegram' }
+      : { type: 'open_page', page: 'telegram', label: 'Apri bot Telegram' };
+  }
+  if (/messagg|inbox|posta/.test(q)) {
+    return { type: 'open_page', page: 'inbox', label: 'Apri messaggi' };
+  }
+  if (/contatt|lead|client/.test(q)) {
+    return { type: 'open_page', page: 'leads', label: 'Apri contatti' };
+  }
+  if (/invii|campagn|email/.test(q)) {
+    return { type: 'open_page', page: 'campaigns', label: 'Apri invii email' };
+  }
+  if (/calendar|appuntament|agenda/.test(q)) {
+    return { type: 'open_page', page: 'calendar', label: 'Apri calendario' };
+  }
+  if (/archiv/.test(q)) return { type: 'open_page', page: 'archive', label: 'Apri archivio' };
+  if (/impostazion|setting/.test(q)) {
+    return { type: 'open_page', page: 'settings', label: 'Apri impostazioni' };
+  }
+  if (/oggi|panoramica|dashboard|home/.test(q)) {
+    return { type: 'open_page', page: 'overview', label: 'Apri Oggi' };
+  }
+  return null;
+}
+
 export function composeOperatorReply(
   question: string,
   envelope: OperatorEnvelope,
@@ -18,6 +52,10 @@ export function composeOperatorReply(
   intent?: OperatorIntent,
   assistMode: OperatorAssistMode = 'ASSISTITO',
 ): OperatorReply {
+  const navigation = navigationActionForQuestion(question);
+  if (navigation) {
+    return { reply: `Ti porto a ${navigation.label.replace(/^Apri /, '')}.`, actions: [navigation] };
+  }
   if (intent?.kind === 'HELP') {
     const help = buildOperatorCapabilityReply(assistMode);
     return { reply: help.reply, actions: [] };
@@ -99,6 +137,27 @@ export function composeOperatorReply(
   );
   if (personalize) {
     parts.push(personalize.summary);
+    const proposal = personalize.data.proposal as
+      | {
+          headline?: string;
+          subheadline?: string;
+          description?: string;
+          ctaLabel?: string;
+        }
+      | undefined;
+    if (personalize.ok && proposal) {
+      parts.push(
+        [
+          'Ecco i testi che ho preparato:',
+          proposal.headline ? `Titolo: ${proposal.headline}` : null,
+          proposal.subheadline ? `Sottotitolo: ${proposal.subheadline}` : null,
+          proposal.description ? `Descrizione: ${proposal.description}` : null,
+          proposal.ctaLabel ? `Pulsante: ${proposal.ctaLabel}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      );
+    }
     const path = typeof personalize.data.publicPath === 'string' ? personalize.data.publicPath : null;
     if (path) actions.push({ type: 'open_demo', path, label: 'Apri demo' });
   }
@@ -137,7 +196,9 @@ export function composeOperatorReply(
         confirmLabel === 'Conferma azione' ||
         confirmLabel === 'Metti in pausa' ||
         confirmLabel === 'Conferma invio' ||
-        confirmLabel === 'Abilita policy'
+        confirmLabel === 'Abilita policy' ||
+        confirmLabel === 'Sì, accendi Telegram' ||
+        confirmLabel === 'Sì, spegni Telegram'
           ? confirmLabel
           : 'Conferma azione';
       actions.push({ type: 'confirm_action', pendingActionId: pendingId, label });
@@ -389,6 +450,7 @@ export function composeOperatorReply(
         status?: string;
         assignedMode?: string | null;
         messages?: Array<{ direction: string; body: string }>;
+        aiDraft?: { understanding: string; text: string } | null;
         threadId?: string;
       }
     | null
@@ -405,6 +467,11 @@ export function composeOperatorReply(
         last
           .map((m) => `${m.direction === 'INBOUND' ? 'Cliente' : 'Noi'}: ${m.body.slice(0, 120)}`)
           .join('\n'),
+      );
+    }
+    if (conversation.aiDraft?.text) {
+      parts.push(
+        `Ho capito: ${conversation.aiDraft.understanding}\n\nBozza pronta (non inviata):\n${conversation.aiDraft.text}`,
       );
     }
     actions.push({
