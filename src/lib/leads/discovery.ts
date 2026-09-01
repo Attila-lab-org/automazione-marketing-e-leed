@@ -75,6 +75,25 @@ export class DiscoveryValidationError extends Error {
   }
 }
 
+async function assertDiscoveryEnabled(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+): Promise<void> {
+  const { data, error } = await admin
+    .from('workspace_feature_flags')
+    .select('value')
+    .eq('workspace_id', workspaceId)
+    .eq('key', 'DISCOVERY_PAUSED')
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Discovery: stato della ricerca non disponibile — ${error.message}`);
+  }
+  const value = data?.value as { enabled?: boolean } | null;
+  if (value?.enabled) {
+    throw new Error('La ricerca Google è in pausa nelle impostazioni.');
+  }
+}
+
 function isFixturePlace(place: DiscoveredPlace): boolean {
   return (
     place.googlePlaceId.startsWith('mock-place-') ||
@@ -97,6 +116,7 @@ export async function runLeadDiscovery(
   const workspace = context
     ? { id: context.workspaceId }
     : await ensureDefaultWorkspace(admin);
+  await assertDiscoveryEnabled(admin, workspace.id);
   const provider = getGooglePlacesProvider(env);
   const mode = (env.GOOGLE_PLACES_PROVIDER_MODE ?? 'mock').toLowerCase();
   let places = await provider.searchMinimal(query);

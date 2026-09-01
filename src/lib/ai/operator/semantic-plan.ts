@@ -8,6 +8,7 @@ import type {
 } from './orchestrator-schema';
 import type { OperatorToolName } from './registry';
 import { detectOperatorOpsAction } from './ops-writes';
+import { extractRequestedCity, inferRequestedCategory } from './intent';
 
 function norm(text: string): string {
   return text
@@ -63,23 +64,6 @@ function call(
   };
 }
 
-function extractCity(q: string): string | null {
-  const cities = [
-    'milano',
-    'roma',
-    'napoli',
-    'torino',
-    'firenze',
-    'bologna',
-    'bergamo',
-    'brescia',
-    'genova',
-    'padova',
-    'verona',
-  ];
-  return cities.find((c) => q.includes(c)) ?? null;
-}
-
 function extractLimit(q: string, fallback: number): number {
   const match = q.match(/\b(\d{1,2})\b/);
   if (match) return Math.min(20, Math.max(1, Number(match[1])));
@@ -107,19 +91,6 @@ function extractLimit(q: string, fallback: number): number {
     ['una', 1],
   ];
   return words.find(([word]) => new RegExp(`\\b${word}\\b`).test(q))?.[1] ?? fallback;
-}
-
-function extractCategory(q: string): string | null {
-  const categories: Array<[RegExp, string]> = [
-    [/\bristorant|\btrattori|\bpizzeri/, 'restaurant'],
-    [/\bhotel|\balbergh|\bb b\b|\bbed and breakfast/, 'hotel'],
-    [/\bdentist|\bstudi odontoiatric/, 'dentist'],
-    [/\bparrucchier|\bsalon|\bbarber/, 'hair salon'],
-    [/\bpalestr|\bfitness|\bgym\b/, 'gym'],
-    [/\bcentri? estetic|\bestetist|\bbeauty/, 'beauty'],
-    [/\bbar\b|\bcaffetteri/, 'bar'],
-  ];
-  return categories.find(([pattern]) => pattern.test(q))?.[1] ?? null;
 }
 
 function extractOrdinal(q: string): number | null {
@@ -158,8 +129,10 @@ export type SemanticPlanInput = {
  */
 export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
   const q = norm(input.question);
-  const city = extractCity(q) ?? (input.envelope.filters?.city ? norm(input.envelope.filters.city) : null);
-  const category = extractCategory(q);
+  const city =
+    extractRequestedCity(input.question) ??
+    (input.envelope.filters?.city ? norm(input.envelope.filters.city) : null);
+  const category = inferRequestedCategory(q);
   const ordinal = extractOrdinal(q);
   const campaignId =
     input.envelope.entityType === 'campaign' ? input.envelope.entityId ?? null : input.refs.lastCampaignId;

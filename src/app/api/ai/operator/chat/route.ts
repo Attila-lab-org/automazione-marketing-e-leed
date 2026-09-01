@@ -22,6 +22,7 @@ import { proposeOrExecuteOps } from '@/lib/ai/operator/ops-writes';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 import { executeCommercialGoalCommand } from '@/lib/sales/goals/command';
+import { runLeadDiscovery } from '@/lib/leads/discovery';
 
 export const runtime = 'nodejs';
 
@@ -97,6 +98,28 @@ export const POST = withAdmin(async (request: Request) => {
           data: createSupabaseOperatorData(admin, workspace.id),
           persist: createSupabaseAiRunStore(admin),
           writes: {
+            discover: async ({ category, location, limit }) => {
+              const result = await runLeadDiscovery(
+                { category, location, maxResults: Math.min(20, limit) },
+                process.env,
+                { admin, workspaceId: workspace.id },
+              );
+              return {
+                found: result.found,
+                created: result.created,
+                duplicates: result.duplicates,
+                qualified: result.qualified,
+                leads: result.leads.map((lead) => ({
+                  id: lead.id,
+                  name: lead.name,
+                  city: lead.city,
+                  category: lead.category,
+                  discoveryScore: lead.discovery_score,
+                  qualificationStatus: lead.qualification_status,
+                  websiteUrl: lead.website_url,
+                })),
+              };
+            },
             goalCommand: (question) =>
               executeCommercialGoalCommand({
                 admin,

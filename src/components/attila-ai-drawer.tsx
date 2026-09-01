@@ -399,7 +399,9 @@ export default function AttilaAiDrawer() {
             <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-stone-300" aria-hidden />
             <header className="flex items-center justify-between border-b border-stone-100 px-5 py-3">
               <div>
-                <h2 id="attila-ai-title" className="text-sm font-semibold text-stone-900">Attila AI</h2>
+                <h2 id="attila-ai-title" className="text-sm font-semibold text-stone-900">
+                  Attila · il tuo agente commerciale
+                </h2>
                 <p className="text-[11px] font-bold uppercase tracking-wide text-amber-800">
                   {modeLabel}
                 </p>
@@ -504,11 +506,14 @@ export default function AttilaAiDrawer() {
                   key={message.id}
                   className={
                     message.role === "user"
-                      ? "ml-8 rounded-lg bg-amber-50 px-3 py-2 text-sm text-stone-800"
-                      : "mr-4 whitespace-pre-wrap rounded-lg bg-stone-50 px-3 py-2 text-sm text-stone-800"
+                      ? "ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-amber-100 px-4 py-3 text-sm text-stone-900"
+                      : "mr-auto max-w-[92%] rounded-2xl rounded-bl-md border border-stone-200 bg-white px-4 py-3 text-sm text-stone-800 shadow-sm"
                   }
                 >
-                  {message.content}
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                    {message.role === "user" ? "Tu" : "Attila"}
+                  </p>
+                  <div className="whitespace-pre-wrap leading-6">{message.content}</div>
                   {message.actions && message.actions.length > 0 ? (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {message.actions.map((action) =>
@@ -576,9 +581,14 @@ export default function AttilaAiDrawer() {
               ))}
 
               {tools.length > 0 ? (
-                <ul className="space-y-1 text-xs text-stone-500">
+                <ul className="mr-auto max-w-[92%] space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-stone-700">
                   {tools.map((tool) => (
-                    <li key={tool.id}>{tool.done ? tool.label : tool.label}</li>
+                    <li key={tool.id} className="flex items-start gap-2">
+                      <span className={tool.done && tool.ok ? "text-emerald-600" : "text-amber-700"}>
+                        {tool.done ? (tool.ok ? "✓" : "!") : "•"}
+                      </span>
+                      <span>{tool.label.replace(/^✓\s*/, "")}</span>
+                    </li>
                   ))}
                 </ul>
               ) : null}
@@ -597,7 +607,7 @@ export default function AttilaAiDrawer() {
                 rows={3}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                placeholder="Chiedi come è andata ieri, i lead di Milano o una campagna bloccata…"
+                placeholder="Scrivi cosa vuoi ottenere. Attila organizza i passaggi…"
                 className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
               />
               <button
@@ -605,7 +615,7 @@ export default function AttilaAiDrawer() {
                 disabled={busy}
                 className="mt-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {busy ? "Sto consultando i dati…" : "Invia"}
+                {busy ? "Attila sta lavorando…" : "Chiedi ad Attila"}
               </button>
             </form>
           </aside>

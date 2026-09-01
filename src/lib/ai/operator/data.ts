@@ -12,6 +12,7 @@ import { listAvailableSlots, listCalendarEvents } from '@/lib/calendar';
 import { getCommercialLearningSnapshot } from '@/lib/sales/learning';
 import { getDailyCommercialBriefing } from '@/lib/sales/daily-briefing';
 import { getActiveCommercialGoal, getActiveGoalPlan } from '@/lib/sales/goals/store';
+import { discoveryCategoryLabel } from '@/lib/leads/discovery-categories';
 import type {
   BlockerItem,
   CalendarEventHit,
@@ -79,7 +80,10 @@ export function createSupabaseOperatorData(
         query = query.ilike('city', `%${input.city.trim().replace(/[%_]/g, '')}%`);
       }
       if (input.category?.trim()) {
-        query = query.ilike('category', `%${input.category.trim().replace(/[%_]/g, '')}%`);
+        const rawCategory = input.category.trim().replace(/[%_,().]/g, '');
+        const localizedCategory = discoveryCategoryLabel(rawCategory).replace(/[%_,().]/g, '');
+        const variants = [...new Set([rawCategory, localizedCategory].filter(Boolean))];
+        query = query.or(variants.map((value) => `category.ilike.%${value}%`).join(','));
       }
       if (input.query?.trim()) {
         query = query.ilike('name', `%${input.query.trim().replace(/[%_]/g, '')}%`);

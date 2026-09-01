@@ -264,6 +264,81 @@ describe('natural language demo batches', () => {
   });
 });
 
+describe('campagna autonoma con discovery', () => {
+  it('cerca su Google e prepara la campagna quando il database locale è vuoto', async () => {
+    const persist: PersistAiRun = async (input) =>
+      ({
+        id: 'run-discovery',
+        model: input.model,
+        taskType: input.taskType,
+        provider: input.provider,
+        inputTokens: input.usage.inputTokens,
+        cachedInputTokens: 0,
+        outputTokens: input.usage.outputTokens,
+        estimatedCostUsd: input.estimatedCostUsd,
+        latencyMs: 0,
+        status: input.status,
+        createdAt: new Date().toISOString(),
+      }) satisfies AiRunPublic;
+    const data = createMemoryOperatorData();
+    data.searchLeads = async () => [];
+    let discoveredTarget: { category: string; location: string } | null = null;
+    let preparedLeadIds: string[] = [];
+
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 'sess',
+      question: 'crea campagna su ristoranti a crema?',
+      envelope: { route: '/overview', entityType: 'none', entityId: null },
+      data,
+      persist,
+      env: { ...process.env, AI_COMMERCIAL_MODE: 'mock' },
+      writes: {
+        discover: async ({ category, location }) => {
+          discoveredTarget = { category, location };
+          return {
+            found: 1,
+            created: 1,
+            duplicates: 0,
+            qualified: 1,
+            leads: [
+              {
+                id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                name: 'Ristorante Crema',
+                city: 'Crema',
+                category: 'restaurant',
+                discoveryScore: 90,
+                qualificationStatus: 'PREQUALIFIED',
+                websiteUrl: 'https://example.com',
+              },
+            ],
+          };
+        },
+        prepare: async ({ leads }) => {
+          preparedLeadIds = leads.map((lead) => lead.id);
+          return [
+            {
+              tool: 'create_campaign',
+              ok: true,
+              summary: 'Invio email creato.',
+              data: {
+                campaignId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                leadCount: leads.length,
+                skipped: 0,
+              },
+            },
+          ];
+        },
+      },
+    });
+
+    expect(discoveredTarget).toEqual({ category: 'restaurant', location: 'crema' });
+    expect(preparedLeadIds).toEqual(['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']);
+    expect(result.reply).toContain('Ricerca Google completata');
+    expect(result.reply).toContain('Invio email creato');
+  });
+});
+
 describe('operator turn calendar read', () => {
   it('answers appointment count from calendar summary tool', async () => {
     const persist: PersistAiRun = async (input) =>

@@ -64,6 +64,20 @@ describe('operator intent router', () => {
     expect(intent.limit).toBe(20);
   });
 
+  it('comprende una città italiana libera nel target della campagna', () => {
+    const question = 'crea campagna su ristoranti a crema?';
+    const intent = classifyOperatorIntent(question);
+    expect(intent.kind).toBe('PREPARE');
+    expect(intent.category).toBe('restaurant');
+    expect(intent.city?.toLowerCase()).toBe('crema');
+    expect(suggestOperatorTools(question, envelopeFromPath('/overview'))).toContainEqual(
+      expect.objectContaining({
+        name: 'search_leads',
+        args: expect.objectContaining({ city: 'crema', category: 'restaurant' }),
+      }),
+    );
+  });
+
   it('invia campagna richiede conferma EXTERNAL', () => {
     expect(classifyOperatorIntent('Invia la campagna Milano.').kind).toBe('EXTERNAL');
   });

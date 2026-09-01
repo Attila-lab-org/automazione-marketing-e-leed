@@ -75,9 +75,12 @@ export function composeOperatorReply(
 
   const create = writes.find((w) => w.tool === 'create_campaign');
   const prepare = writes.find((w) => w.tool === 'prepare_campaign');
+  const discovery = writes.find((w) => w.tool === 'discover_leads');
   const analyze = writes.find((w) => w.tool === 'analyze_business');
   const send = writes.find((w) => w.tool === 'send_campaign');
   const policy = writes.find((w) => w.tool === 'propose_autonomy' || w.tool === 'enable_autonomy');
+
+  if (discovery) parts.push(discovery.summary);
 
   if (analyze?.ok) {
     const opp = analyze.data.opportunity as { aiOpportunityScore?: number; reasons?: string[] } | undefined;
@@ -101,7 +104,7 @@ export function composeOperatorReply(
               ? `Preparazione di ${prepare.data.enqueued} demo avviata: analisi, personalizzazione e copy.`
               : 'Non ho potuto avviare la preparazione delle demo.'
           } ${skipped} attività bloccate. 0 messaggi inviati.`
-        : `Campagna ${create?.ok ? 'creata' : 'non creata'}. ${selected} lead selezionati. ${
+        : `Invio email ${create?.ok ? 'creato' : 'non creato'}. ${selected} contatti selezionati. ${
             typeof prepare?.data.enqueued === 'number' ? `${prepare.data.enqueued} in preparazione.` : ''
           } ${skipped} bloccati in partenza. 0 messaggi inviati.`,
     );

@@ -62,7 +62,7 @@ function requestedLimit(q: string): { value: number; explicit: boolean } {
   return word ? { value: word[1], explicit: true } : { value: 8, explicit: false };
 }
 
-function inferredCategory(q: string): string | null {
+export function inferRequestedCategory(q: string): string | null {
   const categories: Array<[RegExp, string]> = [
     [/\bristorant|\btrattori|\bpizzeri/, 'restaurant'],
     [/\bhotel|\balbergh|\bb&b\b|\bbed and breakfast/, 'hotel'],
@@ -75,10 +75,31 @@ function inferredCategory(q: string): string | null {
   return categories.find(([pattern]) => pattern.test(q))?.[1] ?? null;
 }
 
+export function extractRequestedCity(question: string): string | null {
+  const known = CITIES.find((city) => new RegExp(`\\b${city}\\b`, 'i').test(question));
+  if (known) return known;
+
+  const categoryCue =
+    /\b(?:ristoranti?|trattorie?|pizzerie?|hotel|alberghi?|b&b|dentisti?|studi odontoiatrici?|parrucchieri?|barber|palestre?|fitness|centri estetici?|estetiste?|bar|caffetterie?)\b/i.exec(
+      question,
+    );
+  const businessCue = categoryCue ?? /\b(?:clienti?|contatti?|attivit[aà]|aziende?|imprese?)\b/i.exec(question);
+  if (!businessCue?.[0] || businessCue.index == null) return null;
+
+  const afterCue = question.slice(businessCue.index + businessCue[0].length);
+  const location = afterCue.match(/\b(?:a|ad|di|in|zona)\s+([^,.;!?]+)/i)?.[1];
+  if (!location) return null;
+  const cleaned = location
+    .split(/\b(?:con|per|usando|che|dove|massimo|max|e poi)\b/i)[0]
+    ?.replace(/\b(?:una|un)\s+campagna\b.*$/i, '')
+    .trim();
+  if (!cleaned || cleaned.length < 2 || cleaned.length > 60) return null;
+  return cleaned.replace(/\s+/g, ' ');
+}
+
 function baseFields(question: string, q: string): Omit<OperatorIntent, 'kind' | 'writeVerb'> {
-  const cityMatch = question.match(new RegExp(`\\b(${CITIES.join('|')})\\b`, 'i'));
   const requested = requestedLimit(q);
-  const category = inferredCategory(q);
+  const category = inferRequestedCategory(q);
   const deliveryMode: OperatorIntent['deliveryMode'] = /\btest\b/.test(q)
     ? 'TEST'
     : /\bproduzione\b/.test(q)
@@ -86,7 +107,7 @@ function baseFields(question: string, q: string): Omit<OperatorIntent, 'kind' | 
       : null;
   const campaignHint = /telegram/.test(q) ? 'telegram' : null;
   return {
-    city: cityMatch?.[1] ?? null,
+    city: extractRequestedCity(question),
     category,
     limit: requested.value,
     deliveryMode,
@@ -175,7 +196,7 @@ export function classifyOperatorIntent(question: string): OperatorIntent {
   }
 
   if (
-    /prepara(?:mi)?|crea(?:mi)? una campagna|fammi una campagna|genera(?:mi)?|rigenera|analizz|riprendi|resume|fai partire|lancia/.test(
+    /prepara(?:mi)?|crea(?:mi)?(?: una)? campagna|fammi una campagna|genera(?:mi)?|rigenera|analizz|riprendi|resume|fai partire|lancia/.test(
       q,
     )
   ) {

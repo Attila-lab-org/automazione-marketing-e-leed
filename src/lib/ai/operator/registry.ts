@@ -547,14 +547,13 @@ export function suggestOperatorTools(
       calls.push({ name: 'get_lead_detail', args: { leadId: envelope.entityId } });
       return calls;
     }
-    if (/lead|ristorant|milano|roma|napoli|torino|firenze|bologna|miglior/.test(q)) {
-      const cityMatch = question.match(/\b(milano|roma|napoli|torino|firenze|bologna|bergamo|brescia|genova|padova|verona)\b/i);
+    if (intent.city || intent.category || /lead|attivit|campagn|miglior/.test(q)) {
       const limitMatch = q.match(/\b(\d{1,2})\b/);
       calls.push({
         name: 'search_leads',
         args: {
-          city: cityMatch?.[1] ?? envelope.filters?.city,
-          category: /ristorant|restaurant/.test(q) ? 'restaurant' : undefined,
+          city: intent.city ?? envelope.filters?.city,
+          category: intent.category ?? undefined,
           limit: limitMatch ? Math.min(20, Number(limitMatch[1])) : 20,
         },
       });
@@ -569,15 +568,14 @@ export function suggestOperatorTools(
   if (/ieri|oggi|andata|report|numeri|briefing|brief/.test(q)) {
     calls.push({ name: 'get_daily_report', args: { daysAgo: /oggi/.test(q) && !/ieri/.test(q) ? 0 : 1 } });
   }
-  if (/lead|attivit|miglior|milano|roma|firenze|napoli|torino|bologna|città|citta|ristorant/.test(q)) {
-    const cityMatch = question.match(/\b(milano|roma|napoli|torino|firenze|bologna|bergamo|brescia|genova|padova|verona)\b/i);
+  if (/lead|attivit|miglior|città|citta|ristorant/.test(q) || intent.city || intent.category) {
     const limitMatch = q.match(/\b(\d{1,2})\b/);
     calls.push({
       name: 'search_leads',
       args: {
-        city: cityMatch?.[1] ?? envelope.filters?.city,
+        city: intent.city ?? envelope.filters?.city,
         query: envelope.filters?.query,
-        category: /ristorant|restaurant/.test(q) ? 'restaurant' : undefined,
+        category: intent.category ?? undefined,
         limit: limitMatch ? Math.min(20, Number(limitMatch[1])) : 8,
       },
     });

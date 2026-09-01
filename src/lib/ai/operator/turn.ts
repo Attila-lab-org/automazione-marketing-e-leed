@@ -52,6 +52,17 @@ export type OperatorStreamEvent =
   | { type: 'error'; message: string };
 
 export type OperatorWriteHooks = {
+  discover?: (input: {
+    category: string;
+    location: string;
+    limit: number;
+  }) => Promise<{
+    found: number;
+    created: number;
+    duplicates: number;
+    qualified: number;
+    leads: LeadSearchHit[];
+  }>;
   prepare?: (input: {
     leads: LeadSearchHit[];
     campaignId: string | null;
@@ -345,6 +356,58 @@ export async function* runOperatorTurn(
       if (row?.id) leadHits.push(row);
     }
   }
+  const plannedLeadSearch = plannedCalls.find((call) => call.name === 'search_leads');
+  const discoveryCity =
+    fallbackIntent.city ??
+    (typeof plannedLeadSearch?.args.city === 'string' ? plannedLeadSearch.args.city : null);
+  const discoveryCategory =
+    fallbackIntent.category ??
+    (typeof plannedLeadSearch?.args.category === 'string' ? plannedLeadSearch.args.category : null);
+  if (
+    plan.safetyClass === 'PREPARE' &&
+    plan.prepareKind === 'campaign' &&
+    leadHits.length === 0 &&
+    discoveryCity &&
+    discoveryCategory &&
+    input.writes?.discover
+  ) {
+    yield {
+      type: 'tool_start',
+      name: 'discover_leads',
+      label: `Non ci sono contatti adatti: cerco ${discoveryCategory} a ${discoveryCity} su Google…`,
+    };
+    try {
+      const discovered = await input.writes.discover({
+        category: discoveryCategory,
+        location: discoveryCity,
+        limit: fallbackIntent.limit,
+      });
+      leadHits.push(...discovered.leads);
+      writes.push({
+        tool: 'discover_leads',
+        ok: true,
+        summary: `Ricerca Google completata: ${discovered.found} trovati, ${discovered.created} nuovi, ${discovered.duplicates} già presenti.`,
+        data: {
+          found: discovered.found,
+          created: discovered.created,
+          duplicates: discovered.duplicates,
+          qualified: discovered.qualified,
+        },
+      });
+      yield {
+        type: 'tool_done',
+        name: 'discover_leads',
+        ok: true,
+        label: `${discovered.found} attività trovate su Google`,
+        count: discovered.found,
+      };
+    } catch (reason) {
+      const summary =
+        reason instanceof Error ? `Ricerca Google non riuscita: ${reason.message}` : 'Ricerca Google non riuscita.';
+      writes.push({ tool: 'discover_leads', ok: false, summary, data: {} });
+      yield { type: 'tool_done', name: 'discover_leads', ok: false, label: summary };
+    }
+  }
   const campaignId =
     (envelope.entityType === 'campaign' ? envelope.entityId : null) ?? prevRefs.lastCampaignId;
   const campaignDetail = traces.find((t) => t.name === 'get_campaign_detail' && t.ok)?.result as
@@ -409,12 +472,14 @@ export async function* runOperatorTurn(
       data: { blocked: 'telegram_inbound_not_campaign' },
     });
   } else if (plan.safetyClass === 'PREPARE' && plan.prepareKind === 'campaign' && leadHits.length === 0) {
+    const targetWasProvided = Boolean(discoveryCity || discoveryCategory);
     writes.push({
       tool: 'create_campaign',
       ok: false,
-      summary:
-        'Per la campagna TEST mi serve un target: città, categoria o i lead della conversazione. Non creo una campagna vuota.',
-      data: { blocked: 'empty_campaign', needsTarget: true },
+      summary: targetWasProvided
+        ? `Ho cercato ${discoveryCategory ?? 'attività'}${discoveryCity ? ` a ${discoveryCity}` : ''}, anche su Google, ma non ho trovato contatti utilizzabili. Non creo un invio vuoto.`
+        : 'Dimmi almeno una città, un settore o quali contatti usare. Non creo un invio vuoto.',
+      data: { blocked: 'empty_campaign', needsTarget: !targetWasProvided },
     });
   }
 
