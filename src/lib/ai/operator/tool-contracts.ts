@@ -18,6 +18,8 @@ export type ToolContract = {
     | 'Conferma invio'
     | 'Abilita policy'
     | 'Metti in pausa'
+    | 'Archivia invio'
+    | 'Nascondi invio'
     | 'Conferma azione'
     | 'Conferma risposta'
     | 'Sì, accendi Telegram'
@@ -33,7 +35,7 @@ export const TOOL_CONTRACTS: Record<string, ToolContract> = {
   list_campaigns: { name: 'list_campaigns', tier: 'READ', label: 'lista campagne' },
   get_campaign_detail: { name: 'get_campaign_detail', tier: 'READ', label: 'dettaglio campagna' },
   get_campaign_stats: { name: 'get_campaign_stats', tier: 'READ', label: 'stats campagna' },
-  get_blockers: { name: 'get_blockers', tier: 'READ', label: 'blocker' },
+  get_blockers: { name: 'get_blockers', tier: 'READ', label: 'problemi aperti' },
   list_review_items: { name: 'list_review_items', tier: 'READ', label: 'review' },
   get_daily_report: { name: 'get_daily_report', tier: 'READ', label: 'report giornaliero' },
   get_daily_briefing: {
@@ -119,6 +121,10 @@ export const TOOL_CONTRACTS: Record<string, ToolContract> = {
   },
   take_over_thread: { name: 'take_over_thread', tier: 'INTERNAL', label: 'prendi in carico' },
   return_to_ai: { name: 'return_to_ai', tier: 'INTERNAL', label: 'ridai ad Attila' },
+  close_won: { name: 'close_won', tier: 'INTERNAL', label: 'chiudi cliente pagato' },
+  archive_thread: { name: 'archive_thread', tier: 'INTERNAL', label: 'archivia conversazione' },
+  drop_thread: { name: 'drop_thread', tier: 'INTERNAL', label: 'togli conversazione dalle code' },
+  dismiss_todo: { name: 'dismiss_todo', tier: 'INTERNAL', label: 'togli attività dalla coda' },
   create_calendar_slot: { name: 'create_calendar_slot', tier: 'INTERNAL', label: 'crea disponibilità' },
   reschedule_appointment: {
     name: 'reschedule_appointment',
@@ -149,6 +155,14 @@ export const TOOL_CONTRACTS: Record<string, ToolContract> = {
     humanConfirmLabel: 'Metti in pausa',
     auditPropose: 'propose_pause',
     auditExecute: 'execute_pause',
+  },
+  archive_campaign: {
+    name: 'archive_campaign',
+    tier: 'CONFIRM_IRREVERSIBLE',
+    label: 'archivia campagna',
+    humanConfirmLabel: 'Archivia invio',
+    auditPropose: 'propose_archive',
+    auditExecute: 'execute_archive',
   },
   enable_autonomy: {
     name: 'enable_autonomy',

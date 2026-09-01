@@ -531,7 +531,9 @@ function InboxRow({
         onClick={() => {
           if (
             !archivedView &&
-            !window.confirm(`Archiviare la conversazione con ${item.leadName}?`)
+            !window.confirm(
+              `Non rispondi a ${item.leadName}? Archivia e ferma i solleciti. Le email già inviate restano.`,
+            )
           ) {
             return;
           }

@@ -19,7 +19,13 @@ import {
   type OperatorEntityRefs,
 } from './context';
 import type { OperatorEnvelope } from './envelope';
-import { classifyOperatorIntent } from './intent';
+import {
+  ATTILA_UNAVAILABLE_REPLY,
+  classifyOperatorIntent,
+  isAttilaAvailabilityQuestion,
+  isBulkCampaignWipe,
+  isOpenedCampaignFollowup,
+} from './intent';
 import type { OperatorHistoryItem, OperatorPlan } from './orchestrator-schema';
 import { OPERATOR_ORCHESTRATOR_PROMPT_VERSION } from './orchestrator-schema';
 import { applySafetyPolicy, isTelegramReplyRequest, planOperatorTurnMock } from './semantic-plan';
@@ -99,6 +105,15 @@ export type OperatorTurnInput = {
   history?: OperatorHistoryItem[];
 };
 
+function toolDoneLabel(name: string, done: string, count?: number): string {
+  if (name === 'get_blockers') {
+    if (count == null) return 'Ho controllato cosa blocca';
+    return count === 0 ? 'Nessun problema trovato' : `Trovati ${count} problemi`;
+  }
+  if (count == null) return done;
+  return `${done} (${count})`;
+}
+
 function mapIntentToSafety(
   kind: ReturnType<typeof classifyOperatorIntent>['kind'],
 ): OperatorPlan['safetyClass'] {
@@ -136,15 +151,24 @@ export async function* runOperatorTurn(
   const env = input.env ?? process.env;
   const config = getAiCommercialConfig(env);
   const assistMode = input.assistMode ?? 'ASSISTITO';
-  const fallbackIntent = classifyOperatorIntent(input.question);
+  let fallbackIntent = classifyOperatorIntent(input.question);
   const telegramReplyRequested = isTelegramReplyRequest(input.question);
-  const opsAction = detectOperatorOpsAction(input.question);
+  const opsAction = detectOperatorOpsAction(input.question, {
+    entityType: input.envelope.entityType,
+  });
   let prevRefs = input.refs ?? emptyEntityRefs();
   if (input.envelope.entityType === 'thread' && input.envelope.entityId) {
     prevRefs = { ...prevRefs, lastThreadId: input.envelope.entityId };
   }
   if (input.envelope.entityType === 'event' && input.envelope.entityId) {
     prevRefs = { ...prevRefs, lastEventId: input.envelope.entityId };
+  }
+  if (
+    fallbackIntent.kind !== 'DESTRUCTIVE' &&
+    isOpenedCampaignFollowup(input.question) &&
+    (input.envelope.entityType === 'campaign' || prevRefs.lastCampaignId)
+  ) {
+    fallbackIntent = { ...fallbackIntent, kind: 'DESTRUCTIVE', writeVerb: 'cancel' };
   }
   const rememberedPreference = extractOperatorPreference(input.question);
   if (rememberedPreference) {
@@ -159,6 +183,19 @@ export async function* runOperatorTurn(
     };
   }
   const envelope = resolveOperatorEnvelope(input.question, input.envelope, prevRefs, fallbackIntent);
+
+  if (isAttilaAvailabilityQuestion(input.question, input.history)) {
+    yield { type: 'delta', text: ATTILA_UNAVAILABLE_REPLY };
+    yield {
+      type: 'done',
+      reply: ATTILA_UNAVAILABLE_REPLY,
+      actions: [],
+      run: null,
+      persisted: false,
+      refs: prevRefs,
+    };
+    return;
+  }
 
   if (rememberedPreference) {
     const reply = `Va bene, lo terrò a mente: ${rememberedPreference}.`;
@@ -236,7 +273,9 @@ export async function* runOperatorTurn(
       outputTokens: planned.usage.outputTokens,
     };
     requestId = planned.requestId;
-    plan = applySafetyPolicy(planned.output, input.question);
+    plan = applySafetyPolicy(planned.output, input.question, {
+      entityType: input.envelope.entityType,
+    });
   } catch {
     if (config.mode === 'openai') {
       aiUnavailable = true;
@@ -245,7 +284,7 @@ export async function* runOperatorTurn(
         goal: 'fallback',
         toolCalls: [],
         ordinal: null,
-        clarification: 'Modalità AI temporaneamente non disponibile. Posso solo leggere dati espliciti se me lo chiedi in modo diretto.',
+        clarification: ATTILA_UNAVAILABLE_REPLY,
         telegramIsInboundScan: false,
         prepareKind: 'none',
       };
@@ -268,6 +307,7 @@ export async function* runOperatorTurn(
         envelope,
       }),
       input.question,
+      { entityType: input.envelope.entityType },
     );
   }
   prevRefs = resolveOrdinalSelection(plan.ordinal, prevRefs);
@@ -293,7 +333,7 @@ export async function* runOperatorTurn(
       type: 'tool_done',
       name: executed.name,
       ok: true,
-      label: count != null ? `${labels.done} · ${count}` : labels.done,
+      label: toolDoneLabel(executed.name, labels.done, count),
       count,
     };
   }
@@ -311,6 +351,10 @@ export async function* runOperatorTurn(
       reschedule_appointment: 'Sto riprogrammando…',
       start_telegram: 'Sto avviando Telegram…',
       stop_telegram: 'Sto fermando Telegram…',
+      close_won: 'Sto chiudendo il cliente pagato…',
+      archive_thread: 'Sto archiviando la conversazione…',
+      drop_thread: 'Sto togliendo la conversazione dalle code…',
+      dismiss_todo: 'Sto togliendo l’attività dalla coda…',
     };
     yield {
       type: 'tool_start',
@@ -514,7 +558,15 @@ export async function* runOperatorTurn(
     };
   }
 
-  if (plan.safetyClass === 'DESTRUCTIVE') {
+  if (plan.safetyClass === 'DESTRUCTIVE' && isBulkCampaignWipe(input.question)) {
+    writes.push({
+      tool: 'campaign_mutation',
+      ok: false,
+      summary:
+        'Non cancello in blocco tutte le campagne né le email già inviate. Quelle partite restano nel registro. Se vuoi fermare un invio, apri quella campagna e conferma la pausa.',
+      data: { bulkDeleteRefused: true },
+    });
+  } else if (plan.safetyClass === 'DESTRUCTIVE' && opsAction === 'none') {
     yield { type: 'tool_start', name: 'campaign_mutation', label: 'Sto verificando la campagna…' };
     const mutated = input.writes?.campaignMutation
       ? await input.writes.campaignMutation({
@@ -582,7 +634,7 @@ export async function* runOperatorTurn(
   const composeStartedAt = Date.now();
   try {
     if (aiUnavailable) {
-      replyText = plan.clarification ?? 'Modalità AI temporaneamente non disponibile.';
+      replyText = plan.clarification ?? ATTILA_UNAVAILABLE_REPLY;
     } else if (deterministicWriteFastPath) {
       replyText = deterministic.reply;
     } else {
@@ -645,6 +697,12 @@ export async function* runOperatorTurn(
   // Preferisci il testo grounded quando la reply AI non riporta i numeri/dati tool
   const groundedCalendar = traces.some((t) => t.ok && t.name === 'get_calendar_summary');
   if (groundedCalendar && deterministic.reply && !/\b\d+\s+appuntament/i.test(replyText)) {
+    replyText = deterministic.reply;
+  }
+  const groundedProblems = traces.some((t) => t.ok && t.name === 'get_blockers');
+  const askedWhyBlocked = /perch|blocc|non parte|non funziona/.test(input.question.toLowerCase());
+  const askedPriority = /da dove|partirest/.test(input.question.toLowerCase());
+  if (groundedProblems && deterministic.reply && askedWhyBlocked && !askedPriority) {
     replyText = deterministic.reply;
   }
   if (

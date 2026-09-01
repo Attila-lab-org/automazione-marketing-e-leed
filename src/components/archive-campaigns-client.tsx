@@ -39,6 +39,33 @@ export default function ArchiveCampaignsClient() {
       .finally(() => setLoading(false));
   }, []);
 
+  async function hideCampaign(campaign: Campaign) {
+    if (
+      !window.confirm(
+        `Nascondere «${campaign.name}»? Sparisce anche dall’archivio. Le email già partite restano nel registro.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(campaign.id);
+    setFeedback(null);
+    try {
+      const response = await fetch(`/api/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete" }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Eliminazione fallita");
+      setFeedback(`«${campaign.name}» nascosta. Le email già partite restano nel registro.`);
+      await load();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Errore");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function restore(campaign: Campaign) {
     setBusyId(campaign.id);
     setFeedback(null);
@@ -106,14 +133,24 @@ export default function ArchiveCampaignsClient() {
                   : ""}
               </p>
             </div>
-            <button
-              type="button"
-              disabled={busyId === campaign.id}
-              onClick={() => void restore(campaign)}
-              className="shrink-0 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-50"
-            >
-              {busyId === campaign.id ? "Ripristino…" : "Ripristina"}
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                disabled={busyId === campaign.id}
+                onClick={() => void restore(campaign)}
+                className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-50"
+              >
+                {busyId === campaign.id ? "Ripristino…" : "Ripristina"}
+              </button>
+              <button
+                type="button"
+                disabled={busyId === campaign.id}
+                onClick={() => void hideCampaign(campaign)}
+                className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                Elimina
+              </button>
+            </div>
           </li>
         ))}
       </ul>

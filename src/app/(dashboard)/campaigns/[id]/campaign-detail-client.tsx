@@ -59,6 +59,7 @@ const CAMPAIGN_STATUS: Record<string, string> = {
   PAUSED: "In pausa",
   COMPLETED: "Completata",
   STOPPED: "Fermata",
+  ARCHIVED: "Archiviata",
 };
 
 const CAMPAIGN_MODE: Record<string, string> = {
@@ -164,6 +165,38 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
     const timer = window.setInterval(() => void refresh(), 5000);
     return () => window.clearInterval(timer);
   }, [campaign, totals, refresh]);
+
+  async function runCloseAction(action: "archive" | "delete") {
+    const ok = window.confirm(
+      action === "delete"
+        ? `Nascondere l’invio «${campaign?.name}»? Sparisce dall’elenco. I solleciti si fermano. Le email già partite restano nel registro.`
+        : `Archiviare l’invio «${campaign?.name}»? Sparisce dagli invii attivi, resta in Archivio. I solleciti si fermano.`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Operazione fallita");
+      if (action === "delete") {
+        setMessage("Invio nascosto. Le email già partite restano nel registro.");
+        router.push("/campaigns");
+        return;
+      }
+      setMessage("Invio archiviato. Lo trovi in Archivio. I solleciti sono fermi.");
+      router.push("/archive");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Errore");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function runAction(action: "prepare" | "approve" | "pause" | "resume") {
     if (action === "approve") {
@@ -709,6 +742,24 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
                   Metti in pausa
                 </button>
               ) : null}
+              {campaign.status !== "ARCHIVED" ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void runCloseAction("archive")}
+                  className="rounded-lg border border-stone-300 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                >
+                  Archivia
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void runCloseAction("delete")}
+                className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                Elimina
+              </button>
             </div>
 
             {Object.keys(counts).length > 0 ? (

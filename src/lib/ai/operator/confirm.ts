@@ -1,7 +1,7 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { approveCampaignLeads } from '@/lib/campaigns/review-queue';
 import { getPendingAction, hashPayload, markPending, claimPendingForExecution } from '@/lib/ai/operator/pending';
-import { pauseCampaign, recordAiAudit } from '@/lib/ai/operator/writes';
+import { archiveCampaign, pauseCampaign, recordAiAudit } from '@/lib/ai/operator/writes';
 import { activateAutonomyPolicy } from '@/lib/sales/autonomy';
 import { executeOpsActionNow } from '@/lib/ai/operator/ops-writes';
 import { getToolContract } from '@/lib/ai/operator/tool-contracts';
@@ -63,10 +63,19 @@ export async function confirmPendingAction(args: {
       const campaignId = String(params.campaignId ?? '');
       await pauseCampaign(args.admin, args.workspaceId, campaignId);
       result = { paused: true, campaignId };
+    } else if (row.tool === 'archive_campaign') {
+      const campaignId = String(params.campaignId ?? '');
+      const hide = params.hide === true;
+      const archived = await archiveCampaign(args.admin, args.workspaceId, campaignId, hide);
+      result = { archived: true, hidden: archived.hidden, campaignId };
+      summary = archived.hidden
+        ? `Ho nascosto «${archived.name}». I solleciti sono fermi. Le email già inviate restano nel registro.`
+        : `Ho archiviato l’invio. I solleciti sono fermi. Lo trovi in Archivio.`;
     } else if (row.tool === 'delete_campaign') {
       return {
         ok: false,
-        summary: 'Le campagne non vengono eliminate definitivamente dal sistema. Posso metterla in pausa.',
+        summary:
+          'Non cancello le email già inviate. Posso archiviare o nascondere l’invio: dimmi «archivia questa campagna».',
       };
     } else if (
       row.tool === 'reply_telegram' ||

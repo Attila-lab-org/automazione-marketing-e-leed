@@ -480,9 +480,13 @@ export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
   });
 }
 
-export function applySafetyPolicy(plan: OperatorPlan, question: string): OperatorPlan {
+export function applySafetyPolicy(
+  plan: OperatorPlan,
+  question: string,
+  ctx?: { entityType?: string | null },
+): OperatorPlan {
   const q = norm(question);
-  const ops = detectOperatorOpsAction(question);
+  const ops = detectOperatorOpsAction(question, ctx);
   if (ops !== 'none') {
     const toolCalls: OperatorPlan['toolCalls'] =
       ops === 'start_telegram' || ops === 'stop_telegram'
@@ -490,7 +494,11 @@ export function applySafetyPolicy(plan: OperatorPlan, question: string): Operato
         : ops === 'take_over' ||
             ops === 'return_to_ai' ||
             ops === 'stop_automation' ||
-            ops === 'reply_telegram'
+            ops === 'reply_telegram' ||
+            ops === 'close_won' ||
+            ops === 'archive_thread' ||
+            ops === 'drop_thread' ||
+            ops === 'dismiss_todo'
           ? [call('list_conversations')]
           : [];
     return {

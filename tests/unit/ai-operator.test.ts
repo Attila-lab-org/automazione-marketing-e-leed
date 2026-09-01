@@ -179,7 +179,7 @@ describe('AI-1 grounding', () => {
       env: env(),
     });
     expect(result.reply).toContain('Ristoranti Milano TEST');
-    expect(result.reply).toMatch(/pausa|blocker/i);
+    expect(result.reply).toMatch(/pausa|sistemare/i);
     expect(result.actions.some((a) => a.type === 'open_campaign' && a.campaignId === CAMPAIGN_ID)).toBe(
       true,
     );
@@ -230,7 +230,7 @@ describe('AI-1 grounding', () => {
   });
 
   it('accetta solo action metadata tipizzata', () => {
-    expect(operatorActionSchema.safeParse({ type: 'open_review', label: 'Apri Review' }).success).toBe(
+    expect(operatorActionSchema.safeParse({ type: 'open_review', label: 'Apri da controllare' }).success).toBe(
       true,
     );
     expect(

@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { TOOL_CONTRACTS, contractsByTier, getToolContract, isConfirmTier } from '../../src/lib/ai/operator/tool-contracts';
-import { applyPlaybookCommand, detectOperatorOpsAction } from '../../src/lib/ai/operator/ops-writes';
+import {
+  applyPlaybookCommand,
+  detectOperatorOpsAction,
+  extractNamedLeadHint,
+} from '../../src/lib/ai/operator/ops-writes';
+import { closeOutSummary } from '../../src/lib/sales/close-out';
+import { resolvePendingReuse } from '../../src/lib/ai/operator/pending';
+import {
+  ATTILA_UNAVAILABLE_REPLY,
+  classifyOperatorIntent,
+  isAttilaAvailabilityQuestion,
+  isBulkCampaignWipe,
+  isOpenedCampaignFollowup,
+} from '../../src/lib/ai/operator/intent';
 import { parseEuropeRomeDateTime, formatEuropeRome } from '../../src/lib/ai/operator/time';
 import { planOperatorTurnMock } from '../../src/lib/ai/operator/semantic-plan';
 import { envelopeFromPath } from '../../src/lib/ai/operator/envelope';
@@ -12,7 +25,6 @@ import type { PersistAiRun } from '../../src/lib/ai/persist';
 import type { AiRunPublic } from '../../src/lib/ai/types';
 import { DEFAULT_PLAYBOOK } from '../../src/lib/sales/playbook';
 import { buildDailyCommercialBriefing } from '../../src/lib/sales/daily-briefing';
-import { classifyOperatorIntent } from '../../src/lib/ai/operator/intent';
 
 describe('tool contracts', () => {
   it('marks external and irreversible ops as confirm tiers', () => {
@@ -27,6 +39,32 @@ describe('tool contracts', () => {
   });
 });
 
+describe('pending action reuse', () => {
+  it('riusa la conferma ancora aperta e resetta quella già eseguita', () => {
+    expect(
+      resolvePendingReuse({
+        status: 'pending',
+        expires_at: '2099-01-01T00:00:00.000Z',
+      }),
+    ).toBe('reuse');
+    expect(
+      resolvePendingReuse({
+        status: 'executed',
+        expires_at: '2026-01-01T00:00:00.000Z',
+      }),
+    ).toBe('reset');
+    expect(resolvePendingReuse(null)).toBe('insert');
+  });
+});
+
+describe('bulk wipe safety', () => {
+  it('riconosce la richiesta di cancellare tutte le campagne e le mail', () => {
+    expect(isBulkCampaignWipe('voglio che cancelli tutte le campagne e le mail inviate')).toBe(true);
+    expect(isOpenedCampaignFollowup('l ho aperta')).toBe(true);
+    expect(isBulkCampaignWipe('ferma questa campagna')).toBe(false);
+  });
+});
+
 describe('ops detection', () => {
   it('detects commercial ops phrases', () => {
     expect(detectOperatorOpsAction('rispondi a telegram')).toBe('reply_telegram');
@@ -34,6 +72,23 @@ describe('ops detection', () => {
     expect(detectOperatorOpsAction('aggiungi disponibilità domani alle 15:00')).toBe('create_slot');
     expect(detectOperatorOpsAction('annulla appuntamento')).toBe('cancel_appointment');
     expect(detectOperatorOpsAction('ferma automazione')).toBe('stop_automation');
+    expect(detectOperatorOpsAction('cliente Da Mario chiuso e pagato')).toBe('close_won');
+    expect(detectOperatorOpsAction('non rispondo, archivia')).toBe('archive_thread');
+    expect(detectOperatorOpsAction('cancella questa conversazione')).toBe('drop_thread');
+    expect(detectOperatorOpsAction('togli dalla coda')).toBe('dismiss_todo');
+    expect(detectOperatorOpsAction('cancella questa campagna')).toBe('none');
+    expect(detectOperatorOpsAction('cancellala')).toBe('none');
+    expect(detectOperatorOpsAction('cancellala', { entityType: 'thread' })).toBe('drop_thread');
+    expect(detectOperatorOpsAction('archivia', { entityType: 'thread' })).toBe('archive_thread');
+    expect(extractNamedLeadHint('cliente Da Mario chiuso e pagato')).toBe('Da Mario');
+    expect(
+      closeOutSummary({
+        kind: 'archive',
+        leadId: '1',
+        threadId: '2',
+        leadName: 'Da Mario',
+      }),
+    ).toMatch(/Non rispondo a «Da Mario»/);
     expect(detectOperatorOpsAction('fai partire telegeram')).toBe('start_telegram');
     expect(
       detectOperatorOpsAction(
@@ -378,5 +433,101 @@ describe('operator turn calendar read', () => {
     });
     expect(result.reply.toLowerCase()).toMatch(/2/);
     expect(result.reply).not.toMatch(/182/);
+  });
+});
+
+describe('close-out operativo', () => {
+  it('Attila chiude il cliente pagato senza toccare le campagne', async () => {
+    const persist: PersistAiRun = async (input) =>
+      ({
+        id: 'run-close',
+        model: input.model,
+        taskType: input.taskType,
+        provider: input.provider,
+        inputTokens: input.usage.inputTokens,
+        cachedInputTokens: 0,
+        outputTokens: input.usage.outputTokens,
+        estimatedCostUsd: input.estimatedCostUsd,
+        latencyMs: 0,
+        status: input.status,
+        createdAt: new Date().toISOString(),
+      }) satisfies AiRunPublic;
+
+    let ran: string | null = null;
+    let mutated = false;
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 'sess',
+      question: 'cliente Da Mario chiuso e pagato',
+      envelope: { route: '/inbox', entityType: 'thread', entityId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      data: createMemoryOperatorData(),
+      persist,
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+      writes: {
+        runOps: async (action) => {
+          ran = action;
+          return {
+            tool: 'close_won',
+            ok: true,
+            summary: '«Da Mario» è chiuso e pagato. L’ho tolto dalle code e fermato i solleciti.',
+            data: { threadId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', href: '/inbox' },
+          };
+        },
+        campaignMutation: async () => {
+          mutated = true;
+          return [{ tool: 'campaign_mutation', ok: false, summary: 'non dovevo', data: {} }];
+        },
+      },
+    });
+    expect(ran).toBe('close_won');
+    expect(mutated).toBe(false);
+    expect(result.reply).toMatch(/chiuso e pagato/);
+  });
+
+  it('classifica archivia campagna come azione distruttiva confermata', () => {
+    expect(classifyOperatorIntent('archivia questa campagna').kind).toBe('DESTRUCTIVE');
+    expect(classifyOperatorIntent('non rispondo archivia').kind).not.toBe('DESTRUCTIVE');
+  });
+
+  it('spiega in italiano semplice perché Attila a volte non risponde', async () => {
+    expect(
+      isAttilaAvailabilityQuestion('Modalità AI temporaneamente non disponibile perche?'),
+    ).toBe(true);
+    expect(
+      isAttilaAvailabilityQuestion('perché?', [
+        { role: 'assistant', content: ATTILA_UNAVAILABLE_REPLY },
+      ]),
+    ).toBe(true);
+    expect(isAttilaAvailabilityQuestion('perché questa campagna è bloccata?')).toBe(false);
+
+    const persist: PersistAiRun = async (input) =>
+      ({
+        id: 'run-ai-down',
+        model: input.model,
+        taskType: input.taskType,
+        provider: input.provider,
+        inputTokens: input.usage.inputTokens,
+        cachedInputTokens: 0,
+        outputTokens: input.usage.outputTokens,
+        estimatedCostUsd: input.estimatedCostUsd,
+        latencyMs: 0,
+        status: input.status,
+        createdAt: new Date().toISOString(),
+      }) satisfies AiRunPublic;
+
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 'sess',
+      question: 'Modalità AI temporaneamente non disponibile perche?',
+      envelope: { route: '/overview', entityType: 'none', entityId: null },
+      data: createMemoryOperatorData(),
+      persist,
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+    });
+    expect(result.reply).toMatch(/non dipende dalle campagne/i);
+    expect(result.reply).not.toMatch(/blocker|slot|modalità ai/i);
+    expect(result.events.some((event) => event.type === 'tool_start' && event.name === 'get_blockers')).toBe(
+      false,
+    );
   });
 });

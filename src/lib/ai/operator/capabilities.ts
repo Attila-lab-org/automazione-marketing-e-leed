@@ -14,6 +14,7 @@ export const OPERATOR_CONFIRM_TOOLS = [
   'send_campaign',
   'enable_autonomy',
   'pause_campaign',
+  'archive_campaign',
   'cancel_appointment',
   'stop_automation',
   'set_telegram_runtime',
@@ -27,9 +28,9 @@ export const CAMPAIGN_MUTATION_CAPABILITIES = {
 } as const;
 
 const READ_CAPABILITY_LABELS: Partial<Record<OperatorToolName, string>> = {
-  search_leads: 'trovare e confrontare lead',
+  search_leads: 'trovare e confrontare contatti',
   get_lead_detail: 'analizzare attività e siti',
-  get_blockers: 'spiegare blocker',
+  get_blockers: 'spiegare cosa blocca un invio',
   get_daily_report: 'leggere performance e report',
   get_dashboard_summary: 'leggere performance e report',
   get_campaign_stats: 'leggere performance e report',
@@ -56,6 +57,10 @@ const WRITE_NOW_LABELS: Partial<Record<string, string>> = {
   apply_demo_personalization: 'applicare personalizzazioni demo già proposte',
   take_over_thread: 'prendere in carico una conversazione',
   return_to_ai: 'ridare una conversazione ad Attila',
+  close_won: 'chiudere un cliente pagato e toglierlo dalle code',
+  archive_thread: 'archiviare una conversazione se non rispondi',
+  drop_thread: 'cancellare una conversazione dalle code aperte',
+  dismiss_todo: 'togliere un follow-up dalla coda',
   create_calendar_slot: 'aggiungere disponibilità in calendario',
   reschedule_appointment: 'riprogrammare un appuntamento su slot liberi',
   reply_telegram: 'rispondere subito all’ultimo Telegram in attesa',
@@ -65,6 +70,7 @@ const CONFIRM_LABELS: Record<string, string> = {
   send_campaign: 'inviare campagne (email/Telegram) dopo conferma esplicita',
   enable_autonomy: 'abilitare autonomia secondo il Commercial Playbook',
   pause_campaign: 'mettere in pausa una campagna dopo conferma',
+  archive_campaign: 'archiviare o nascondere un invio dopo conferma (le email già partite restano)',
   cancel_appointment: 'annullare un appuntamento dopo conferma',
   stop_automation: 'fermare l’automazione su un contatto dopo conferma',
   set_telegram_runtime: 'avviare o fermare il bot Telegram dopo conferma',
@@ -75,7 +81,7 @@ const HUMAN_LABELS: Record<(typeof DENIED_TOOL_NAMES)[number], string> = {
   fetch_url: 'chiamate HTTP arbitrarie',
   send_email: 'invio email saltando Send Guard',
   send_telegram: 'invio Telegram saltando Send Guard',
-  delete_lead: 'cancellazione lead',
+  delete_lead: 'cancellazione contatti',
 };
 
 function unique(items: string[]): string[] {
@@ -109,7 +115,7 @@ export function registeredConfirmCapabilities(): string[] {
 export function registeredHumanCapabilities(): string[] {
   const items = unique(DENIED_TOOL_NAMES.map((name) => HUMAN_LABELS[name]));
   if (!CAMPAIGN_MUTATION_CAPABILITIES.hardDelete) {
-    items.push('eliminazione definitiva delle campagne (non disponibile: usa pausa)');
+    items.push('eliminazione definitiva delle campagne (non disponibile: archivia o nascondi l’invio)');
   }
   return items;
 }
@@ -130,7 +136,7 @@ export function buildOperatorCapabilityReply(mode: OperatorAssistMode = 'ASSISTI
   const list = (title: string, rows: string[]) =>
     `${title}\n${rows.map((row) => `- ${row}`).join('\n')}`;
   const reply = [
-    'Posso gestire il commerciale da questa chat (lead, campagne, review, messaggi, Telegram, calendario, demo):',
+    'Posso gestire il commerciale da questa chat (contatti, invii, messaggi, Telegram, calendario, anteprime):',
     '',
     list('Posso fare ora', now),
     '',

@@ -388,7 +388,7 @@ describe('operator conversational orchestrator', () => {
           (e.name === 'list_templates' || e.name === 'list_demos' || e.name === 'inspect_demo'),
       ),
     ).toBe(true);
-    expect(result.reply.toLowerCase()).toMatch(/template|demo/);
+    expect(result.reply.toLowerCase()).toMatch(/anteprime|modelli|template|demo/);
   });
 
   it('il terzo resta lo stesso lead e miglioragli i testi usa quel riferimento', async () => {

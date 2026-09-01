@@ -22,7 +22,8 @@ export const GET = withAdmin(async (request: Request) => {
   query = archivedOnly ? query.eq('status', 'ARCHIVED') : query.neq('status', 'ARCHIVED');
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message, campaigns: [] }, { status: 500 });
-  const campaignIds = (data ?? []).map((campaign) => campaign.id);
+  const visible = (data ?? []).filter((campaign) => !campaign.name.startsWith('[eliminata]'));
+  const campaignIds = visible.map((campaign) => campaign.id);
   const { data: memberships } = campaignIds.length
     ? await admin
         .from('campaign_leads')
@@ -48,7 +49,7 @@ export const GET = withAdmin(async (request: Request) => {
     current.push(membership);
     membershipsByCampaign.set(membership.campaign_id, current);
   }
-  const campaigns = (data ?? []).map((campaign) => {
+  const campaigns = visible.map((campaign) => {
     const campaignMemberships = membershipsByCampaign.get(campaign.id) ?? [];
     return {
       ...campaign,

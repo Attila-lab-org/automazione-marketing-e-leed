@@ -57,6 +57,33 @@ export default function CampaignsClient() {
       .finally(() => setLoading(false));
   }, []);
 
+  async function deleteCampaign(campaign: Campaign) {
+    if (
+      !window.confirm(
+        `Nascondere l’invio «${campaign.name}»? Sparisce dall’elenco. I solleciti si fermano. Le email già partite restano nel registro.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(campaign.id);
+    setFeedback(null);
+    try {
+      const response = await fetch(`/api/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete" }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Eliminazione fallita");
+      setFeedback(`Invio «${campaign.name}» nascosto. Le email già partite restano nel registro.`);
+      await load();
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Errore");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function archiveCampaign(campaign: Campaign) {
     if (
       !window.confirm(
@@ -223,9 +250,17 @@ export default function CampaignsClient() {
                     type="button"
                     disabled={busyId === c.id}
                     onClick={() => void archiveCampaign(c)}
-                    className="text-xs font-semibold text-stone-500 hover:text-red-700 disabled:opacity-50"
+                    className="text-xs font-semibold text-stone-500 hover:text-stone-800 disabled:opacity-50"
                   >
                     {busyId === c.id ? "…" : "Archivia"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyId === c.id}
+                    onClick={() => void deleteCampaign(c)}
+                    className="text-xs font-semibold text-stone-500 hover:text-red-700 disabled:opacity-50"
+                  >
+                    {busyId === c.id ? "…" : "Elimina"}
                   </button>
                 </div>
               </li>

@@ -110,8 +110,8 @@ export function composeOperatorReply(
     );
     if (campaignId) {
       actions.push({ type: 'open_campaign', campaignId, label: 'Apri campagna' });
-      actions.push({ type: 'open_review', label: 'Apri Review' });
-      actions.push({ type: 'show_blockers', campaignId, label: 'Mostra blocker' });
+      actions.push({ type: 'open_review', label: 'Apri da controllare' });
+      actions.push({ type: 'show_blockers', campaignId, label: 'Mostra problemi' });
     }
   }
 
@@ -162,7 +162,7 @@ export function composeOperatorReply(
       );
     }
     const path = typeof personalize.data.publicPath === 'string' ? personalize.data.publicPath : null;
-    if (path) actions.push({ type: 'open_demo', path, label: 'Apri demo' });
+    if (path) actions.push({ type: 'open_demo', path, label: 'Apri anteprima' });
   }
 
   const opsWrite = writes.find((w) =>
@@ -178,6 +178,10 @@ export function composeOperatorReply(
       'update_commercial_playbook',
       'update_telegram_keywords',
       'list_manual_followups',
+      'close_won',
+      'archive_thread',
+      'drop_thread',
+      'dismiss_todo',
     ].includes(w.tool),
   );
   if (opsWrite) {
@@ -201,7 +205,9 @@ export function composeOperatorReply(
         confirmLabel === 'Conferma invio' ||
         confirmLabel === 'Abilita policy' ||
         confirmLabel === 'Sì, accendi Telegram' ||
-        confirmLabel === 'Sì, spegni Telegram'
+        confirmLabel === 'Sì, spegni Telegram' ||
+        confirmLabel === 'Archivia invio' ||
+        confirmLabel === 'Nascondi invio'
           ? confirmLabel
           : 'Conferma azione';
       actions.push({ type: 'confirm_action', pendingActionId: pendingId, label });
@@ -234,10 +240,15 @@ export function composeOperatorReply(
     const pendingId = typeof mutation.data.pendingActionId === 'string' ? mutation.data.pendingActionId : null;
     const listed = byName.get('list_campaigns') as Array<{ id: string; name: string; status: string }> | undefined;
     if (campaignId) actions.push({ type: 'open_campaign', campaignId, label: 'Apri campagna' });
-    if (pendingId && mutation.data.canPause !== false) {
+    if (pendingId && mutation.data.canPause === true) {
       actions.push({ type: 'confirm_action', pendingActionId: pendingId, label: 'Metti in pausa' });
     }
-    if (campaignId && mutation.data.hardDelete === false && mutation.data.choice !== false) {
+    if (pendingId && mutation.data.canPause !== true) {
+      const label =
+        mutation.data.confirmLabel === 'Nascondi invio' ? 'Nascondi invio' : 'Archivia invio';
+      actions.push({ type: 'confirm_action', pendingActionId: pendingId, label });
+    }
+    if (campaignId && mutation.data.choice === true && mutation.data.hardDelete === false) {
       actions.push({
         type: 'send_followup',
         message: HARD_DELETE_FOLLOWUP,
@@ -266,14 +277,14 @@ export function composeOperatorReply(
     const failed = metricText(daily.metrics.failedPreparations);
     const period = daily.period.label;
     const sentences: string[] = [];
-    if (found) sentences.push(`${period === 'ieri' ? 'Ieri' : period} hai trovato ${found} nuov${found === '1' ? 'o' : 'i'} lead`);
-    else sentences.push(`Il numero di nuovi lead per ${period} non è disponibile`);
+    if (found) sentences.push(`${period === 'ieri' ? 'Ieri' : period} hai trovato ${found} nuov${found === '1' ? 'o contatto' : 'i contatti'}`);
+    else sentences.push(`Il numero di nuovi contatti per ${period} non è disponibile`);
     if (qualified) sentences.push(`${qualified} ${qualified === '1' ? 'è stato qualificato' : 'sono stati qualificati'}`);
     else sentences.push('il numero di qualificati non è disponibile');
-    if (demos) sentences.push(`${demos} ${demos === '1' ? 'ha' : 'hanno'} una demo pronta`);
-    else sentences.push('il numero di demo pronte non è disponibile');
-    if (review) sentences.push(`${review} ${review === '1' ? 'è entrat' : 'sono entrat'}i in Review`);
-    else sentences.push('il numero di item in Review non è disponibile');
+    if (demos) sentences.push(`${demos} ${demos === '1' ? 'ha' : 'hanno'} un’anteprima pronta`);
+    else sentences.push('il numero di anteprime pronte non è disponibile');
+    if (review) sentences.push(`${review} ${review === '1' ? 'è da controllare' : 'sono da controllare'}`);
+    else sentences.push('il numero di attività da controllare non è disponibile');
     parts.push(`${sentences[0]}. ${sentences.slice(1).join(', ')}.`);
     if (failed) {
       const samples = daily.failedSamples
@@ -297,7 +308,7 @@ export function composeOperatorReply(
       parts.push('Il numero di risposte ricevute in quel periodo non è disponibile.');
     }
     if (Number(review ?? '0') > 0) {
-      actions.push({ type: 'open_review', label: 'Apri Review' });
+      actions.push({ type: 'open_review', label: 'Apri da controllare' });
     }
   }
 
@@ -312,17 +323,17 @@ export function composeOperatorReply(
         null;
       const ranked = [...leads].sort((a, b) => (b.discoveryScore ?? -1) - (a.discoveryScore ?? -1));
       const lines = ranked.slice(0, 5).map((lead, i) => {
-        const score = lead.discoveryScore == null ? 'score non disponibile' : `score ${lead.discoveryScore}`;
+        const score = lead.discoveryScore == null ? 'punteggio non disponibile' : `punteggio ${lead.discoveryScore}`;
         return `${i + 1}. ${lead.name}${lead.city ? ` (${lead.city})` : ''} — ${score}`;
       });
       parts.push(
-        `${cityLabel ? `I migliori lead a ${cityLabel[0]!.toUpperCase()}${cityLabel.slice(1)}` : 'I migliori lead'} secondo lo score attuale:\n${lines.join('\n')}`,
+        `${cityLabel ? `I contatti più interessanti a ${cityLabel[0]!.toUpperCase()}${cityLabel.slice(1)}` : 'I contatti più interessanti'} in questo momento:\n${lines.join('\n')}`,
       );
       actions.push({
         type: 'show_leads',
         leadIds: ranked.slice(0, 8).map((l) => l.id),
         city: cityLabel ?? undefined,
-        label: 'Mostra lead',
+        label: 'Mostra contatti',
       });
     }
   }
@@ -338,21 +349,35 @@ export function composeOperatorReply(
         'Non ho una campagna nel contesto di questa pagina. Aprine una e riprova, senza bisogno di copiare l’ID.',
       );
     } else if (campaign?.name) {
-      if (campaign.status === 'PAUSED') {
-        parts.push(`La campagna «${campaign.name}» è in pausa.`);
-      } else {
-        parts.push(`La campagna «${campaign.name}» è in stato ${campaign.status}.`);
-      }
+      const statusLabel =
+        campaign.status === 'PAUSED'
+          ? 'in pausa'
+          : campaign.status === 'ACTIVE'
+            ? 'in corso'
+            : campaign.status === 'DRAFT'
+              ? 'in bozza'
+              : campaign.status === 'COMPLETED'
+                ? 'completata'
+                : campaign.status === 'STOPPED'
+                  ? 'fermata'
+                  : campaign.status === 'ARCHIVED'
+                    ? 'archiviata'
+                    : null;
+      parts.push(
+        statusLabel
+          ? `L’invio «${campaign.name}» è ${statusLabel}.`
+          : `L’invio «${campaign.name}» è aperto.`,
+      );
       if (campaign.id) {
         actions.push({ type: 'open_campaign', campaignId: campaign.id, label: 'Apri campagna' });
       }
     }
     if (blockers) {
       if (blockers.length === 0) {
-        parts.push('Non risultano blocker aperti nei dati attuali.');
+        parts.push('Al momento non ci sono problemi aperti.');
       } else {
         parts.push(
-          `${blockers.length} blocker: ${blockers
+          `${blockers.length === 1 ? 'C’è 1 cosa da sistemare' : `Ci sono ${blockers.length} cose da sistemare`}: ${blockers
             .slice(0, 5)
             .map((b) => b.label)
             .join('; ')}.`,
@@ -372,10 +397,10 @@ export function composeOperatorReply(
   if (review) {
     parts.push(
       review.length
-        ? `In Review ci sono ${review.length} attività da controllare.`
-        : 'La Review è vuota.',
+        ? `Ci sono ${review.length} attività da controllare.`
+        : 'Non c’è niente da controllare.',
     );
-    if (review.length) actions.push({ type: 'open_review', label: 'Apri Review' });
+    if (review.length) actions.push({ type: 'open_review', label: 'Apri da controllare' });
   }
 
   const conversations = byName.get('list_conversations') as Array<{ leadName: string }> | undefined;
@@ -486,7 +511,7 @@ export function composeOperatorReply(
 
   const demoInspect = byName.get('inspect_demo') as { publicPath?: string; leadName?: string } | undefined;
   if (demoInspect && typeof demoInspect.publicPath === 'string') {
-    actions.push({ type: 'open_demo', path: demoInspect.publicPath, label: 'Apri demo' });
+    actions.push({ type: 'open_demo', path: demoInspect.publicPath, label: 'Apri anteprima' });
   }
 
   const uniqueActions = actions.filter((action, index) => {

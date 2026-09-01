@@ -588,6 +588,35 @@ describe('operator conversational router', () => {
     );
   });
 
+  it('rifiuta la cancellazione in blocco di campagne e mail inviate', async () => {
+    let mutated = false;
+    const result = await collectOperatorTurn({
+      workspaceId: 'ws',
+      sessionId: 's',
+      question: 'voglio che cancelli tutte le campagne e le mail inviate',
+      envelope: envelopeFromPath(`/campaigns/${CAMPAIGN_ID}`),
+      data,
+      persist: persist(),
+      env: { AI_PROVIDER_MODE: 'mock' } as unknown as NodeJS.ProcessEnv,
+      writes: {
+        campaignMutation: async () => {
+          mutated = true;
+          return [
+            {
+              tool: 'campaign_mutation',
+              ok: true,
+              summary: 'Non dovevo arrivare qui.',
+              data: { campaignId: CAMPAIGN_ID },
+            },
+          ];
+        },
+      },
+    });
+    expect(mutated).toBe(false);
+    expect(result.reply).toMatch(/non cancello in blocco/i);
+    expect(result.actions.some((a) => a.type === 'confirm_action')).toBe(false);
+  });
+
   it('azione distruttiva richiede conferma e non cancella da sola', async () => {
     const result = await collectOperatorTurn({
       workspaceId: 'ws',

@@ -44,7 +44,7 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
     );
     if (progress.pace) {
       parts.push(
-        `Ritmo ${progress.pace}: ${progress.progressPct ?? 0}% del target, ${progress.elapsedPct ?? 0}% del tempo trascorso.${progress.blockers?.length ? ` Blocker: ${progress.blockers.join(', ')}.` : ''}`,
+        `Ritmo ${progress.pace}: ${progress.progressPct ?? 0}% dell’obiettivo, ${progress.elapsedPct ?? 0}% del tempo passato.${progress.blockers?.length ? ` Da sistemare: ${progress.blockers.join(', ')}.` : ''}`,
       );
     }
     if (goalPlan) {
@@ -121,12 +121,12 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
   if (wantsPriority && (dashboard || blockers || daily || campaigns)) {
     const startFrom =
       blockers && blockers.length
-        ? `i ${blockers.length} blocker aperti (${blockers[0]?.label ?? 'blocco'})`
+        ? `${blockers.length === 1 ? 'questa cosa da sistemare' : `queste ${blockers.length} cose da sistemare`} (${blockers[0]?.label ?? 'blocco'})`
         : daily?.metrics.reviewEntered.available && daily.metrics.reviewEntered.value > 0
-          ? 'la Review, dove ci sono attività da controllare'
+          ? 'le attività da controllare'
           : campaigns?.find((c) => c.status === 'PAUSED')
-            ? `la campagna in pausa «${campaigns.find((c) => c.status === 'PAUSED')?.name}»`
-            : 'i lead già qualificati, prima di aprire una nuova campagna';
+            ? `l’invio in pausa «${campaigns.find((c) => c.status === 'PAUSED')?.name}»`
+            : 'i contatti già pronti, prima di aprire un nuovo invio';
     parts.push(`Partirei da ${startFrom}, dai dati attuali.`);
     if (dashboard) {
       parts.push(
@@ -135,7 +135,7 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
     }
   } else if (blockers?.length) {
     parts.push(
-      `${blockers.length} blocker: ${blockers
+      `${blockers.length === 1 ? 'C’è 1 cosa da sistemare' : `Ci sono ${blockers.length} cose da sistemare`}: ${blockers
         .slice(0, 5)
         .map((b) => b.label)
         .join('; ')}.`,
@@ -143,7 +143,7 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
   }
   if (daily && !wantsPriority) {
     const found = daily.metrics.leadsFound;
-    if (found.available) parts.push(`${daily.period.label} hai trovato ${found.value} lead.`);
+    if (found.available) parts.push(`${daily.period.label} hai trovato ${found.value} contatti.`);
   }
 
   const campaign = succeeded<{ id?: string; name?: string; status?: string }>(input, 'get_campaign_detail');
@@ -157,11 +157,11 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
     else {
       const top = [...leads].sort((a, b) => (b.discoveryScore ?? -1) - (a.discoveryScore ?? -1)).slice(0, 5);
       parts.push(
-        `Lead più forti: ${top
+        `Contatti più interessanti: ${top
           .map(
             (l, i) =>
               `${i + 1}. ${l.name}${l.city ? ` (${l.city})` : ''}${
-                l.discoveryScore != null ? ` — score ${l.discoveryScore}` : ''
+                l.discoveryScore != null ? ` — punteggio ${l.discoveryScore}` : ''
               }`,
           )
           .join('; ')}.`,
@@ -175,14 +175,14 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
   const template = succeeded<TemplateSummary>(input, 'inspect_template');
   if (demo && !('missing' in (demo as object))) {
     parts.push(
-      `Demo «${demo.leadName}» su ${demo.templateName}. Headline: ${demo.headline ?? 'non impostata'}. Path ${demo.publicPath}.`,
+      `Anteprima «${demo.leadName}» sul modello ${demo.templateName}. Titolo: ${demo.headline ?? 'non impostato'}.`,
     );
   } else if (template && !('missing' in (template as object))) {
-    parts.push(`Template «${template.name}» (${template.status}), ${template.demoCount} demo collegate.`);
+    parts.push(`Modello «${template.name}», ${template.demoCount} anteprime collegate.`);
   } else if (templates || demos) {
-    if (demos?.length) parts.push(`Demo attive: ${demos.slice(0, 5).map((d) => d.leadName).join(', ')}. Quale controllo?`);
-    else if (templates?.length) parts.push(`Template: ${templates.map((t) => t.name).join(', ')}. Quale vuoi aprire?`);
-    else parts.push('Non c’è una demo o un template nel contesto. Quale vuoi che controlli?');
+    if (demos?.length) parts.push(`Anteprime pronte: ${demos.slice(0, 5).map((d) => d.leadName).join(', ')}. Quale controllo?`);
+    else if (templates?.length) parts.push(`Modelli: ${templates.map((t) => t.name).join(', ')}. Quale vuoi aprire?`);
+    else parts.push('Non c’è un’anteprima o un modello da aprire. Quale vuoi che controlli?');
   }
 
   const reply = parts.join(' ').trim();
@@ -190,7 +190,7 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
     return {
       reply:
         input.plan.clarification ??
-        'Ho i dati degli strumenti usati. Dimmi se vuoi approfondire lead, campagna, calendario, demo o Telegram.',
+        'Ho i dati. Dimmi se vuoi approfondire i contatti, un invio, il calendario, un’anteprima o Telegram.',
       citedTools: cited,
     };
   }

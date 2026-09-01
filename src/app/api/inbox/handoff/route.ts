@@ -3,6 +3,7 @@ import { withAdmin } from '@/lib/api/with-admin';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 import { stopLeadSequences } from '@/lib/sales/stop';
+import { closeOutLeadWork } from '@/lib/sales/close-out';
 import { resumeTelegramAiAndReply } from '@/lib/inbound/telegram-resume';
 
 export const runtime = 'nodejs';
@@ -13,7 +14,7 @@ export const POST = withAdmin(async (request: Request) => {
   }
   const body = (await request.json()) as {
     threadId?: string;
-    action?: 'take_over' | 'return_to_ai' | 'stop' | 'archive' | 'unarchive';
+    action?: 'take_over' | 'return_to_ai' | 'stop' | 'archive' | 'unarchive' | 'drop';
   };
   if (!body.threadId || !body.action) {
     return NextResponse.json({ error: 'threadId e action obbligatori' }, { status: 400 });
@@ -87,18 +88,24 @@ export const POST = withAdmin(async (request: Request) => {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     await stopLeadSequences(admin, workspace.id, currentThread.lead_id);
   }
-  if (body.action === 'archive') {
-    const { error } = await admin
-      .from('message_threads')
-      .update({
+  if (body.action === 'archive' || body.action === 'drop') {
+    try {
+      await closeOutLeadWork(admin, workspace.id, {
+        leadId: currentThread.lead_id,
+        threadId: body.threadId,
+        kind: body.action === 'drop' ? 'drop' : 'archive',
+      });
+      return NextResponse.json({
+        ok: true,
         status: 'ARCHIVED',
-        unread_count: 0,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('workspace_id', workspace.id)
-      .eq('id', body.threadId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, status: 'ARCHIVED' });
+        dropped: body.action === 'drop',
+      });
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : 'Operazione non riuscita' },
+        { status: 400 },
+      );
+    }
   }
   if (body.action === 'unarchive') {
     const { error } = await admin

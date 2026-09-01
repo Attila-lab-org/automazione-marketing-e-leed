@@ -138,8 +138,18 @@ export default function TelegramConversationDrawer({
                   <HandoffButton
                     threadId={detail.threadId}
                     action="archive"
-                    label="Archivia chat"
-                    confirmMessage="Archiviare questa chat? Sparisce dalle aperte, resta nell’archivio Telegram."
+                    label="Non rispondo"
+                    confirmMessage="Non rispondi? Archivia la chat e ferma i solleciti. Resta in Archivio."
+                    onDone={async () => {
+                      await onChanged?.();
+                      onClose();
+                    }}
+                  />
+                  <HandoffButton
+                    threadId={detail.threadId}
+                    action="drop"
+                    label="Cancella dalle code"
+                    confirmMessage="Togliere questa chat dalle code aperte? I solleciti si fermano. I messaggi già inviati restano."
                     onDone={async () => {
                       await onChanged?.();
                       onClose();
@@ -161,8 +171,18 @@ export default function TelegramConversationDrawer({
                     <HandoffButton
                       threadId={detail.threadId}
                       action="archive"
-                      label="Archivia conversazione"
-                      confirmMessage="Archiviare questa conversazione email?"
+                      label="Non rispondo"
+                      confirmMessage="Non rispondi? Archivia e ferma i solleciti. Resta in Archivio."
+                      onDone={async () => {
+                        await onChanged?.();
+                        onClose();
+                      }}
+                    />
+                    <HandoffButton
+                      threadId={detail.threadId}
+                      action="drop"
+                      label="Cancella dalle code"
+                      confirmMessage="Togliere questa conversazione dalle code aperte? I solleciti si fermano. Le email già inviate restano."
                       onDone={async () => {
                         await onChanged?.();
                         onClose();
@@ -390,7 +410,7 @@ function HandoffButton({
   onDone,
 }: {
   threadId: string;
-  action: "take_over" | "return_to_ai" | "stop" | "archive" | "unarchive";
+  action: "take_over" | "return_to_ai" | "stop" | "archive" | "unarchive" | "drop";
   label: string;
   confirmMessage?: string;
   onDone?: () => void | Promise<void>;
@@ -430,7 +450,9 @@ function HandoffButton({
                 : action === "take_over"
                   ? "Ora gestisci tu la conversazione."
                   : action === "archive"
-                    ? "Conversazione archiviata."
+                    ? "Conversazione archiviata. I solleciti sono fermi."
+                    : action === "drop"
+                      ? "Conversazione tolta dalle code. I solleciti sono fermi."
                     : action === "unarchive"
                       ? "Conversazione riaperta."
                   : "Conversazione chiusa e automazione fermata.",

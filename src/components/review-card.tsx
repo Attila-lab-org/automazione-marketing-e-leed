@@ -111,8 +111,8 @@ export default function ReviewCard({
     },
     {
       key: "skip",
-      label: "Salta",
-      hint: "Rimanda la decisione. Questo elemento resterà tra quelli da controllare.",
+      label: "Togli dalla coda",
+      hint: "La togli da quelle da fare. Nessuna email parte e i solleciti su questa attività si fermano.",
       callback: onSkip,
       className: "border border-stone-300 text-stone-700 hover:bg-stone-50",
     },

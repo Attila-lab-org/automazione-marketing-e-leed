@@ -11,6 +11,7 @@ import {
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 import { emailHtmlToText } from '@/lib/messaging/html-to-text';
+import { archiveCampaignWork } from '@/lib/campaigns/archive';
 
 export const runtime = 'nodejs';
 
@@ -289,23 +290,14 @@ export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
     return NextResponse.json({ ok: true, status: 'PAUSED' });
   }
   if (body.action === 'archive') {
-    const { error } = await admin
-      .from('campaigns')
-      .update({ status: 'ARCHIVED', updated_at: new Date().toISOString() })
-      .eq('workspace_id', workspace.id)
-      .eq('id', id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    await admin.from('activity_log').insert({
-      workspace_id: workspace.id,
-      actor_type: 'USER',
-      entity_type: 'campaign',
-      entity_id: id,
-      category: 'DECISION',
-      event_type: 'CAMPAIGN_ARCHIVED',
-      message: 'Campagna archiviata',
-      data: {},
-    });
-    return NextResponse.json({ ok: true, status: 'ARCHIVED' });
+    try {
+      await archiveCampaignWork(admin, workspace.id, id);
+      return NextResponse.json({ ok: true, status: 'ARCHIVED' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Archiviazione fallita';
+      const status = message === 'Campagna non trovata' ? 404 : 500;
+      return NextResponse.json({ error: message }, { status });
+    }
   }
   if (body.action === 'unarchive') {
     const { error } = await admin
@@ -327,33 +319,14 @@ export const PATCH = withAdmin(async (request: Request, ctx?: unknown) => {
     return NextResponse.json({ ok: true, status: 'PAUSED' });
   }
   if (body.action === 'delete') {
-    const { data: campaign } = await admin
-      .from('campaigns')
-      .select('id, status')
-      .eq('workspace_id', workspace.id)
-      .eq('id', id)
-      .maybeSingle();
-    if (!campaign) return NextResponse.json({ error: 'Campagna non trovata' }, { status: 404 });
-    if (campaign.status !== 'DRAFT' && campaign.status !== 'ARCHIVED') {
-      return NextResponse.json(
-        {
-          error:
-            'Puoi eliminare solo campagne in bozza o già archiviate. Prima mettile in archivio.',
-        },
-        { status: 409 },
-      );
+    try {
+      await archiveCampaignWork(admin, workspace.id, id, { hide: true });
+      return NextResponse.json({ ok: true, status: 'ARCHIVED', deleted: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Eliminazione fallita';
+      const status = message === 'Campagna non trovata' ? 404 : 500;
+      return NextResponse.json({ error: message }, { status });
     }
-    // Soft-delete: resta ARCHIVED e nascosta; niente hard delete per sicurezza.
-    const { error } = await admin
-      .from('campaigns')
-      .update({
-        status: 'ARCHIVED',
-        name: `[eliminata] ${new Date().toISOString().slice(0, 10)}`,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, status: 'ARCHIVED', deleted: true });
   }
   if (body.action === 'resume') {
     try {

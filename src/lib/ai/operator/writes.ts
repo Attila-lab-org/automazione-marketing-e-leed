@@ -5,6 +5,7 @@ import { enqueueCampaignPreparation } from '@/lib/campaigns/prepare';
 import { resumeCampaign } from '@/lib/campaigns/resume';
 import { parseTestRecipientAllowlist } from '@/lib/campaigns/test-delivery';
 import { analyzeLeadWebsite } from '@/lib/intelligence/analyze';
+import { archiveCampaignWork } from '@/lib/campaigns/archive';
 import { createPendingAction } from './pending';
 import { CAMPAIGN_MUTATION_CAPABILITIES } from './capabilities';
 import type { OperatorIntent } from './intent';
@@ -53,6 +54,15 @@ export async function pauseCampaign(
     .eq('workspace_id', workspaceId)
     .eq('id', campaignId);
   if (error) throw new Error(error.message);
+}
+
+export async function archiveCampaign(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+  campaignId: string,
+  hide = false,
+) {
+  return archiveCampaignWork(admin, workspaceId, campaignId, { hide });
 }
 
 export async function executePreparePlan(args: {
@@ -372,8 +382,9 @@ export async function executeCampaignMutation(args: {
   const shortId = args.campaignId.slice(0, 8);
   const leadCount = Number(args.campaign.totals?.leads ?? 0);
   const facts = `«${args.campaign.name}» (${shortId}…), ${leadCount} lead, stato ${args.campaign.status}.`;
+  const hide = args.verb === 'hard_delete';
 
-  if (args.verb === 'hard_delete' && !CAMPAIGN_MUTATION_CAPABILITIES.hardDelete) {
+  if (!CAMPAIGN_MUTATION_CAPABILITIES.archive) {
     const pause = CAMPAIGN_MUTATION_CAPABILITIES.pause
       ? await createPausePending({
           admin: args.admin,
@@ -402,20 +413,33 @@ export async function executeCampaignMutation(args: {
     ];
   }
 
-  const pause = CAMPAIGN_MUTATION_CAPABILITIES.pause
-    ? await createPausePending({
-        admin: args.admin,
-        workspaceId: args.workspaceId,
-        campaignId: args.campaignId,
-        campaign: { name: args.campaign.name, status: args.campaign.status, leadCount },
-      })
-    : null;
+  const pending = await createPendingAction(args.admin, {
+    workspaceId: args.workspaceId,
+    tool: 'archive_campaign',
+    params: { campaignId: args.campaignId, hide },
+    targetSummary: {
+      campaignId: args.campaignId,
+      name: args.campaign.name,
+      hide,
+    },
+  });
+  await recordAiAudit(args.admin, {
+    workspaceId: args.workspaceId,
+    actor: 'AI',
+    tool: 'archive_campaign',
+    action: 'pending',
+    entityType: 'campaign',
+    entityId: args.campaignId,
+    confirmationId: pending.id,
+  });
 
   return [
     {
       tool: 'campaign_mutation',
       ok: true,
-      summary: `Vuoi fermare «${args.campaign.name}» oppure eliminarla definitivamente? ${facts} Metterla in pausa ferma gli invii. Nessuna modifica finché non confermi.`,
+      summary: hide
+        ? `Non cancello le email già inviate. ${facts} Conferma per nasconderla dall’elenco: i solleciti si fermano, lo storico resta.`
+        : `Conferma per archiviare «${args.campaign.name}». ${facts} Sparisce dagli invii attivi e i solleciti si fermano. Le email già partite restano nel registro.`,
       data: {
         campaignId: args.campaignId,
         name: args.campaign.name,
@@ -423,9 +447,11 @@ export async function executeCampaignMutation(args: {
         leadCount,
         shortId,
         hardDelete: false,
-        choice: true,
-        canPause: CAMPAIGN_MUTATION_CAPABILITIES.pause,
-        pendingActionId: pause?.data.pendingActionId,
+        choice: false,
+        canPause: false,
+        hide,
+        pendingActionId: pending.id,
+        confirmLabel: hide ? 'Nascondi invio' : 'Archivia invio',
       },
     },
   ];

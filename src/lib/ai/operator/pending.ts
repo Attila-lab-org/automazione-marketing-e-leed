@@ -39,6 +39,39 @@ export function pendingIdempotencyKey(
   return `${tool}:${hashPayload(tool, params).slice(0, 24)}`;
 }
 
+export function resolvePendingReuse(
+  existing: { status: string; expires_at: string } | null,
+  now = new Date(),
+): 'reuse' | 'reset' | 'insert' {
+  if (!existing) return 'insert';
+  if (existing.status === 'pending' && new Date(existing.expires_at) > now) return 'reuse';
+  return 'reset';
+}
+
+function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
+  return error?.code === '23505' || /pending_ai_actions_idempotency_idx/i.test(error?.message ?? '');
+}
+
+function toPending(row: {
+  id: string;
+  tool: string;
+  params: unknown;
+  payload_hash: string;
+  target_summary: unknown;
+  status: string;
+  expires_at: string;
+}): PendingAction {
+  return {
+    id: row.id,
+    tool: row.tool,
+    params: (row.params ?? {}) as Record<string, unknown>,
+    payloadHash: row.payload_hash,
+    targetSummary: (row.target_summary ?? {}) as Record<string, unknown>,
+    status: row.status as PendingActionStatus,
+    expiresAt: row.expires_at,
+  };
+}
+
 export async function createPendingAction(
   admin: AppSupabaseClient,
   args: {
@@ -54,26 +87,18 @@ export async function createPendingAction(
   const idempotencyKey = pendingIdempotencyKey(args.tool, args.params);
   const expiresAt = new Date(Date.now() + (args.ttlMinutes ?? 30) * 60_000).toISOString();
 
-  const { data: existing } = await admin
-    .from('pending_ai_actions')
-    .select('id, tool, params, payload_hash, target_summary, status, expires_at')
-    .eq('workspace_id', args.workspaceId)
-    .eq('idempotency_key', idempotencyKey)
-    .maybeSingle();
-  if (existing && existing.status === 'pending' && new Date(existing.expires_at) > new Date()) {
-    return {
-      id: existing.id,
-      tool: existing.tool,
-      params: (existing.params ?? {}) as Record<string, unknown>,
-      payloadHash: existing.payload_hash,
-      targetSummary: (existing.target_summary ?? {}) as Record<string, unknown>,
-      status: existing.status as PendingActionStatus,
-      expiresAt: existing.expires_at,
-    };
-  }
+  const loadExisting = async () => {
+    const { data } = await admin
+      .from('pending_ai_actions')
+      .select('id, tool, params, payload_hash, target_summary, status, expires_at')
+      .eq('workspace_id', args.workspaceId)
+      .eq('idempotency_key', idempotencyKey)
+      .maybeSingle();
+    return data;
+  };
 
-  if (existing && (existing.status === 'expired' || existing.status === 'cancelled' || new Date(existing.expires_at) <= new Date())) {
-    await admin
+  const resetExisting = async (id: string): Promise<PendingAction> => {
+    const { data, error } = await admin
       .from('pending_ai_actions')
       .update({
         status: 'pending',
@@ -86,17 +111,17 @@ export async function createPendingAction(
         executed_at: null,
       })
       .eq('workspace_id', args.workspaceId)
-      .eq('id', existing.id);
-    return {
-      id: existing.id,
-      tool: args.tool,
-      params: args.params,
-      payloadHash,
-      targetSummary: args.targetSummary,
-      status: 'pending',
-      expiresAt,
-    };
-  }
+      .eq('id', id)
+      .select('id, tool, params, payload_hash, target_summary, status, expires_at')
+      .single();
+    if (error || !data) throw new Error(error?.message ?? 'Pending action non aggiornata');
+    return toPending(data);
+  };
+
+  const existing = await loadExisting();
+  const decision = resolvePendingReuse(existing);
+  if (decision === 'reuse' && existing) return toPending(existing);
+  if (decision === 'reset' && existing) return resetExisting(existing.id);
 
   const { data, error } = await admin
     .from('pending_ai_actions')
@@ -113,16 +138,13 @@ export async function createPendingAction(
     })
     .select('id, tool, params, payload_hash, target_summary, status, expires_at')
     .single();
+  if (isUniqueViolation(error)) {
+    const raced = await loadExisting();
+    if (!raced) throw new Error(error?.message ?? 'Pending action non creata');
+    return resolvePendingReuse(raced) === 'reuse' ? toPending(raced) : resetExisting(raced.id);
+  }
   if (error || !data) throw new Error(error?.message ?? 'Pending action non creata');
-  return {
-    id: data.id,
-    tool: data.tool,
-    params: (data.params ?? {}) as Record<string, unknown>,
-    payloadHash: data.payload_hash,
-    targetSummary: (data.target_summary ?? {}) as Record<string, unknown>,
-    status: data.status as PendingActionStatus,
-    expiresAt: data.expires_at,
-  };
+  return toPending(data);
 }
 
 export async function getPendingAction(

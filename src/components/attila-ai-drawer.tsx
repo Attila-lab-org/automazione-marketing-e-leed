@@ -115,7 +115,7 @@ async function streamOperatorChat(
         handlers.onAssistant(assistantId, state.text, state.actions);
       }
       if (event.type === "error") {
-        throw new Error(event.message ?? "Errore Attila AI");
+        throw new Error(event.message ?? "Errore di Attila");
       }
     }
     if (done) break;
@@ -166,7 +166,7 @@ export default function AttilaAiDrawer() {
       .then((r) => r.json())
       .then((data) => {
         if (data?.playbook?.autonomy?.defaultMode === "AUTO_ALLOWED") {
-          setModeLabel("AUTO CONTROLLATO");
+          setModeLabel("Automatico protetto");
         }
       })
       .catch(() => undefined);
@@ -330,7 +330,7 @@ export default function AttilaAiDrawer() {
         setOpen(false);
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Errore Attila AI");
+      setError(reason instanceof Error ? reason.message : "Errore di Attila");
     } finally {
       void fetch("/api/ai/goals", { cache: "no-store" })
         .then((response) => response.json())
@@ -378,14 +378,14 @@ export default function AttilaAiDrawer() {
         aria-controls="attila-ai-panel"
         className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-300 bg-amber-50 px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-amber-950 shadow-lg hover:bg-amber-100 md:bottom-6 md:left-auto md:right-6 md:translate-x-0"
       >
-        Attila AI
+        Attila
       </button>
 
       {open ? (
         <div className="fixed inset-0 z-40 flex items-end justify-center">
           <button
             type="button"
-            aria-label="Chiudi Attila AI"
+            aria-label="Chiudi Attila"
             className="absolute inset-0 bg-stone-900/30"
             onClick={() => setOpen(false)}
           />
@@ -437,7 +437,13 @@ export default function AttilaAiDrawer() {
               {goal ? (
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex gap-1">
-                    {(["ASK", "DO", "AUTOPILOT"] as const).map((mode) => (
+                    {(
+                      [
+                        ["ASK", "Chiedi"],
+                        ["DO", "Prepara"],
+                        ["AUTOPILOT", "Automatico"],
+                      ] as const
+                    ).map(([mode, label]) => (
                       <button
                         key={mode}
                         type="button"
@@ -449,7 +455,7 @@ export default function AttilaAiDrawer() {
                             : "border border-stone-200 bg-white text-stone-600"
                         } disabled:opacity-60`}
                       >
-                        {mode}
+                        {label}
                       </button>
                     ))}
                   </div>

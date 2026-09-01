@@ -22,6 +22,7 @@ import {
   unregisterTelegramWebhook,
 } from '@/lib/providers/telegram/webhook';
 import { stopLeadSequences } from '@/lib/sales/stop';
+import { closeOutLeadWork, closeOutSummary, type CloseOutKind } from '@/lib/sales/close-out';
 import { getCurrentPlaybook, saveCurrentPlaybook } from '@/lib/sales/playbook-store';
 import type { CommercialPlaybook, ResponseMode } from '@/lib/sales/playbook';
 
@@ -30,6 +31,10 @@ export type OperatorOpsAction =
   | 'take_over'
   | 'return_to_ai'
   | 'stop_automation'
+  | 'close_won'
+  | 'archive_thread'
+  | 'drop_thread'
+  | 'dismiss_todo'
   | 'create_slot'
   | 'cancel_appointment'
   | 'reschedule_appointment'
@@ -41,6 +46,8 @@ export type OperatorOpsAction =
   | 'list_manual_followups'
   | 'update_playbook'
   | 'none';
+
+export type OperatorOpsContext = { entityType?: string | null };
 
 function norm(text: string): string {
   return text
@@ -153,7 +160,35 @@ export async function listDueManualFollowups(
   return filtered;
 }
 
-export function detectOperatorOpsAction(question: string): OperatorOpsAction {
+export function extractNamedLeadHint(question: string): string | null {
+  const raw = question.trim();
+  const patterns = [
+    /\b(?:cliente|contatto)\s+([^,.;!?]+?)(?=\s+(?:ho|ha|e|è|chiuso|pagato|archivi|cancell|elimin|non|inviato|mandato|togl)|[,.;]|$)/i,
+    /\b(?:archivia|cancella|elimina)\s+(?:il |la |lo )?(?:cliente |contatto )?([^,.;!?]+)$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    const hint = match?.[1]?.trim().replace(/^["«]+|["»]+$/g, '');
+    if (
+      hint &&
+      hint.length >= 2 &&
+      hint.length <= 80 &&
+      !/^(campagn|conversaz|chat|thread|invio|questa|quella)/i.test(hint)
+    ) {
+      return hint;
+    }
+  }
+  return null;
+}
+
+function isCampaignScopedClose(q: string): boolean {
+  return /campagn|invii email|questo invio|questa campagna/.test(q);
+}
+
+export function detectOperatorOpsAction(
+  question: string,
+  ctx?: OperatorOpsContext,
+): OperatorOpsAction {
   const q = norm(question);
   if (
     /(aggiungi|metti|inserisci).{0,40}(parol|keyword)/.test(q) ||
@@ -251,6 +286,41 @@ export function detectOperatorOpsAction(question: string): OperatorOpsAction {
   ) {
     return 'stop_telegram';
   }
+  if (isCampaignScopedClose(q) && /(cancell|elimin|archivi|nascond)/.test(q)) {
+    return 'none';
+  }
+  if (
+    /(chiuso e pagato|chiuso pagato|ha pagato|cliente chiuso|vendita chiusa|contratto chiuso|deal chiuso|trattativa chiusa|\bvinto\b|ho chiuso (il |la )?(cliente|trattativa|affare|deal))/.test(
+      q,
+    ) &&
+    !/automazione|campagn/.test(q)
+  ) {
+    return 'close_won';
+  }
+  if (
+    /(togli|rimuovi|segna).{0,18}(coda|todo|attivita|follow.?up)|segna come fatto|toglila dalla coda/.test(
+      q,
+    )
+  ) {
+    return 'dismiss_todo';
+  }
+  const conversationDelete = /(cancell|elimin).{0,24}(conversaz|chat|thread)/.test(q);
+  const conversationArchive =
+    /non rispondo|non risponde|non voglio rispondere|lascia perdere/.test(q) ||
+    (/archivia/.test(q) && /(conversaz|chat|cliente|contatto|questa|quella)/.test(q));
+  if ((conversationDelete || conversationArchive) && !isCampaignScopedClose(q)) {
+    if (conversationDelete && !conversationArchive) return 'drop_thread';
+    return 'archive_thread';
+  }
+  if (
+    (ctx?.entityType === 'thread' || ctx?.entityType === 'lead') &&
+    /(cancell|elimin|archivi|non rispondo|non risponde|lascia perdere)/.test(q) &&
+    !isCampaignScopedClose(q)
+  ) {
+    return /archivi|non rispondo|non risponde|lascia perdere/.test(q)
+      ? 'archive_thread'
+      : 'drop_thread';
+  }
   return 'none';
 }
 
@@ -259,6 +329,10 @@ const OPS_TOOL_BY_ACTION: Record<Exclude<OperatorOpsAction, 'none'>, string> = {
   take_over: 'take_over_thread',
   return_to_ai: 'return_to_ai',
   stop_automation: 'stop_automation',
+  close_won: 'close_won',
+  archive_thread: 'archive_thread',
+  drop_thread: 'drop_thread',
+  dismiss_todo: 'dismiss_todo',
   create_slot: 'create_calendar_slot',
   cancel_appointment: 'cancel_appointment',
   reschedule_appointment: 'reschedule_appointment',
@@ -272,6 +346,63 @@ const OPS_TOOL_BY_ACTION: Record<Exclude<OperatorOpsAction, 'none'>, string> = {
 };
 
 export type ThreadTarget = { threadId: string; leadId: string; channel: string; ambiguous?: boolean };
+
+async function findLeadsByNameHint(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+  hint: string,
+): Promise<Array<{ id: string; name: string }>> {
+  const cleaned = hint.replace(/[%_]/g, '').slice(0, 80);
+  if (!cleaned) return [];
+  const { data } = await admin
+    .from('leads')
+    .select('id, name')
+    .eq('workspace_id', workspaceId)
+    .ilike('name', `%${cleaned}%`)
+    .limit(5);
+  return data ?? [];
+}
+
+async function resolveCloseOutTarget(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+  refs: { lastThreadId?: string | null; lastLeadId?: string | null; lastEventId?: string | null },
+  question: string,
+): Promise<
+  | { leadId: string; threadId: string | null }
+  | { needsContext: true; summary: string }
+> {
+  const hint = extractNamedLeadHint(question);
+  const direct = await resolveThreadTarget(admin, workspaceId, refs);
+  if (direct && !('needsContext' in direct)) {
+    return { leadId: direct.leadId, threadId: direct.threadId };
+  }
+  if (hint) {
+    const found = await findLeadsByNameHint(admin, workspaceId, hint);
+    if (found.length > 1) {
+      return {
+        needsContext: true,
+        summary: `Quale contatto intendi: ${found.map((row) => `«${row.name}»`).join(', ')}?`,
+      };
+    }
+    if (found.length === 1) {
+      const thread = await resolveThreadTarget(admin, workspaceId, { lastLeadId: found[0].id });
+      if (thread && !('needsContext' in thread)) {
+        return { leadId: thread.leadId, threadId: thread.threadId };
+      }
+      return { leadId: found[0].id, threadId: null };
+    }
+    return {
+      needsContext: true,
+      summary: `Non trovo «${hint}». Apri il contatto in Messaggi o dimmi il nome esatto.`,
+    };
+  }
+  return {
+    needsContext: true,
+    summary:
+      'Apri la conversazione o dimmi il cliente. Esempio: «cliente Da Mario chiuso e pagato» oppure «non rispondo, archivia».',
+  };
+}
 
 /** Risolve il target: mai fallback silenzioso all’ultimo Telegram globale. */
 export async function resolveThreadTarget(
@@ -862,6 +993,49 @@ export async function executeOpsActionNow(args: {
       ok: true,
       summary: `Follow-up da approvare (${due.length}):\n${lines}\nApri la coda di controllo per leggere, modificare e approvare.`,
       data: { items: due, href: '/review-queue', count: due.length },
+    };
+  }
+
+  if (
+    action === 'close_won' ||
+    action === 'archive_thread' ||
+    action === 'drop_thread' ||
+    action === 'dismiss_todo'
+  ) {
+    const target = await resolveCloseOutTarget(
+      args.admin,
+      args.workspaceId,
+      refs,
+      args.question ?? '',
+    );
+    if ('needsContext' in target) {
+      return { tool: OPS_TOOL_BY_ACTION[action], ok: false, summary: target.summary, data: {} };
+    }
+    const kind: CloseOutKind =
+      action === 'close_won' ? 'won' : action === 'drop_thread' ? 'drop' : action === 'dismiss_todo' ? 'dismiss' : 'archive';
+    const result = await closeOutLeadWork(args.admin, args.workspaceId, {
+      leadId: target.leadId,
+      threadId: target.threadId,
+      kind,
+    });
+    await recordAiAudit(args.admin, {
+      workspaceId: args.workspaceId,
+      actor: 'AI',
+      tool: OPS_TOOL_BY_ACTION[action],
+      action: 'execute',
+      entityType: result.threadId ? 'thread' : 'lead',
+      entityId: result.threadId ?? result.leadId,
+      result: { kind: result.kind },
+    });
+    return {
+      tool: OPS_TOOL_BY_ACTION[action],
+      ok: true,
+      summary: closeOutSummary(result),
+      data: {
+        leadId: result.leadId,
+        threadId: result.threadId,
+        href: result.threadId ? `/inbox?thread=${result.threadId}` : '/inbox',
+      },
     };
   }
 

@@ -131,9 +131,51 @@ function isHelpQuestion(q: string): boolean {
   );
 }
 
+export function isBulkCampaignWipe(question: string): boolean {
+  const q = question.toLowerCase();
+  return (
+    /cancell|elimina|delete|rimuovi|svuota/.test(q) &&
+    /tutte|tutti|tutto/.test(q) &&
+    /campagn|mail|email|inviat/.test(q)
+  );
+}
+
+export function isOpenedCampaignFollowup(question: string): boolean {
+  return /l['’ ]?ho aperta|l ho aperta|e aperta|è aperta|l['’]ho aperta/.test(question.toLowerCase());
+}
+
+export const ATTILA_UNAVAILABLE_REPLY =
+  'Non dipende dalle campagne. A volte il servizio che mi aiuta a ragionare non risponde. Riprova tra un attimo.';
+
+export function isAttilaAvailabilityQuestion(
+  question: string,
+  history: Array<{ role: string; content: string }> = [],
+): boolean {
+  const q = question
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (
+    /(modalit|attila|intelligenza|servizio).{0,48}(non disponibile|non funziona|non risponde|spento)/.test(q) ||
+    /(non disponibile|non funziona).{0,48}(modalit|attila)/.test(q)
+  ) {
+    return true;
+  }
+  if (/perch/.test(q) && /(modalit|attila|\bai\b|non disponibile)/.test(q)) return true;
+  const lastAssistant =
+    [...history].reverse().find((item) => item.role === 'assistant')?.content.toLowerCase() ?? '';
+  const lastWasDown =
+    /non disponibile|non riesco a ragionare|riprova tra un attimo|servizio che mi aiuta a ragionare/.test(
+      lastAssistant,
+    );
+  return lastWasDown && /^(perch|e perche|ma perche|come mai)/.test(q.trim());
+}
+
 function isDestructiveQuestion(q: string): boolean {
+  if (isBulkCampaignWipe(q)) return true;
   if (/cancellala|eliminala|cancellala definitivamente|eliminala definitivamente/.test(q)) return true;
   if (/elimina definitivamente|cancell[ae] definitivamente|hard.?delete/.test(q)) return true;
+  if (/archivi/.test(q) && /campagn|invio/.test(q)) return true;
   return /cancell[aeio]|elimina|delete|rimuovi/.test(q) && /campagn|questa|quella/.test(q);
 }
 

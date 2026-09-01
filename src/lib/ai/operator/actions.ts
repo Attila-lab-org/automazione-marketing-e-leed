@@ -25,7 +25,7 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
     type: z.literal('show_leads'),
     leadIds: z.array(z.string().uuid()).max(20).optional(),
     city: z.string().max(80).optional(),
-    label: z.literal('Mostra lead'),
+    label: z.literal('Mostra contatti'),
   }),
   z.object({
     type: z.literal('open_lead'),
@@ -34,12 +34,12 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('open_review'),
-    label: z.literal('Apri Review'),
+    label: z.literal('Apri da controllare'),
   }),
   z.object({
     type: z.literal('open_demo'),
     path: z.string().min(1).max(200),
-    label: z.literal('Apri demo'),
+    label: z.literal('Apri anteprima'),
   }),
   z.object({
     type: z.literal('open_inbox'),
@@ -60,7 +60,7 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('show_blockers'),
     campaignId: z.string().uuid().optional(),
-    label: z.literal('Mostra blocker'),
+    label: z.literal('Mostra problemi'),
   }),
   z.object({
     type: z.literal('confirm_action'),
@@ -73,6 +73,8 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
       z.literal('Conferma risposta'),
       z.literal('Sì, accendi Telegram'),
       z.literal('Sì, spegni Telegram'),
+      z.literal('Archivia invio'),
+      z.literal('Nascondi invio'),
     ]),
   }),
   z.object({
