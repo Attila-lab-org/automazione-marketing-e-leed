@@ -140,6 +140,23 @@ export function isBulkCampaignWipe(question: string): boolean {
   );
 }
 
+export function isBulkConversationArchive(
+  question: string,
+  ctx?: { entityType?: string | null; route?: string | null },
+): boolean {
+  const q = question
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!/\b(tutte|tutti|tutto)\b/.test(q)) return false;
+  if (/campagn|invii email|questo invio|questa campagna/.test(q)) return false;
+  if (/archivi/.test(q) && /conversaz|chat|thread|messagg/.test(q)) return true;
+  if (/(cancell|elimin).{0,24}(conversaz|chat|thread|messagg)/.test(q)) return true;
+  if (!/archivi/.test(q)) return false;
+  const route = (ctx?.route ?? '').toLowerCase();
+  return route.includes('/inbox') || route.includes('/telegram') || ctx?.entityType === 'thread';
+}
+
 export function isOpenedCampaignFollowup(question: string): boolean {
   return /l['’ ]?ho aperta|l ho aperta|e aperta|è aperta|l['’]ho aperta/.test(question.toLowerCase());
 }

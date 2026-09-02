@@ -143,7 +143,7 @@ export class MockAICommercialProvider implements AICommercialProvider {
         envelope: input.envelope,
       }),
       input.question,
-      { entityType: input.envelope.entityType },
+      { entityType: input.envelope.entityType, route: input.envelope.route },
     );
     return this.wrap(output, ctx);
   }

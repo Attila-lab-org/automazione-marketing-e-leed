@@ -155,6 +155,7 @@ export async function* runOperatorTurn(
   const telegramReplyRequested = isTelegramReplyRequest(input.question);
   const opsAction = detectOperatorOpsAction(input.question, {
     entityType: input.envelope.entityType,
+    route: input.envelope.route,
   });
   let prevRefs = input.refs ?? emptyEntityRefs();
   if (input.envelope.entityType === 'thread' && input.envelope.entityId) {
@@ -275,6 +276,7 @@ export async function* runOperatorTurn(
     requestId = planned.requestId;
     plan = applySafetyPolicy(planned.output, input.question, {
       entityType: input.envelope.entityType,
+      route: input.envelope.route,
     });
   } catch {
     if (config.mode === 'openai') {
@@ -307,7 +309,7 @@ export async function* runOperatorTurn(
         envelope,
       }),
       input.question,
-      { entityType: input.envelope.entityType },
+      { entityType: input.envelope.entityType, route: input.envelope.route },
     );
   }
   prevRefs = resolveOrdinalSelection(plan.ordinal, prevRefs);
@@ -353,6 +355,7 @@ export async function* runOperatorTurn(
       stop_telegram: 'Sto fermando Telegram…',
       close_won: 'Sto chiudendo il cliente pagato…',
       archive_thread: 'Sto archiviando la conversazione…',
+      archive_all_threads: 'Sto archiviando le conversazioni aperte…',
       drop_thread: 'Sto togliendo la conversazione dalle code…',
       dismiss_todo: 'Sto togliendo l’attività dalla coda…',
     };

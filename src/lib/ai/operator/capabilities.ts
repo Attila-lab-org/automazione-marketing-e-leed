@@ -60,6 +60,7 @@ const WRITE_NOW_LABELS: Partial<Record<string, string>> = {
   return_to_ai: 'ridare una conversazione ad Attila',
   close_won: 'chiudere un cliente pagato e toglierlo dalle code',
   archive_thread: 'archiviare una conversazione se non rispondi',
+  archive_all_threads: 'archiviare tutte le conversazioni aperte',
   drop_thread: 'cancellare una conversazione dalle code aperte',
   dismiss_todo: 'togliere un follow-up dalla coda',
   create_calendar_slot: 'aggiungere disponibilità in calendario',

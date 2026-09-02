@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { extractNamedSecurityQuery, isSecurityReportQuestion } from '@/lib/security/operator-query';
+import { isBulkConversationArchive } from './intent';
 import type { OperatorEnvelope } from './envelope';
 import { classifyOperatorIntent, type OperatorIntent } from './intent';
 import type { DailyCommercialBriefing } from '@/lib/sales/daily-briefing';
@@ -650,7 +651,7 @@ export function suggestOperatorTools(
   if (/review|da controllare/.test(q)) {
     calls.push({ name: 'list_review_items', args: {} });
   }
-  if (/messagg|inbox|conversaz|telegram/.test(q)) {
+  if (/messagg|inbox|conversaz|telegram/.test(q) && !isBulkConversationArchive(question)) {
     calls.push({ name: 'list_conversations', args: {} });
   }
   if (/riepilogo|dashboard|quanto/.test(q) && !has('get_daily_report')) {

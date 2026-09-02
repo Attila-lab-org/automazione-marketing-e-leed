@@ -238,6 +238,7 @@ export function composeOperatorReply(
       'list_manual_followups',
       'close_won',
       'archive_thread',
+      'archive_all_threads',
       'drop_thread',
       'dismiss_todo',
     ].includes(w.tool),
@@ -248,7 +249,9 @@ export function composeOperatorReply(
     const threadId = typeof opsWrite.data.threadId === 'string' ? opsWrite.data.threadId : null;
     const pendingId = typeof opsWrite.data.pendingActionId === 'string' ? opsWrite.data.pendingActionId : null;
     const confirmLabel = opsWrite.data.confirmLabel;
-    if (href?.startsWith('/inbox') || threadId) {
+    if (href === '/archive' || href?.startsWith('/archive')) {
+      actions.push({ type: 'open_page', page: 'archive', label: 'Apri archivio' });
+    } else if (href?.startsWith('/inbox') || threadId) {
       actions.push({
         type: 'open_inbox',
         ...(threadId ? { threadId } : {}),

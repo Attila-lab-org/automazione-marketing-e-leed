@@ -12,6 +12,7 @@ import {
   classifyOperatorIntent,
   isAttilaAvailabilityQuestion,
   isBulkCampaignWipe,
+  isBulkConversationArchive,
   isOpenedCampaignFollowup,
 } from '../../src/lib/ai/operator/intent';
 import { parseEuropeRomeDateTime, formatEuropeRome } from '../../src/lib/ai/operator/time';
@@ -74,7 +75,12 @@ describe('ops detection', () => {
     expect(detectOperatorOpsAction('ferma automazione')).toBe('stop_automation');
     expect(detectOperatorOpsAction('cliente Da Mario chiuso e pagato')).toBe('close_won');
     expect(detectOperatorOpsAction('non rispondo, archivia')).toBe('archive_thread');
+    expect(detectOperatorOpsAction('archivia tutte le conversazioni')).toBe('archive_all_threads');
+    expect(detectOperatorOpsAction('archivia tutte', { route: '/inbox' })).toBe('archive_all_threads');
     expect(detectOperatorOpsAction('cancella questa conversazione')).toBe('drop_thread');
+    expect(extractNamedLeadHint('archivia tutte le conversazioni')).toBeNull();
+    expect(isBulkConversationArchive('archivia tutte le conversazioni')).toBe(true);
+    expect(isBulkConversationArchive('archivia tutte le campagne')).toBe(false);
     expect(detectOperatorOpsAction('togli dalla coda')).toBe('dismiss_todo');
     expect(detectOperatorOpsAction('cancella questa campagna')).toBe('none');
     expect(detectOperatorOpsAction('cancellala')).toBe('none');
@@ -117,6 +123,23 @@ describe('ops detection', () => {
       type: 'open_page',
       page: 'security',
     });
+    expect(navigationActionForQuestion('archivia tutte le conversazioni')).toBeNull();
+  });
+
+  it('dopo aver archiviato tutte le chat porta all’archivio', () => {
+    const reply = composeOperatorReply('archivia tutte le conversazioni', envelopeFromPath('/inbox'), [], [
+      {
+        tool: 'archive_all_threads',
+        ok: true,
+        summary: 'Ho archiviato 15 conversazioni. Le trovi in Archivio.',
+        data: { archived: 15, href: '/archive' },
+      },
+    ]);
+    expect(reply.reply).toMatch(/15 conversazioni/);
+    expect(reply.reply).not.toMatch(/Non trovo/);
+    expect(reply.actions.some((action) => action.type === 'open_page' && action.page === 'archive')).toBe(
+      true,
+    );
   });
 
   it('traduce un comando semplice in regole commerciali editabili', () => {

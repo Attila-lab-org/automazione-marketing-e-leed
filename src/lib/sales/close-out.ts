@@ -103,6 +103,28 @@ export async function closeOutLeadWork(
   return { kind: 'archive', leadId: lead.id, threadId, leadName: lead.name };
 }
 
+export async function archiveOpenThreadsWork(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+): Promise<{ archived: number }> {
+  const now = new Date().toISOString();
+  const { data, error } = await admin
+    .from('message_threads')
+    .update({
+      status: 'ARCHIVED',
+      unread_count: 0,
+      assigned_mode: 'HUMAN',
+      updated_at: now,
+    })
+    .eq('workspace_id', workspaceId)
+    .neq('status', 'ARCHIVED')
+    .select('id');
+  if (error) {
+    throw new Error(`Archivio conversazioni: ${error.message}`);
+  }
+  return { archived: data?.length ?? 0 };
+}
+
 export function closeOutSummary(result: CloseOutResult): string {
   if (result.kind === 'won') {
     return `«${result.leadName}» è chiuso e pagato. L’ho tolto dalle code e fermato i solleciti.`;

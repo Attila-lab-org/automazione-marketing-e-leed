@@ -500,7 +500,7 @@ export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
 export function applySafetyPolicy(
   plan: OperatorPlan,
   question: string,
-  ctx?: { entityType?: string | null },
+  ctx?: { entityType?: string | null; route?: string | null },
 ): OperatorPlan {
   const q = norm(question);
   const ops = detectOperatorOpsAction(question, ctx);

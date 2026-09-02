@@ -4,6 +4,7 @@ import { recordAiAudit } from './writes';
 import { createPendingAction } from './pending';
 import { getToolContract, isConfirmTier } from './tool-contracts';
 import { formatEuropeRome, parseEuropeRomeDateTime } from './time';
+import { isBulkConversationArchive } from './intent';
 import { resumeTelegramAiAndReply, replyLatestPendingTelegram } from '@/lib/inbound/telegram-resume';
 import {
   cancelAppointment,
@@ -22,7 +23,12 @@ import {
   unregisterTelegramWebhook,
 } from '@/lib/providers/telegram/webhook';
 import { stopLeadSequences } from '@/lib/sales/stop';
-import { closeOutLeadWork, closeOutSummary, type CloseOutKind } from '@/lib/sales/close-out';
+import {
+  archiveOpenThreadsWork,
+  closeOutLeadWork,
+  closeOutSummary,
+  type CloseOutKind,
+} from '@/lib/sales/close-out';
 import { getCurrentPlaybook, saveCurrentPlaybook } from '@/lib/sales/playbook-store';
 import type { CommercialPlaybook, ResponseMode } from '@/lib/sales/playbook';
 
@@ -33,6 +39,7 @@ export type OperatorOpsAction =
   | 'stop_automation'
   | 'close_won'
   | 'archive_thread'
+  | 'archive_all_threads'
   | 'drop_thread'
   | 'dismiss_todo'
   | 'create_slot'
@@ -47,7 +54,7 @@ export type OperatorOpsAction =
   | 'update_playbook'
   | 'none';
 
-export type OperatorOpsContext = { entityType?: string | null };
+export type OperatorOpsContext = { entityType?: string | null; route?: string | null };
 
 function norm(text: string): string {
   return text
@@ -173,7 +180,8 @@ export function extractNamedLeadHint(question: string): string | null {
       hint &&
       hint.length >= 2 &&
       hint.length <= 80 &&
-      !/^(campagn|conversaz|chat|thread|invio|questa|quella)/i.test(hint)
+      !/^(campagn|conversaz|chat|thread|invio|questa|quella|tutte|tutti|tutto|ogni)\b/i.test(hint) &&
+      !/\b(conversaz|chat|thread|messagg)/i.test(hint)
     ) {
       return hint;
     }
@@ -289,6 +297,9 @@ export function detectOperatorOpsAction(
   if (isCampaignScopedClose(q) && /(cancell|elimin|archivi|nascond)/.test(q)) {
     return 'none';
   }
+  if (isBulkConversationArchive(question, ctx)) {
+    return 'archive_all_threads';
+  }
   if (
     /(chiuso e pagato|chiuso pagato|ha pagato|cliente chiuso|vendita chiusa|contratto chiuso|deal chiuso|trattativa chiusa|\bvinto\b|ho chiuso (il |la )?(cliente|trattativa|affare|deal))/.test(
       q,
@@ -331,6 +342,7 @@ const OPS_TOOL_BY_ACTION: Record<Exclude<OperatorOpsAction, 'none'>, string> = {
   stop_automation: 'stop_automation',
   close_won: 'close_won',
   archive_thread: 'archive_thread',
+  archive_all_threads: 'archive_all_threads',
   drop_thread: 'drop_thread',
   dismiss_todo: 'dismiss_todo',
   create_slot: 'create_calendar_slot',
@@ -993,6 +1005,31 @@ export async function executeOpsActionNow(args: {
       ok: true,
       summary: `Follow-up da approvare (${due.length}):\n${lines}\nApri la coda di controllo per leggere, modificare e approvare.`,
       data: { items: due, href: '/review-queue', count: due.length },
+    };
+  }
+
+  if (action === 'archive_all_threads') {
+    const result = await archiveOpenThreadsWork(args.admin, args.workspaceId);
+    await recordAiAudit(args.admin, {
+      workspaceId: args.workspaceId,
+      actor: 'AI',
+      tool: 'archive_all_threads',
+      action: 'execute',
+      entityType: 'thread',
+      entityId: args.workspaceId,
+      result: { archived: result.archived },
+    });
+    const summary =
+      result.archived === 0
+        ? 'Non c’è nessuna conversazione aperta da archiviare.'
+        : result.archived === 1
+          ? 'Ho archiviato 1 conversazione. La trovi in Archivio.'
+          : `Ho archiviato ${result.archived} conversazioni. Le trovi in Archivio.`;
+    return {
+      tool: 'archive_all_threads',
+      ok: true,
+      summary,
+      data: { archived: result.archived, href: '/archive' },
     };
   }
 

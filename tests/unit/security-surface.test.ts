@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mapPool } from '@/lib/security/concurrency';
 import { buildScopeLetter, buildSecurityEmail } from '@/lib/security/copy';
 import { explainFinding, riskIfUnfixed } from '@/lib/security/explain';
+import { displayNameForSite, homepageHref } from '@/lib/security/manual-site';
 import {
   analyzeSurfacePage,
   scoreBand,
@@ -43,6 +44,22 @@ describe('parsePublicHttpUrl', () => {
   it('rifiuta schemi che non sono una pagina web', () => {
     expect(() => parsePublicHttpUrl('file:///etc/passwd')).toThrow(UrlNotAllowedError);
     expect(() => parsePublicHttpUrl('javascript:alert(1)')).toThrow(UrlNotAllowedError);
+  });
+});
+
+describe('sito inserito a mano', () => {
+  it('apre solo la homepage, anche se incolli un percorso', () => {
+    expect(homepageHref('studiomazzei.it/contatti')).toBe('https://studiomazzei.it/');
+    expect(homepageHref('https://www.studio.esempio/wp-admin')).toBe('https://www.studio.esempio/');
+  });
+
+  it('usa il nome scritto, altrimenti il dominio', () => {
+    expect(displayNameForSite('Studio Mazzei', 'www.studiomazzei.it')).toBe('Studio Mazzei');
+    expect(displayNameForSite('  ', 'www.studiomazzei.it')).toBe('studiomazzei.it');
+  });
+
+  it('non accetta un indirizzo interno', () => {
+    expect(() => homepageHref('http://127.0.0.1')).toThrow(UrlNotAllowedError);
   });
 });
 

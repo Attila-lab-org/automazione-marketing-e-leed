@@ -124,6 +124,11 @@ export const TOOL_CONTRACTS: Record<string, ToolContract> = {
   return_to_ai: { name: 'return_to_ai', tier: 'INTERNAL', label: 'ridai ad Attila' },
   close_won: { name: 'close_won', tier: 'INTERNAL', label: 'chiudi cliente pagato' },
   archive_thread: { name: 'archive_thread', tier: 'INTERNAL', label: 'archivia conversazione' },
+  archive_all_threads: {
+    name: 'archive_all_threads',
+    tier: 'INTERNAL',
+    label: 'archivia tutte le conversazioni',
+  },
   drop_thread: { name: 'drop_thread', tier: 'INTERNAL', label: 'togli conversazione dalle code' },
   dismiss_todo: { name: 'dismiss_todo', tier: 'INTERNAL', label: 'togli attività dalla coda' },
   create_calendar_slot: { name: 'create_calendar_slot', tier: 'INTERNAL', label: 'crea disponibilità' },
