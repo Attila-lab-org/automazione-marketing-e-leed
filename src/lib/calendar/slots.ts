@@ -281,6 +281,83 @@ export function formatSlotForHuman(slot: SlotLike, locale = 'it-IT'): string {
   return `${day}, ${timeFmt.format(start)}–${timeFmt.format(end)}`;
 }
 
+export const CALENDAR_TIMEZONE = 'Europe/Rome';
+export const WORKING_HOUR_START = 9;
+export const WORKING_HOUR_END = 18;
+export const WORKING_SLOT_MINUTES = 30;
+/** Lunedì–venerdì (0 = domenica). */
+export const WORKING_WEEKDAYS = [1, 2, 3, 4, 5] as const;
+export const WORKING_HOURS_HORIZON_DAYS = 21;
+export const WORKING_HOURS_SLOT_NOTE = 'orario di lavoro';
+
+export function slotWindowsOverlap(
+  aStart: string,
+  aEnd: string,
+  bStart: string,
+  bEnd: string,
+): boolean {
+  return new Date(aStart).getTime() < new Date(bEnd).getTime() && new Date(aEnd).getTime() > new Date(bStart).getTime();
+}
+
+export function weekdayInTimeZone(iso: string, timeZone = CALENDAR_TIMEZONE): number {
+  const local = zonedParts(new Date(iso), timeZone);
+  return new Date(Date.UTC(local.year, local.month - 1, local.day)).getUTCDay();
+}
+
+export function addDaysIso(iso: string, days: number, timeZone = CALENDAR_TIMEZONE): string {
+  const local = zonedParts(new Date(iso), timeZone);
+  return zonedDateTimeToUtc(addCalendarDays(local, days), timeZone).toISOString();
+}
+
+/**
+ * Finestra 9–18, lunedì–venerdì, fette da 30 minuti.
+ * Vuota nel weekend e per gli orari già passati.
+ */
+export function enumerateWorkingHoursSlots(opts: {
+  fromIso: string;
+  toIso: string;
+  nowIso?: string;
+  timeZone?: string;
+}): Array<{ startsAt: string; endsAt: string }> {
+  const timeZone = opts.timeZone ?? CALENDAR_TIMEZONE;
+  const now = new Date(opts.nowIso ?? new Date().toISOString()).getTime();
+  const from = new Date(opts.fromIso);
+  const to = new Date(opts.toIso);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to.getTime() <= from.getTime()) {
+    return [];
+  }
+
+  const startLocal = zonedParts(from, timeZone);
+  let cursor = zonedDateTimeToUtc(
+    { ...startLocal, hour: 0, minute: 0, second: 0 },
+    timeZone,
+  );
+  const out: Array<{ startsAt: string; endsAt: string }> = [];
+
+  while (cursor.getTime() < to.getTime()) {
+    const day = zonedParts(cursor, timeZone);
+    const weekday = new Date(Date.UTC(day.year, day.month - 1, day.day)).getUTCDay();
+    if ((WORKING_WEEKDAYS as readonly number[]).includes(weekday)) {
+      const minutesPerDay = (WORKING_HOUR_END - WORKING_HOUR_START) * 60;
+      for (let offset = 0; offset < minutesPerDay; offset += WORKING_SLOT_MINUTES) {
+        const hour = WORKING_HOUR_START + Math.floor(offset / 60);
+        const minute = offset % 60;
+        const starts = zonedDateTimeToUtc(
+          { year: day.year, month: day.month, day: day.day, hour, minute, second: 0 },
+          timeZone,
+        );
+        const ends = new Date(starts.getTime() + WORKING_SLOT_MINUTES * 60_000);
+        if (starts.getTime() < now) continue;
+        if (starts.getTime() >= to.getTime()) continue;
+        if (starts.getTime() < from.getTime()) continue;
+        out.push({ startsAt: starts.toISOString(), endsAt: ends.toISOString() });
+      }
+    }
+    cursor = zonedDateTimeToUtc(addCalendarDays({ ...day, hour: 0, minute: 0, second: 0 }, 1), timeZone);
+  }
+  return out;
+}
+
 export function slotsForAiPrompt(slots: SlotLike[], limit = 5): Array<{
   id: string;
   label: string;

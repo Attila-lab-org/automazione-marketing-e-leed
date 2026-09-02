@@ -89,6 +89,12 @@ import type {
   SalesThreadEventRow,
   SalesThreadMemoryInsert,
   SalesThreadMemoryRow,
+  SecurityAuditInsert,
+  SecurityAuditRow,
+  SecurityOutreachInsert,
+  SecurityOutreachRow,
+  SecurityTargetInsert,
+  SecurityTargetRow,
   SegmentInsert,
   SegmentRow,
   SuppressionListInsert,
@@ -186,6 +192,9 @@ export type Database = {
         CalendarAvailabilitySlotInsert
       >;
       calendar_events: Tbl<CalendarEventRow, CalendarEventInsert>;
+      security_targets: Tbl<SecurityTargetRow, SecurityTargetInsert>;
+      security_audits: Tbl<SecurityAuditRow, SecurityAuditInsert>;
+      security_outreach: Tbl<SecurityOutreachRow, SecurityOutreachInsert>;
     };
     Views: {
       [_ in never]: never;

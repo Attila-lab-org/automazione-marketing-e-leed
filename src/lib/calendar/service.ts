@@ -9,7 +9,17 @@ import type {
   Json,
 } from '@/lib/types/database';
 import { SupabaseJobQueue } from '@/lib/jobs/supabase-queue';
-import { formatSlotForHuman, pickFirstCompatibleSlot, type SlotLike } from './slots';
+import {
+  addDaysIso,
+  formatSlotForHuman,
+  enumerateWorkingHoursSlots,
+  pickFirstCompatibleSlot,
+  slotWindowsOverlap,
+  CALENDAR_TIMEZONE,
+  WORKING_HOURS_HORIZON_DAYS,
+  WORKING_HOURS_SLOT_NOTE,
+  type SlotLike,
+} from './slots';
 
 export type BookAppointmentResult =
   | {
@@ -47,6 +57,120 @@ async function scheduleReminderJob(
   });
 }
 
+export async function ensureWorkingHoursSlots(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+  opts?: { fromIso?: string; toIso?: string; nowIso?: string },
+): Promise<{ inserted: number }> {
+  const fromIso = opts?.fromIso ?? new Date().toISOString();
+  const toIso = opts?.toIso ?? addDaysIso(fromIso, WORKING_HOURS_HORIZON_DAYS);
+  const windows = enumerateWorkingHoursSlots({
+    fromIso,
+    toIso,
+    nowIso: opts?.nowIso ?? new Date().toISOString(),
+  });
+  if (windows.length === 0) return { inserted: 0 };
+
+  const [{ data: existing, error: existingError }, { data: events, error: eventsError }] =
+    await Promise.all([
+      admin
+        .from('calendar_availability_slots')
+        .select('id, starts_at, ends_at, status')
+        .eq('workspace_id', workspaceId)
+        .gte('starts_at', fromIso)
+        .lt('starts_at', toIso),
+      admin
+        .from('calendar_events')
+        .select('id, starts_at, ends_at')
+        .eq('workspace_id', workspaceId)
+        .eq('event_type', 'APPOINTMENT')
+        .eq('status', 'SCHEDULED')
+        .gte('starts_at', fromIso)
+        .lt('starts_at', toIso),
+    ]);
+  if (existingError) throw new Error(`Slot orario di lavoro: ${existingError.message}`);
+  if (eventsError) throw new Error(`Appuntamenti orario di lavoro: ${eventsError.message}`);
+
+  const taken = new Set(
+    (existing ?? []).map((row) => `${row.starts_at}|${row.ends_at}`),
+  );
+  const appointments = (events ?? []).filter(
+    (row): row is { id: string; starts_at: string; ends_at: string } =>
+      typeof row.starts_at === 'string' && typeof row.ends_at === 'string',
+  );
+
+  const rows = windows
+    .filter((window) => !taken.has(`${window.startsAt}|${window.endsAt}`))
+    .filter(
+      (window) =>
+        !appointments.some((event) =>
+          slotWindowsOverlap(window.startsAt, window.endsAt, event.starts_at, event.ends_at),
+        ),
+    )
+    .map((window) => ({
+      workspace_id: workspaceId,
+      starts_at: window.startsAt,
+      ends_at: window.endsAt,
+      timezone: CALENDAR_TIMEZONE,
+      status: 'AVAILABLE' as const,
+      note: WORKING_HOURS_SLOT_NOTE,
+    }));
+
+  if (rows.length === 0) return { inserted: 0 };
+
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += 100) {
+    const chunk = rows.slice(i, i + 100);
+    const { data, error } = await admin
+      .from('calendar_availability_slots')
+      .upsert(chunk, {
+        onConflict: 'workspace_id,starts_at,ends_at',
+        ignoreDuplicates: true,
+      })
+      .select('id');
+    if (error) throw new Error(`Apertura orari di lavoro: ${error.message}`);
+    inserted += data?.length ?? 0;
+  }
+  return { inserted };
+}
+
+async function occupyOverlappingAvailableSlots(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+  event: Pick<CalendarEventRow, 'id' | 'event_type' | 'starts_at' | 'ends_at' | 'slot_id'>,
+): Promise<void> {
+  if (event.event_type !== 'APPOINTMENT' || !event.starts_at || !event.ends_at) return;
+  const { data: slots, error } = await admin
+    .from('calendar_availability_slots')
+    .select('id, starts_at, ends_at, status')
+    .eq('workspace_id', workspaceId)
+    .eq('status', 'AVAILABLE')
+    .lt('starts_at', event.ends_at)
+    .gt('ends_at', event.starts_at);
+  if (error) throw new Error(`Occupazione orari: ${error.message}`);
+  const overlapping = slots ?? [];
+  if (overlapping.length === 0) return;
+  const chosen =
+    overlapping.find((row) => row.starts_at === event.starts_at) ?? overlapping[0];
+  const { error: updateError } = await admin
+    .from('calendar_availability_slots')
+    .update({
+      status: 'BOOKED',
+      booked_event_id: event.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('workspace_id', workspaceId)
+    .eq('id', chosen.id);
+  if (updateError) throw new Error(`Occupazione orari: ${updateError.message}`);
+  if (!event.slot_id) {
+    await admin
+      .from('calendar_events')
+      .update({ slot_id: chosen.id, updated_at: new Date().toISOString() })
+      .eq('id', event.id)
+      .eq('workspace_id', workspaceId);
+  }
+}
+
 export async function listAvailableSlots(
   admin: AppSupabaseClient,
   workspaceId: string,
@@ -54,6 +178,7 @@ export async function listAvailableSlots(
 ): Promise<CalendarAvailabilitySlotRow[]> {
   const fromIso = opts?.fromIso ?? new Date().toISOString();
   const limit = opts?.limit ?? 40;
+  await ensureWorkingHoursSlots(admin, workspaceId, { fromIso });
   const { data, error } = await admin
     .from('calendar_availability_slots')
     .select('*')
@@ -72,6 +197,7 @@ export async function listSlotsInRange(
   fromIso: string,
   toIso: string,
 ): Promise<CalendarAvailabilitySlotRow[]> {
+  await ensureWorkingHoursSlots(admin, workspaceId, { fromIso, toIso });
   const { data, error } = await admin
     .from('calendar_availability_slots')
     .select('*')
@@ -102,7 +228,27 @@ export async function createAvailabilitySlot(
     })
     .select('*')
     .single();
-  if (error || !data) throw new Error(`Creazione slot: ${error?.message ?? 'fallita'}`);
+  if (error || !data) {
+    const duplicate = error?.code === '23505' || /duplicate|unique/i.test(error?.message ?? '');
+    if (duplicate) {
+      const { data: existing } = await admin
+        .from('calendar_availability_slots')
+        .select('*')
+        .eq('workspace_id', input.workspace_id)
+        .eq('starts_at', input.starts_at)
+        .eq('ends_at', input.ends_at)
+        .maybeSingle();
+      if (existing?.status === 'AVAILABLE') return existing as CalendarAvailabilitySlotRow;
+      if (existing?.status === 'BLOCKED') {
+        return updateAvailabilitySlot(admin, input.workspace_id, existing.id, {
+          status: 'AVAILABLE',
+          note: input.note ?? existing.note,
+        });
+      }
+      throw new Error('Quell’orario è già occupato da un appuntamento.');
+    }
+    throw new Error(`Creazione slot: ${error?.message ?? 'fallita'}`);
+  }
   return data as CalendarAvailabilitySlotRow;
 }
 
@@ -128,13 +274,20 @@ export async function deleteAvailabilitySlot(
   workspaceId: string,
   slotId: string,
 ): Promise<void> {
-  const { error } = await admin
+  const { data, error } = await admin
     .from('calendar_availability_slots')
-    .delete()
+    .update({
+      status: 'BLOCKED',
+      note: 'chiuso a mano',
+      updated_at: new Date().toISOString(),
+    })
     .eq('workspace_id', workspaceId)
     .eq('id', slotId)
-    .eq('status', 'AVAILABLE');
-  if (error) throw new Error(`Eliminazione slot: ${error.message}`);
+    .eq('status', 'AVAILABLE')
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error(`Chiusura orario: ${error.message}`);
+  if (!data) throw new Error('Questo orario non è più libero.');
 }
 
 export async function bookSlotAtomic(
@@ -226,6 +379,16 @@ export async function cancelAppointment(
     p_event_id: eventId,
   });
   if (error) throw new Error(`Annullamento appuntamento: ${error.message}`);
+  await admin
+    .from('calendar_availability_slots')
+    .update({
+      status: 'AVAILABLE',
+      booked_event_id: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('workspace_id', workspaceId)
+    .eq('booked_event_id', eventId)
+    .eq('status', 'BOOKED');
   return Boolean(data);
 }
 
@@ -296,6 +459,7 @@ export async function createCalendarEvent(
     .single();
   if (error || !data) throw new Error(`Creazione evento: ${error?.message ?? 'fallita'}`);
   const event = data as CalendarEventRow;
+  await occupyOverlappingAvailableSlots(admin, event.workspace_id, event);
   await scheduleReminderJob(admin, event.workspace_id, event);
   return event;
 }

@@ -50,6 +50,9 @@ export function envelopeFromPath(pathname: string, search = ''): OperatorEnvelop
     }
     return { route: pathname, entityType: 'calendar', entityId: null, filters };
   }
+  if (parts[0] === 'security') {
+    return { route: pathname, entityType: 'none', entityId: null, filters };
+  }
   if (parts[0] === 'review-queue') {
     return { route: pathname, entityType: 'review', entityId: null, filters };
   }

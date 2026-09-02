@@ -381,14 +381,14 @@ export default function CalendarClient() {
   }
 
   async function deleteSlot(slot: CalendarSlot) {
-    if (!window.confirm("Eliminare questa disponibilità?")) return;
+    if (!window.confirm("Togliere questo orario? Non sarà più prenotabile finché non lo riapri.")) return;
     setBusy(true);
     setError(null);
     try {
       const res = await fetch(`/api/calendar/${slot.id}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Eliminazione fallita");
-      setFeedback("Disponibilità eliminata.");
+        setFeedback("Orario chiuso: Attila non lo proporrà più.");
       setSelected(null);
       await load();
     } catch (err) {
@@ -490,6 +490,13 @@ export default function CalendarClient() {
           const daySlots = showSlots
             ? slots.filter((slot) => new Date(slot.starts_at).toDateString() === dayKey)
             : [];
+          const nowMs = Date.now();
+          const freeSlots = daySlots.filter(
+            (slot) =>
+              slot.status === "AVAILABLE" && new Date(slot.starts_at).getTime() >= nowMs,
+          );
+          const weekday = day.getDay();
+          const workingDay = weekday >= 1 && weekday <= 5;
           const isToday = day.toDateString() === new Date().toDateString();
           return (
             <div
@@ -505,7 +512,13 @@ export default function CalendarClient() {
               </p>
               <div className="mt-2 space-y-2">
                 {filter === "AVAILABILITY"
-                  ? daySlots.map((slot) => (
+                  ? daySlots
+                      .filter(
+                        (slot) =>
+                          slot.status !== "AVAILABLE" ||
+                          new Date(slot.starts_at).getTime() >= nowMs,
+                      )
+                      .map((slot) => (
                       <button
                         key={slot.id}
                         type="button"
@@ -533,23 +546,12 @@ export default function CalendarClient() {
                       </button>
                     ))
                   : null}
-                {filter === "all"
-                  ? daySlots
-                      .filter((slot) => slot.status === "AVAILABLE")
-                      .map((slot) => (
-                        <button
-                          key={slot.id}
-                          type="button"
-                          onClick={() => {
-                            setSelected({ kind: "slot", slot });
-                            setActionsOpen(false);
-                          }}
-                          className="w-full rounded-lg border border-dashed border-emerald-200 bg-white px-2 py-1 text-left text-[11px] text-emerald-800 hover:border-emerald-400"
-                        >
-                          Libero {fmtTime(slot.starts_at, slot.timezone)}
-                        </button>
-                      ))
-                  : null}
+                {filter === "all" && freeSlots.length > 0 ? (
+                  <p className="rounded-lg border border-dashed border-emerald-200 bg-emerald-50/70 px-2 py-1.5 text-[11px] text-emerald-800">
+                    Libero 9–18 · {freeSlots.length}{" "}
+                    {freeSlots.length === 1 ? "orario" : "orari"}
+                  </p>
+                ) : null}
                 {dayEvents.map((event) => (
                   <button
                     key={event.id}
@@ -571,8 +573,18 @@ export default function CalendarClient() {
                   </button>
                 ))}
                 {!dayEvents.length &&
-                !(filter === "AVAILABILITY" ? daySlots.length : filter === "all" ? daySlots.some((s) => s.status === "AVAILABLE") : false) ? (
-                  <p className="text-[11px] text-stone-400">Vuoto</p>
+                (filter === "AVAILABILITY"
+                  ? !daySlots.some(
+                      (slot) =>
+                        slot.status !== "AVAILABLE" ||
+                        new Date(slot.starts_at).getTime() >= nowMs,
+                    )
+                  : filter === "all"
+                    ? freeSlots.length === 0
+                    : true) ? (
+                  <p className="text-[11px] text-stone-400">
+                    {workingDay ? "Nessun orario rimasto" : "Chiuso"}
+                  </p>
                 ) : null}
               </div>
             </div>
@@ -681,7 +693,7 @@ export default function CalendarClient() {
                       <option value={12}>Ogni settimana per 12 settimane</option>
                     </select>
                     <span className="mt-1 block text-xs text-stone-500">
-                      Attila potrà prenotare soltanto questi orari.
+                      Lun–ven 9–18 è già libero. Usa questo solo per un orario extra (sera o weekend).
                     </span>
                   </label>
                 </>
@@ -906,7 +918,7 @@ export default function CalendarClient() {
                       onClick={() => void deleteSlot(selectedSlot)}
                       className="w-full rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-800 disabled:opacity-40"
                     >
-                      Elimina disponibilità
+                      Togli questo orario
                     </button>
                   ) : null}
                 </>

@@ -694,7 +694,7 @@ export function mockDraftReply(input: SalesReplyDraftInput): SalesReplyDraft {
   }
   if (input.classification.bookingRequest && !slots.length) {
     return {
-      text: 'Volentieri fissiamo una chiamata. Al momento non ho slot liberi in agenda: ti propongo un orario appena se ne libera uno.',
+      text: 'Volentieri fissiamo una chiamata. Al momento tutti gli orari dalle 9 alle 18 sono già presi: ti propongo il primo che si libera.',
       claimsUsed: [],
       recommendedState: 'CALL_PROPOSED',
       nextStep: 'wait_for_slot',

@@ -9,6 +9,7 @@ import {
   resolvePreferredTimeHint,
   slotsForAiPrompt,
   wantsImmediateBooking,
+  enumerateWorkingHoursSlots,
 } from '../../src/lib/calendar';
 import { mockClassifyInbound, mockDraftReply } from '../../src/lib/ai/commercial/mock-impl';
 import { validateSalesTransition } from '../../src/lib/sales/states';
@@ -130,6 +131,45 @@ describe('calendar slot selection', () => {
   });
 });
 
+describe('orario di lavoro 9–18', () => {
+  it('apre lunedì–venerdì dalle 9 alle 18 in fette da 30 minuti', () => {
+    const slots = enumerateWorkingHoursSlots({
+      fromIso: '2026-09-02T00:00:00.000Z',
+      toIso: '2026-09-03T00:00:00.000Z',
+      nowIso: '2026-09-01T10:00:00.000Z',
+    });
+    expect(slots).toHaveLength(18);
+    expect(slots[0]).toEqual({
+      startsAt: '2026-09-02T07:00:00.000Z',
+      endsAt: '2026-09-02T07:30:00.000Z',
+    });
+    expect(slots[slots.length - 1]).toEqual({
+      startsAt: '2026-09-02T15:30:00.000Z',
+      endsAt: '2026-09-02T16:00:00.000Z',
+    });
+  });
+
+  it('lascia vuoto il sabato e la domenica', () => {
+    expect(
+      enumerateWorkingHoursSlots({
+        fromIso: '2026-09-05T00:00:00.000Z',
+        toIso: '2026-09-07T00:00:00.000Z',
+        nowIso: '2026-09-01T10:00:00.000Z',
+      }),
+    ).toEqual([]);
+  });
+
+  it('non propone orari già passati', () => {
+    const slots = enumerateWorkingHoursSlots({
+      fromIso: '2026-09-02T00:00:00.000Z',
+      toIso: '2026-09-03T00:00:00.000Z',
+      nowIso: '2026-09-02T08:10:00.000Z',
+    });
+    expect(slots[0]?.startsAt).toBe('2026-09-02T08:30:00.000Z');
+    expect(slots).toHaveLength(15);
+  });
+});
+
 describe('booking intent signals', () => {
   it('riconosce accettazione esplicita', () => {
     const c = mockClassifyInbound('Ok fissiamo la chiamata');
@@ -209,7 +249,7 @@ describe('booking intent signals', () => {
       allowedFeatures: [],
       availableSlots: [],
     });
-    expect(draft.text.toLowerCase()).toContain('non ho slot');
+    expect(draft.text.toLowerCase()).toMatch(/già presi|9 alle 18/);
   });
 
   it('permette INTERESTED → CALL_BOOKED', () => {

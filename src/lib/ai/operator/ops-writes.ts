@@ -1302,7 +1302,7 @@ export async function executeOpsActionNow(args: {
         tool: 'reschedule_appointment',
         ok: false,
         summary:
-          'Non ci sono slot alternativi. Aggiungi disponibilità in Calendario e riprova.',
+          'Non ci sono altri orari liberi dalle 9 alle 18. Riprova quando si libera un appuntamento.',
         data: { reason: result.reason },
       };
     }

@@ -113,6 +113,10 @@ describe('ops detection', () => {
       type: 'open_page',
       page: 'leads',
     });
+    expect(navigationActionForQuestion('Apri sicurezza')).toMatchObject({
+      type: 'open_page',
+      page: 'security',
+    });
   });
 
   it('traduce un comando semplice in regole commerciali editabili', () => {

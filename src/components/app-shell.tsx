@@ -63,6 +63,16 @@ const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
+        href: "/security",
+        label: "Sicurezza",
+        hint: "",
+        description: "Apri la pagina pubblica dei contatti e leggi un report con prove.",
+        match: ["/security"],
+        icon: navIcon(
+          "M12 3l7 4v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V7l7-4Z",
+        ),
+      },
+      {
         href: "/inbox",
         label: "Messaggi",
         hint: "",
@@ -103,6 +113,7 @@ const NAV_GROUPS: NavGroup[] = [
 const SECTION_LABELS: Record<string, string> = {
   overview: "Oggi",
   leads: "Contatti",
+  security: "Sicurezza",
   segments: "Filtri salvati",
   campaigns: "Invii email",
   telegram: "Bot Telegram",

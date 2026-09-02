@@ -102,7 +102,7 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
     parts.push(
       slots.length
         ? `Disponibilità: ${slots.slice(0, 8).map((s) => s.label).join('; ')}.`
-        : 'Nessuno slot disponibile.',
+        : 'Non ci sono orari liberi: dalle 9 alle 18 è tutto già occupato.',
     );
   }
 

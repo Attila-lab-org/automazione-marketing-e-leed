@@ -13,6 +13,7 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
       'archive',
       'telegram',
       'settings',
+      'security',
     ]),
     label: z.string().min(1).max(40),
   }),
@@ -124,6 +125,7 @@ export const OPERATOR_REPLY_JSON_SCHEMA = {
                   'archive',
                   'telegram',
                   'settings',
+                  'security',
                 ],
               },
               label: { type: 'string' },
@@ -200,6 +202,7 @@ export function hrefForAction(action: OperatorAction): string {
         archive: '/archive',
         telegram: '/telegram',
         settings: '/settings',
+        security: '/security',
       }[action.page];
     case 'open_campaign':
       return `/campaigns/${action.campaignId}`;

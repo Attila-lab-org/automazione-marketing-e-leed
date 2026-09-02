@@ -1780,6 +1780,118 @@ export interface CalendarEventInsert {
 }
 
 // ---------------------------------------------------------------------------
+// 0032 — check-up visibile da fuori (pagina pubblica)
+// ---------------------------------------------------------------------------
+
+export type SecurityTargetStatus =
+  | 'listed'
+  | 'audited'
+  | 'skipped'
+  | 'email_draft'
+  | 'email_sent'
+  | 'failed';
+
+export type SecurityOutreachStatus = 'draft' | 'sent' | 'mock_sent' | 'failed';
+
+export interface SecurityTargetRow {
+  id: string;
+  workspace_id: string;
+  lead_id: string;
+  url: string;
+  domain: string;
+  name: string;
+  status: SecurityTargetStatus;
+  score: number | null;
+  latest_audit_id: string | null;
+  public_slug: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SecurityTargetInsert {
+  id?: string;
+  workspace_id: string;
+  lead_id: string;
+  url: string;
+  domain: string;
+  name: string;
+  status?: SecurityTargetStatus;
+  score?: number | null;
+  latest_audit_id?: string | null;
+  public_slug: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SecurityAuditRow {
+  id: string;
+  workspace_id: string;
+  target_id: string;
+  lead_id: string;
+  requested_url: string;
+  final_url: string | null;
+  http_status: number | null;
+  score: number;
+  headers: Json;
+  technologies: Json;
+  findings: Json;
+  emails_found: Json;
+  api_mentions: Json;
+  ga_ids: Json;
+  error: string | null;
+  created_at: string;
+}
+
+export interface SecurityAuditInsert {
+  id?: string;
+  workspace_id: string;
+  target_id: string;
+  lead_id: string;
+  requested_url: string;
+  final_url?: string | null;
+  http_status?: number | null;
+  score: number;
+  headers?: Json;
+  technologies?: Json;
+  findings?: Json;
+  emails_found?: Json;
+  api_mentions?: Json;
+  ga_ids?: Json;
+  error?: string | null;
+  created_at?: string;
+}
+
+export interface SecurityOutreachRow {
+  id: string;
+  workspace_id: string;
+  target_id: string;
+  audit_id: string | null;
+  to_email: string | null;
+  subject: string;
+  body_html: string;
+  status: SecurityOutreachStatus;
+  provider_message_id: string | null;
+  error: string | null;
+  created_at: string;
+  sent_at: string | null;
+}
+
+export interface SecurityOutreachInsert {
+  id?: string;
+  workspace_id: string;
+  target_id: string;
+  audit_id?: string | null;
+  to_email?: string | null;
+  subject: string;
+  body_html: string;
+  status?: SecurityOutreachStatus;
+  provider_message_id?: string | null;
+  error?: string | null;
+  created_at?: string;
+  sent_at?: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Mappa tabelle → Row (helper per i Domain Services / repository)
 // ---------------------------------------------------------------------------
 
@@ -1834,6 +1946,9 @@ export interface Tables {
   ai_autonomy_policies: AiAutonomyPolicyRow;
   calendar_availability_slots: CalendarAvailabilitySlotRow;
   calendar_events: CalendarEventRow;
+  security_targets: SecurityTargetRow;
+  security_audits: SecurityAuditRow;
+  security_outreach: SecurityOutreachRow;
 }
 
 export type TableName = keyof Tables;

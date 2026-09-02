@@ -144,7 +144,7 @@ export function buildOperatorCapabilityReply(mode: OperatorAssistMode = 'ASSISTI
     '',
     list('Richiede intervento umano', human),
     '',
-    'Esempi: «quanti appuntamenti ho?», «rispondi a telegram», «prendi in carico», «aggiungi disponibilità domani alle 15:00», «riprogramma appuntamento».',
+    'Esempi: «quanti appuntamenti ho?», «rispondi a telegram», «prendi in carico», «riprogramma appuntamento». Lun–ven dalle 9 alle 18 gli orari sono già liberi.',
     '',
     modeLine,
   ].join('\n');

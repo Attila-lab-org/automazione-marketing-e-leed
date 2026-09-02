@@ -337,7 +337,7 @@ export async function applyConversationBooking(args: {
     return {
       action: 'NO_SLOT',
       message:
-        'Perfetto, sono d’accordo a fissare. Al momento non ho slot liberi in agenda: dimmi pure i giorni che preferisci e ti propongo un orario appena disponibile.',
+        'Perfetto, sono d’accordo a fissare. Al momento tutti gli orari dalle 9 alle 18 sono già presi: dimmi i giorni che preferisci e ti propongo il primo che si libera.',
     };
   }
 

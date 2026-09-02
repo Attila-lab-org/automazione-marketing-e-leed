@@ -25,6 +25,9 @@ export function navigationActionForQuestion(question: string): OperatorAction | 
   if (/messagg|inbox|posta/.test(q)) {
     return { type: 'open_page', page: 'inbox', label: 'Apri messaggi' };
   }
+  if (/sicurezz|check-up sito|checkup sito/.test(q)) {
+    return { type: 'open_page', page: 'security', label: 'Apri sicurezza' };
+  }
   if (/contatt|lead|client/.test(q)) {
     return { type: 'open_page', page: 'leads', label: 'Apri contatti' };
   }
@@ -63,7 +66,7 @@ export function composeOperatorReply(
   if (intent?.kind === 'UNKNOWN') {
     return {
       reply:
-        'Non ho collegato questa richiesta a un’azione. Prova: «rispondi a telegram», «prendi in carico», «aggiungi disponibilità domani alle 15:00», «riprogramma appuntamento», oppure preparare una campagna TEST.',
+        'Non ho collegato questa richiesta a un’azione. Prova: «rispondi a telegram», «prendi in carico», «quanti appuntamenti ho?», «riprogramma appuntamento», oppure preparare una campagna TEST.',
       actions: [],
     };
   }
@@ -467,7 +470,7 @@ export function composeOperatorReply(
     parts.push(
       slots.length
         ? `Disponibilità aperte: ${slots.slice(0, 8).map((s) => s.label).join('; ')}.`
-        : 'Non ci sono slot disponibili. Aggiungine uno, es. «aggiungi disponibilità domani alle 15:00».',
+        : 'Non ci sono orari liberi: dalle 9 alle 18, lunedì–venerdì, è tutto già occupato.',
     );
     actions.push({ type: 'open_calendar', label: 'Apri calendario' });
   }
