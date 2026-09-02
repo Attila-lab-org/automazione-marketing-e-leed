@@ -19,6 +19,8 @@ export type HeaderChecklist = {
   csp: 'present' | 'report-only' | 'missing';
   frameProtection: boolean;
   nosniff: boolean;
+  referrerPolicy: boolean;
+  cookieSecure: boolean | null;
 };
 
 export type DetectedTechnology = {
@@ -184,6 +186,16 @@ function detectTechnologies(html: string): DetectedTechnology[] {
       name: 'WooCommerce',
       evidence: 'In pagina c’è un riferimento a WooCommerce',
     },
+    {
+      test: lower.includes('prestashop') || lower.includes('/modules/ps_'),
+      name: 'PrestaShop',
+      evidence: 'In pagina c’è un riferimento a PrestaShop',
+    },
+    {
+      test: lower.includes('mage/cookies') || lower.includes('magento'),
+      name: 'Magento',
+      evidence: 'In pagina c’è un riferimento a Magento',
+    },
   ];
 
   for (const rule of rules) {
@@ -232,6 +244,116 @@ function hasFrameProtection(csp: string | null, xfo: string | null): boolean {
   return /frame-ancestors/i.test(csp);
 }
 
+function maskToken(value: string): string {
+  const clean = value.trim();
+  if (clean.length <= 8) return `${clean.slice(0, 3)}…`;
+  return `${clean.slice(0, 8)}…`;
+}
+
+function cookieLines(headers: Record<string, string>): string[] {
+  const raw = headerOf(headers, 'set-cookie');
+  if (!raw) return [];
+  return raw
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function insecureCookieNames(headers: Record<string, string>, https: boolean): string[] {
+  if (!https) return [];
+  return unique(
+    cookieLines(headers)
+      .filter((line) => !/;\s*secure\b/i.test(line))
+      .map((line) => line.split('=')[0]?.trim() ?? '')
+      .filter(Boolean),
+    6,
+  );
+}
+
+function mixedHttpUrls(html: string, pageHttps: boolean): string[] {
+  if (!pageHttps) return [];
+  const found: string[] = [];
+  for (const match of html.matchAll(/(?:src|href)=["'](http:\/\/[^"']+)["']/gi)) {
+    const url = match[1] ?? '';
+    if (/schema\.org|w3\.org|xmlns|example\.com/i.test(url)) continue;
+    found.push(clip(url, 90));
+  }
+  return unique(found, 6);
+}
+
+function formHttpActions(html: string): string[] {
+  const found: string[] = [];
+  for (const match of html.matchAll(/<form\b[^>]*\baction=["'](http:\/\/[^"']+)["']/gi)) {
+    if (match[1]) found.push(clip(match[1], 90));
+  }
+  return unique(found, 4);
+}
+
+function adminLinks(html: string): string[] {
+  const found: string[] = [];
+  for (const match of html.matchAll(
+    /(?:href|src|action)=["']([^"']*(?:wp-login\.php|wp-admin|xmlrpc\.php|\/administrator\/?|\/user\/login)[^"']*)["']/gi,
+  )) {
+    if (match[1]) found.push(clip(match[1], 90));
+  }
+  return unique(found, 4);
+}
+
+function visibleSecrets(html: string): Array<{ kind: 'secret' | 'maps'; sample: string }> {
+  const out: Array<{ kind: 'secret' | 'maps'; sample: string }> = [];
+  for (const match of html.matchAll(/\b(sk_live_[A-Za-z0-9]{8,})\b/g)) {
+    out.push({ kind: 'secret', sample: maskToken(match[1] ?? '') });
+  }
+  for (const match of html.matchAll(/\b(AKIA[0-9A-Z]{16})\b/g)) {
+    out.push({ kind: 'secret', sample: maskToken(match[1] ?? '') });
+  }
+  for (const match of html.matchAll(/\b(\d{8,12}:[A-Za-z0-9_-]{30,})\b/g)) {
+    out.push({ kind: 'secret', sample: maskToken(match[1] ?? '') });
+  }
+  for (const match of html.matchAll(/\b(AIza[0-9A-Za-z\-_]{20,})\b/g)) {
+    out.push({ kind: 'maps', sample: maskToken(match[1] ?? '') });
+  }
+  return out.slice(0, 4);
+}
+
+function generatorVersion(html: string): string | null {
+  const tag = html.match(/<meta[^>]+name=["']generator["'][^>]*>/i)?.[0] ?? '';
+  const content =
+    tag.match(/content=["']([^"']+)["']/i)?.[1] ?? tag.match(/content=([^\s>]+)/i)?.[1] ?? '';
+  const trimmed = content.trim();
+  if (!trimmed || !/\d/.test(trimmed)) return null;
+  return clip(trimmed, 60);
+}
+
+function extractPhones(html: string): string[] {
+  const matches = html.match(/(?:\+39[\s.]?)?(?:3\d{2}|0\d{1,3})[\s.]?\d{6,8}/g) ?? [];
+  return unique(matches.map((item) => item.replace(/\s+/g, ' ').trim()), 6);
+}
+
+const SCORE_DELTA: Record<string, number> = {
+  NO_HTTPS: 25,
+  CARD_FORM_OWN: 20,
+  FORM_TO_HTTP: 18,
+  VISIBLE_SECRET: 16,
+  MIXED_CONTENT: 12,
+  COOKIE_INSECURE: 10,
+  ADMIN_LINK: 8,
+  NO_HSTS: 8,
+  NO_CSP: 8,
+  NO_FRAME_PROTECTION: 6,
+  VISIBLE_MAPS_KEY: 6,
+  LOGIN_FORM: 6,
+  OLD_COPYRIGHT: 5,
+  SERVER_BANNER: 5,
+  FILE_UPLOAD: 5,
+  CSP_REPORT_ONLY: 4,
+  NO_NOSNIFF: 4,
+  GENERATOR_VERSION: 4,
+  EMAILS_VISIBLE: 3,
+  PHONES_VISIBLE: 2,
+  SOURCEMAP: 2,
+};
+
 export function analyzeSurfacePage(
   input: SurfaceAnalysisInput,
   now: Date = new Date(),
@@ -244,6 +366,9 @@ export function analyzeSurfacePage(
   const nosniffRaw = headerOf(input.headers, 'x-content-type-options');
   const nosniff = Boolean(nosniffRaw && /nosniff/i.test(nosniffRaw));
   const hstsOn = Boolean(hsts && !/max-age\s*=\s*0\b/i.test(hsts));
+  const referrer = headerOf(input.headers, 'referrer-policy');
+  const cookieNames = insecureCookieNames(input.headers, finalHttps);
+  const hasCookies = cookieLines(input.headers).length > 0;
 
   const checklist: HeaderChecklist = {
     https: finalHttps,
@@ -251,6 +376,8 @@ export function analyzeSurfacePage(
     csp: csp ? 'present' : cspReport ? 'report-only' : 'missing',
     frameProtection: hasFrameProtection(csp, xfo),
     nosniff,
+    referrerPolicy: Boolean(referrer),
+    cookieSecure: hasCookies ? cookieNames.length === 0 : null,
   };
 
   const technologies = detectTechnologies(input.html);
@@ -277,6 +404,125 @@ export function analyzeSurfacePage(
       title: 'In pagina c’è un modulo per i dati della carta',
       detail: 'Si vede un campo per il numero di carta sul loro sito, non un pagamento Stripe, PayPal o Satispay.',
       evidence: 'Nel codice della pagina c’è un campo collegato a carta / card number.',
+    });
+  }
+
+  const httpForms = formHttpActions(input.html);
+  if (httpForms.length > 0) {
+    findings.push({
+      code: 'FORM_TO_HTTP',
+      severity: 'HIGH',
+      title: 'Un modulo manda i dati senza lucchetto',
+      detail: 'Il modulo della pagina pubblica invia verso un indirizzo http, non https.',
+      evidence: httpForms[0] ?? 'action=http://…',
+    });
+  }
+
+  const mixed = mixedHttpUrls(input.html, finalHttps);
+  if (mixed.length > 0) {
+    findings.push({
+      code: 'MIXED_CONTENT',
+      severity: 'MEDIUM',
+      title: 'La pagina con lucchetto carica pezzi senza lucchetto',
+      detail: 'L’indirizzo è https, ma in pagina ci sono file o link in http.',
+      evidence: mixed.slice(0, 2).join(', '),
+    });
+  }
+
+  if (cookieNames.length > 0) {
+    findings.push({
+      code: 'COOKIE_INSECURE',
+      severity: 'MEDIUM',
+      title: 'Il sito lascia un cookie senza la regola Secure',
+      detail: 'Nella risposta c’è un cookie senza Secure, su una pagina https.',
+      evidence: cookieNames.slice(0, 3).join(', '),
+    });
+  }
+
+  const secrets = visibleSecrets(input.html);
+  const secretSamples = secrets.filter((item) => item.kind === 'secret').map((item) => item.sample);
+  const mapsSamples = secrets.filter((item) => item.kind === 'maps').map((item) => item.sample);
+  if (secretSamples.length > 0) {
+    findings.push({
+      code: 'VISIBLE_SECRET',
+      severity: 'HIGH',
+      title: 'In pagina si vede una chiave che non dovrebbe essere pubblica',
+      detail: 'Nel codice della pagina pubblica c’è una chiave (troncata qui). Non è una prova di furti già avvenuti.',
+      evidence: secretSamples.join(', '),
+    });
+  }
+  if (mapsSamples.length > 0) {
+    findings.push({
+      code: 'VISIBLE_MAPS_KEY',
+      severity: 'MEDIUM',
+      title: 'In pagina si vede una chiave Google Maps',
+      detail: 'La chiave è scritta nel codice della pagina. Molti siti la mettono così: resta visibile a chi apre il codice.',
+      evidence: mapsSamples.join(', '),
+    });
+  }
+
+  const admin = adminLinks(input.html);
+  if (admin.length > 0) {
+    findings.push({
+      code: 'ADMIN_LINK',
+      severity: 'MEDIUM',
+      title: 'In pagina c’è un link alla zona di accesso',
+      detail: 'Nella homepage pubblica compare un indirizzo di login o amministrazione. Non abbiamo aperto quella pagina.',
+      evidence: admin[0] ?? '',
+    });
+  }
+
+  if (/<input\b[^>]*type=["']password["']/i.test(input.html)) {
+    findings.push({
+      code: 'LOGIN_FORM',
+      severity: 'LOW',
+      title: 'In pagina c’è un campo per la password',
+      detail: 'Sulla pagina pubblica si vede un modulo di accesso. È solo quello che c’è scritto, non un ingresso forzato.',
+      evidence: 'Nel codice c’è un campo type="password".',
+    });
+  }
+
+  if (/<input\b[^>]*type=["']file["']/i.test(input.html)) {
+    findings.push({
+      code: 'FILE_UPLOAD',
+      severity: 'LOW',
+      title: 'In pagina si può caricare un file',
+      detail: 'C’è un campo per inviare un file dalla pagina pubblica.',
+      evidence: 'Nel codice c’è un campo type="file".',
+    });
+  }
+
+  const server = headerOf(input.headers, 'server');
+  const powered = headerOf(input.headers, 'x-powered-by');
+  const banner = [server, powered].filter((item): item is string => Boolean(item && /\d+\.\d+/.test(item)));
+  if (banner.length > 0) {
+    findings.push({
+      code: 'SERVER_BANNER',
+      severity: 'LOW',
+      title: 'Il sito dice che programma e versione usa il server',
+      detail: 'Nella risposta compare il nome e il numero di versione. È solo un’etichetta, non una prova di ingresso.',
+      evidence: banner.map((item) => clip(item, 80)).join(' · '),
+    });
+  }
+
+  const generator = generatorVersion(input.html);
+  if (generator) {
+    findings.push({
+      code: 'GENERATOR_VERSION',
+      severity: 'LOW',
+      title: 'In pagina è scritta la versione del sito',
+      detail: `Si legge «${generator}». È quello che il sito pubblica da solo, non un controllo su aggiornamenti.`,
+      evidence: generator,
+    });
+  }
+
+  if (/sourceMappingURL|\.js\.map/i.test(input.html)) {
+    findings.push({
+      code: 'SOURCEMAP',
+      severity: 'LOW',
+      title: 'In pagina c’è un riferimento a una mappa del codice',
+      detail: 'Compare un file .map o sourceMappingURL. Serve agli sviluppatori; da fuori si vede che c’è.',
+      evidence: clip(input.html.match(/sourceMappingURL[^\s"'<]+|\S+\.js\.map/i)?.[0] ?? '.map', 80),
     });
   }
 
@@ -338,6 +584,17 @@ export function analyzeSurfacePage(
     });
   }
 
+  const phonesFound = extractPhones(input.html);
+  if (phonesFound.length > 0) {
+    findings.push({
+      code: 'PHONES_VISIBLE',
+      severity: 'LOW',
+      title: 'In pagina si vede un numero di telefono',
+      detail: 'Il numero è scritto nella pagina pubblica, come sul campanello. Non è una prova di accessi.',
+      evidence: phonesFound.slice(0, 3).join(', '),
+    });
+  }
+
   const year = oldestCopyrightYear(input.html, now.getFullYear());
   if (year !== null && year <= now.getFullYear() - 4) {
     const generator = technologies.find((item) => /wordpress|joomla|drupal/i.test(item.name));
@@ -354,15 +611,7 @@ export function analyzeSurfacePage(
 
   let score = 100;
   for (const finding of findings) {
-    if (finding.code === 'NO_HTTPS') score -= 25;
-    else if (finding.code === 'CARD_FORM_OWN') score -= 20;
-    else if (finding.code === 'NO_HSTS') score -= 8;
-    else if (finding.code === 'NO_CSP') score -= 8;
-    else if (finding.code === 'CSP_REPORT_ONLY') score -= 4;
-    else if (finding.code === 'NO_FRAME_PROTECTION') score -= 6;
-    else if (finding.code === 'NO_NOSNIFF') score -= 4;
-    else if (finding.code === 'EMAILS_VISIBLE') score -= 3;
-    else if (finding.code === 'OLD_COPYRIGHT') score -= 5;
+    score -= SCORE_DELTA[finding.code] ?? 3;
   }
 
   return {

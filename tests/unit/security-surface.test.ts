@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mapPool } from '@/lib/security/concurrency';
 import { buildScopeLetter, buildSecurityEmail } from '@/lib/security/copy';
+import { explainFinding } from '@/lib/security/explain';
 import {
   analyzeSurfacePage,
   scoreBand,
@@ -125,6 +126,47 @@ describe('analyzeSurfacePage', () => {
     expect(result.findings.some((item) => item.code === 'OLD_COPYRIGHT')).toBe(true);
     expect(result.findings.find((item) => item.code === 'OLD_COPYRIGHT')?.evidence).toBe('© 2018');
   });
+
+  it('segnala lucchetto a metà, modulo senza https, login e link di accesso', () => {
+    const result = analyze(
+      [
+        '<script src="http://cdn.studioesempio.it/app.js"></script>',
+        '<form action="http://studioesempio.it/prenota"><input type="password" /></form>',
+        '<a href="/wp-login.php">Entra</a>',
+      ].join(''),
+      HARDENED,
+    );
+    const codes = result.findings.map((item) => item.code);
+    expect(codes).toEqual(
+      expect.arrayContaining(['MIXED_CONTENT', 'FORM_TO_HTTP', 'LOGIN_FORM', 'ADMIN_LINK']),
+    );
+    expect(result.findings.find((item) => item.code === 'FORM_TO_HTTP')?.evidence).toContain('http://');
+  });
+
+  it('segnala cookie senza Secure e versione server, senza inventare CVE', () => {
+    const result = analyze('<html></html>', {
+      ...HARDENED,
+      server: 'Apache/2.4.41 (Ubuntu)',
+      'set-cookie': 'session=abc; Path=/; HttpOnly',
+    });
+    expect(result.findings.some((item) => item.code === 'COOKIE_INSECURE')).toBe(true);
+    expect(result.findings.find((item) => item.code === 'COOKIE_INSECURE')?.evidence).toBe('session');
+    expect(result.findings.some((item) => item.code === 'SERVER_BANNER')).toBe(true);
+    expect(result.findings.map((item) => item.detail).join(' ').toLowerCase()).not.toMatch(
+      /cve|sfruttabil|probabilmente/,
+    );
+  });
+
+  it('tronca una chiave visibile e non la stampa intera', () => {
+    const result = analyze(
+      '<script>const k="sk_live_abcdefghijklmnopqrstuv"</script>',
+      HARDENED,
+    );
+    const secret = result.findings.find((item) => item.code === 'VISIBLE_SECRET');
+    expect(secret).toBeTruthy();
+    expect(secret?.evidence).toMatch(/^sk_live_/);
+    expect(secret?.evidence).not.toContain('abcdefghijklmnopqrstuv');
+  });
 });
 
 describe('copy email e lettera', () => {
@@ -140,10 +182,49 @@ describe('copy email e lettera', () => {
     expect(email.text).toMatch(/come farebbe un visitatore/);
   });
 
-  it('la lettera è un permesso scritto, non un attacco', () => {
+  it('la lettera accetta anche il permesso al telefono, non è un attacco', () => {
     const letter = buildScopeLetter({ businessName: 'Studio Esempio', domain: 'studioesempio.it' });
-    expect(letter).toMatch(/permesso scritto|autorizza per iscritto/i);
+    expect(letter).toMatch(/telefono/i);
+    expect(letter).toMatch(/autorizza/i);
     expect(letter.toLowerCase()).toMatch(/non è un attacco/);
+  });
+
+  it('l’email spiega le cose viste con un esempio semplice', () => {
+    const analysis = analyze('<html></html>', {}, HTTP);
+    const email = buildSecurityEmail({
+      businessName: 'Studio Esempio',
+      domain: 'studioesempio.it',
+      analysis,
+    });
+    expect(email.text).toMatch(/In pratica:/);
+    expect(email.text).toMatch(/Esempio:/);
+    expect(email.text).toMatch(/Wi-Fi|stessa rete/i);
+    expect(email.text).toMatch(/prima di questa mail/);
+  });
+});
+
+describe('spiegazioni per l’utente medio', () => {
+  it('ogni falla nota ha significato ed esempio, senza dire probabilmente', () => {
+    for (const code of [
+      'NO_HTTPS',
+      'BAD_CERT',
+      'CARD_FORM_OWN',
+      'NO_HSTS',
+      'NO_CSP',
+      'NO_FRAME_PROTECTION',
+      'EMAILS_VISIBLE',
+      'FORM_TO_HTTP',
+      'MIXED_CONTENT',
+      'ADMIN_LINK',
+      'VISIBLE_SECRET',
+    ]) {
+      const explained = explainFinding(code);
+      expect(explained.meaning.length).toBeGreaterThan(20);
+      expect(explained.example.length).toBeGreaterThan(20);
+      expect(`${explained.meaning} ${explained.example}`.toLowerCase()).not.toMatch(
+        /probabilmente|cve|sfruttabil/,
+      );
+    }
   });
 });
 

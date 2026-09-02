@@ -242,4 +242,35 @@ describe('AI-1 grounding', () => {
     expect(operatorTaskType('Come è andata ieri?')).toBe('answer_operator_simple');
     expect(operatorTaskType('Perché questa campagna è bloccata?')).toBe('answer_operator');
   });
+
+  it('dice quante email ha letto dai siti quando prepara le mail', () => {
+    const reply = composeOperatorReply(
+      'prepara le mail',
+      envelopeFromPath('/leads'),
+      [],
+      [
+        {
+          tool: 'create_campaign',
+          ok: true,
+          summary: 'Campagna creata',
+          data: { campaignId: CAMPAIGN_ID, leadCount: 3, skipped: 0 },
+        },
+        {
+          tool: 'prepare_campaign',
+          ok: true,
+          summary: 'Preparazione avviata',
+          data: {
+            campaignId: CAMPAIGN_ID,
+            enqueued: 3,
+            selected: 3,
+            emailsFromSites: 2,
+            emailsStillMissing: 1,
+          },
+        },
+      ],
+    );
+    expect(reply.reply).toContain('2 email dai siti');
+    expect(reply.reply).toContain('1 ancora senza email');
+    expect(reply.reply).not.toMatch(/non so|non conosco/i);
+  });
 });

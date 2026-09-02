@@ -17,6 +17,7 @@ import {
 } from './surface-audit';
 import { UrlNotAllowedError } from './url-guard';
 import type { SecurityTargetListItem } from './labels';
+import { persistLeadEmailIfMissing } from '@/lib/enrichment/persist-email';
 
 export type { SecurityTargetListItem } from './labels';
 
@@ -81,6 +82,9 @@ export function analysisFromAudit(audit: SecurityAuditRow): SurfaceAnalysis {
           : 'missing',
       frameProtection: Boolean(headers.frameProtection),
       nosniff: Boolean(headers.nosniff),
+      referrerPolicy: Boolean(headers.referrerPolicy),
+      cookieSecure:
+        headers.cookieSecure === true || headers.cookieSecure === false ? headers.cookieSecure : null,
     },
     technologies: Array.isArray(audit.technologies)
       ? audit.technologies.flatMap((item) => {
@@ -225,7 +229,16 @@ async function persistAudit(
     throw new Error(`Sicurezza: salvataggio controllo fallito — ${error?.message ?? 'sconosciuto'}`);
   }
 
-  const status: SecurityTargetStatus = analysis ? 'audited' : 'failed';
+  const preserve =
+    input.target.status === 'deep_open' ||
+    input.target.status === 'deep_done' ||
+    input.target.status === 'email_sent' ||
+    input.target.status === 'email_draft';
+  const status: SecurityTargetStatus = preserve
+    ? input.target.status
+    : analysis
+      ? 'audited'
+      : 'failed';
   const { error: updateError } = await admin
     .from('security_targets')
     .update({
@@ -237,6 +250,16 @@ async function persistAudit(
     .eq('id', input.target.id);
   if (updateError) {
     throw new Error(`Sicurezza: aggiornamento contatto fallito — ${updateError.message}`);
+  }
+  if (analysis?.emailsFound.length) {
+    await persistLeadEmailIfMissing(admin, {
+      workspaceId: input.workspaceId,
+      leadId: input.target.lead_id,
+      emails: analysis.emailsFound,
+      siteDomain: input.target.domain,
+      source: 'WEBSITE_SCRAPE',
+      label: 'pagina pubblica',
+    });
   }
   return audit;
 }
@@ -278,6 +301,8 @@ export async function runSurfaceAudit(
             csp: 'missing',
             frameProtection: false,
             nosniff: false,
+            referrerPolicy: false,
+            cookieSecure: null,
           },
           technologies: [],
           findings: [
@@ -409,7 +434,20 @@ export async function loadSecurityReport(
     audit = data ?? null;
   }
 
-  const analysis = audit && !audit.error ? analysisFromAudit(audit) : audit ? analysisFromAudit(audit) : null;
+  const analysis = audit ? analysisFromAudit(audit) : null;
+  if (analysis?.emailsFound.length) {
+    const saved = await persistLeadEmailIfMissing(admin, {
+      workspaceId,
+      leadId: lead.id,
+      emails: analysis.emailsFound,
+      siteDomain: target.domain || normalizeDomain(lead.website_url),
+      source: 'WEBSITE_SCRAPE',
+      label: 'pagina pubblica',
+    });
+    if (saved.email) {
+      lead.email = saved.email;
+    }
+  }
   const emailPreview = analysis
     ? buildSecurityEmail({ businessName: target.name, domain: target.domain, analysis })
     : null;

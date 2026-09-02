@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { consentChannelLabel } from "@/lib/security/deep-check";
+import { DEEP_CHECK_STEPS, explainFinding } from "@/lib/security/explain";
 import { securityScoreClass } from "@/lib/security/labels";
 import { scoreBandLabel } from "@/lib/security/surface-audit";
 import type { SurfaceAnalysis, SurfaceFinding } from "@/lib/security/surface-audit";
+import type { SecurityConsentChannel } from "@/lib/types/database";
 
 type ReportPayload = {
   target: {
@@ -16,6 +19,10 @@ type ReportPayload = {
     status: string;
     score: number | null;
     public_slug: string;
+    consent_channel: SecurityConsentChannel | null;
+    consent_note: string | null;
+    consent_at: string | null;
+    deep_notes: string | null;
   };
   lead: { email: string | null; city: string | null; phone: string | null };
   analysis: SurfaceAnalysis | null;
@@ -61,15 +68,21 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
   const router = useRouter();
   const [report, setReport] = useState<ReportPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"skip" | "send" | null>(null);
+  const [busy, setBusy] = useState<"skip" | "send" | "deep" | null>(null);
   const [confirmSend, setConfirmSend] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [consentChannel, setConsentChannel] = useState<SecurityConsentChannel>("phone");
+  const [consentNote, setConsentNote] = useState("");
+  const [deepNotes, setDeepNotes] = useState("");
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/security/targets/${targetId}`, { cache: "no-store" });
     const data = (await response.json()) as ReportPayload;
     if (!response.ok) throw new Error(data.error ?? "Report non trovato");
     setReport(data);
+    setDeepNotes(data.target.deep_notes ?? "");
+    if (data.target.consent_channel) setConsentChannel(data.target.consent_channel);
+    if (data.target.consent_note) setConsentNote(data.target.consent_note);
   }, [targetId]);
 
   useEffect(() => {
@@ -112,6 +125,50 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
       await load();
     } catch (reason) {
       setNotice(reason instanceof Error ? reason.message : "Invio non riuscito");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function openDeep() {
+    setBusy("deep");
+    setNotice(null);
+    try {
+      const response = await fetch(`/api/security/targets/${targetId}/deep`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirm: true,
+          channel: consentChannel,
+          note: consentNote.trim() || null,
+        }),
+      });
+      const data = (await response.json()) as { error?: string; message?: string };
+      if (!response.ok) throw new Error(data.error ?? "Non ho potuto aprire il controllo");
+      setNotice(data.message ?? "Controllo approfondito aperto.");
+      await load();
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : "Non ho potuto aprire il controllo");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveDeep(done = false) {
+    setBusy("deep");
+    setNotice(null);
+    try {
+      const response = await fetch(`/api/security/targets/${targetId}/deep`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: deepNotes, done }),
+      });
+      const data = (await response.json()) as { error?: string; message?: string };
+      if (!response.ok) throw new Error(data.error ?? "Salvataggio non riuscito");
+      setNotice(data.message ?? "Salvato.");
+      await load();
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : "Salvataggio non riuscito");
     } finally {
       setBusy(null);
     }
@@ -192,6 +249,16 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
                 missing="Assente"
               />
               <CheckRow ok={analysis.headers.nosniff} label="Regola nosniff" missing="Assente" />
+              <CheckRow
+                ok={analysis.headers.referrerPolicy}
+                label="Dice cosa può vedere il sito precedente"
+                missing="Assente"
+              />
+              <CheckRow
+                ok={analysis.headers.cookieSecure}
+                label="Cookie solo con lucchetto"
+                missing="Senza Secure"
+              />
             </ul>
             {report.audit?.final_url ? (
               <p className="mt-3 truncate text-xs text-stone-400">Pagina aperta: {report.audit.final_url}</p>
@@ -223,16 +290,24 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
               </p>
             ) : (
               <ul className="mt-3 space-y-3">
-                {analysis.findings.map((item) => (
-                  <li key={item.code} className={`rounded-xl border p-4 ${severityClass(item.severity)}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="font-semibold">{item.title}</h3>
-                      <span className="text-[11px] uppercase tracking-wide">{severityLabel(item.severity)}</span>
-                    </div>
-                    <p className="mt-1 text-sm opacity-90">{item.detail}</p>
-                    <p className="mt-2 text-xs opacity-70">Prova: {item.evidence}</p>
-                  </li>
-                ))}
+                {analysis.findings.map((item) => {
+                  const explained = explainFinding(item.code);
+                  return (
+                    <li key={item.code} className={`rounded-xl border p-4 ${severityClass(item.severity)}`}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="font-semibold">{item.title}</h3>
+                        <span className="text-[11px] uppercase tracking-wide">{severityLabel(item.severity)}</span>
+                      </div>
+                      <p className="mt-2 text-sm">
+                        <span className="font-medium">Cosa significa.</span> {explained.meaning}
+                      </p>
+                      <p className="mt-2 text-sm opacity-90">
+                        <span className="font-medium">Esempio.</span> {explained.example}
+                      </p>
+                      <p className="mt-2 text-xs opacity-70">Prova: {item.evidence}</p>
+                    </li>
+                  );
+                })}
               </ul>
             )}
             {analysis.apiMentions.length > 0 ? (
@@ -275,8 +350,19 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
                 : "Prepara / invia email"}
           </button>
         </div>
+        {report.lead.email ? (
+          <p className="mt-2 text-sm text-stone-600">
+            Email sul contatto: {report.lead.email}
+            {analysis?.emailsFound?.length
+              ? " — letta dalla pagina pubblica e salvata."
+              : ""}
+          </p>
+        ) : null}
         {!report.canSendEmail ? (
-          <p className="mt-2 text-sm text-amber-800">Senza email sul contatto non posso inviare.</p>
+          <p className="mt-2 text-sm text-amber-800">
+            In questa pagina pubblica non ho visto un’email da salvare. Puoi comunque chiamare e, se
+            il titolare dà il permesso al telefono, aprire subito il controllo approfondito.
+          </p>
         ) : null}
         {confirmSend && report.canSendEmail ? (
           <p className="mt-2 text-sm text-stone-600">
@@ -295,11 +381,102 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
       </section>
 
       <section className="rounded-xl border border-dashed border-stone-300 bg-white p-5">
-        <h2 className="text-sm font-semibold text-stone-900">Controllo più approfondito (dopo permesso scritto)</h2>
+        <h2 className="text-sm font-semibold text-stone-900">Controllo più approfondito</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Lo fa una persona, solo con questa lettera firmata. Attila non attacca e non parte da solo.
+          Si può aprire <strong>prima della mail</strong>, se il titolare ti ha detto sì al telefono,
+          di persona o con la lettera. Non serve a trovare le email: quelle visibili in pagina si
+          salvano al primo controllo. Attila non attacca e non parte da solo: il controllo lo fai tu
+          con lui.
         </p>
-        <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-stone-50 p-4 text-xs text-stone-700">
+        {report.lead.phone ? (
+          <p className="mt-2 text-sm text-stone-700">
+            Telefono sul contatto: <span className="font-medium">{report.lead.phone}</span>
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-stone-500">Sul contatto non c’è ancora un telefono.</p>
+        )}
+
+        {report.target.consent_at ? (
+          <div className="mt-4 space-y-3">
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              Permesso annotato: {consentChannelLabel(report.target.consent_channel)}
+              {report.target.consent_note ? ` · ${report.target.consent_note}` : ""}.
+              {report.target.status === "deep_done" ? " Controllo segnato come fatto." : " Controllo aperto."}
+            </p>
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-stone-700">
+              {DEEP_CHECK_STEPS.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <label className="block text-sm text-stone-700">
+              Note del controllo
+              <textarea
+                value={deepNotes}
+                onChange={(event) => setDeepNotes(event.target.value)}
+                rows={4}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                placeholder="Cosa avete guardato insieme, cosa ha chiesto, cosa farete."
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void saveDeep(false)}
+                className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 disabled:opacity-60"
+              >
+                {busy === "deep" ? "Salvo…" : "Salva le note"}
+              </button>
+              {report.target.status !== "deep_done" ? (
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void saveDeep(true)}
+                  className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  Segna come fatto
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-stone-600">
+              Annota il permesso e apri il controllo. La mail, se serve, la puoi mandare dopo.
+            </p>
+            <label className="block text-sm text-stone-700">
+              Come è arrivato il permesso
+              <select
+                value={consentChannel}
+                onChange={(event) => setConsentChannel(event.target.value as SecurityConsentChannel)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              >
+                <option value="phone">Al telefono</option>
+                <option value="in_person">Di persona</option>
+                <option value="letter">Lettera firmata</option>
+              </select>
+            </label>
+            <label className="block text-sm text-stone-700">
+              Chi ha detto sì (facoltativo)
+              <input
+                value={consentNote}
+                onChange={(event) => setConsentNote(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                placeholder="Es. Mario Rossi, titolare, 2 settembre"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void openDeep()}
+              className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {busy === "deep" ? "Apro…" : "Ho il permesso: apri il controllo approfondito"}
+            </button>
+          </div>
+        )}
+
+        <pre className="mt-4 whitespace-pre-wrap rounded-lg bg-stone-50 p-4 text-xs text-stone-700">
           {report.letter}
         </pre>
         {score !== null ? (

@@ -30,6 +30,10 @@ function headersToRecord(headers: Headers): Record<string, string> {
   headers.forEach((value, key) => {
     out[key] = value;
   });
+  if (typeof headers.getSetCookie === 'function') {
+    const cookies = headers.getSetCookie();
+    if (cookies.length > 0) out['set-cookie'] = cookies.join('\n');
+  }
   return out;
 }
 

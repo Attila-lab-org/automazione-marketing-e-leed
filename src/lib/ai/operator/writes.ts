@@ -4,8 +4,10 @@ import { createCampaignWithLeads } from '@/lib/campaigns/materialize';
 import { enqueueCampaignPreparation } from '@/lib/campaigns/prepare';
 import { resumeCampaign } from '@/lib/campaigns/resume';
 import { parseTestRecipientAllowlist } from '@/lib/campaigns/test-delivery';
+import { enrichLeadEmail } from '@/lib/enrichment/enrich-lead-email';
 import { analyzeLeadWebsite } from '@/lib/intelligence/analyze';
 import { archiveCampaignWork } from '@/lib/campaigns/archive';
+import { mapPool } from '@/lib/security/concurrency';
 import { createPendingAction } from './pending';
 import { CAMPAIGN_MUTATION_CAPABILITIES } from './capabilities';
 import type { OperatorIntent } from './intent';
@@ -101,11 +103,17 @@ export async function executePreparePlan(args: {
     results.push({
       tool: 'analyze_business',
       ok: true,
-      summary: `Analisi ${lead.name}: opportunità ${analyzed.opportunity.aiOpportunityScore}.`,
+      summary: analyzed.emailSaved
+        ? `Analisi ${lead.name}: opportunità ${analyzed.opportunity.aiOpportunityScore}. Email dal sito salvata: ${analyzed.email}.`
+        : analyzed.email
+          ? `Analisi ${lead.name}: opportunità ${analyzed.opportunity.aiOpportunityScore}. Email già presente: ${analyzed.email}.`
+          : `Analisi ${lead.name}: opportunità ${analyzed.opportunity.aiOpportunityScore}.`,
       data: {
         leadId: lead.id,
         analysis: analyzed.analysis,
         opportunity: analyzed.opportunity,
+        email: analyzed.email,
+        emailSaved: analyzed.emailSaved,
       },
     });
     return results;
@@ -203,6 +211,24 @@ export async function executePreparePlan(args: {
     ];
   }
 
+  const enrichStartedAt = Date.now();
+  const enrichResults = await mapPool(selected, 5, async (lead) => {
+    try {
+      const result = await enrichLeadEmail(args.admin, args.workspaceId, lead.id);
+      return {
+        leadId: lead.id,
+        email: result.email,
+        fromSite: result.status === 'FOUND',
+      };
+    } catch {
+      return { leadId: lead.id, email: null, fromSite: false };
+    }
+  });
+  const emailsFromSites = enrichResults.filter((row) => row.fromSite).length;
+  const emailsKnown = enrichResults.filter((row) => Boolean(row.email)).length;
+  const emailsStillMissing = selected.length - emailsKnown;
+  const enrichMs = Date.now() - enrichStartedAt;
+
   const city = args.intent.city ?? 'selezione';
   const name = `${deliveryMode} · ${city} · ${selected.length} attività`;
   const campaignCreateStartedAt = Date.now();
@@ -234,6 +260,9 @@ export async function executePreparePlan(args: {
       eligible: created.eligible,
       skipped: created.skipped,
       campaignCreateMs,
+      emailsFromSites,
+      emailsKnown,
+      emailsStillMissing,
     },
   });
 
@@ -252,13 +281,20 @@ export async function executePreparePlan(args: {
   results.push({
     tool: 'prepare_campaign',
     ok: true,
-    summary: `Preparazione avviata per ${prepared.enqueued} attività (enrichment, analisi, demo, copy). Zero invii.`,
+    summary:
+      emailsFromSites > 0
+        ? `Ho letto ${emailsFromSites} email dai siti e le ho salvate. Preparazione avviata per ${prepared.enqueued} attività. Zero invii.`
+        : `Preparazione avviata per ${prepared.enqueued} attività (analisi, demo, copy). Zero invii.`,
     data: {
       campaignId: created.campaignId,
       enqueued: prepared.enqueued,
       selected: selected.length,
       campaignCreateMs,
       enqueueMs,
+      enrichMs,
+      emailsFromSites,
+      emailsKnown,
+      emailsStillMissing,
     },
   });
   return results;

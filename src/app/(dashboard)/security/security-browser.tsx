@@ -127,7 +127,12 @@ export default function SecurityBrowser() {
       return rows.filter((row) => row.status === "listed" || row.status === "failed");
     }
     return rows.filter(
-      (row) => row.status === "audited" || row.status === "email_draft" || row.status === "email_sent",
+      (row) =>
+        row.status === "audited" ||
+        row.status === "email_draft" ||
+        row.status === "email_sent" ||
+        row.status === "deep_open" ||
+        row.status === "deep_done",
     );
   }, [rows, statusFilter]);
 

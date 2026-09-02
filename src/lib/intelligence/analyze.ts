@@ -11,6 +11,8 @@ import { groundedWebsiteAnalysis } from '@/lib/ai/commercial/grounding';
 import type { BusinessOpportunity, WebsiteAnalysis } from '@/lib/ai/commercial/schemas';
 import { PROMPT_VERSIONS } from '@/lib/ai/commercial/schemas';
 import { mockAnalyzeBusiness } from '@/lib/ai/commercial/mock-impl';
+import { persistLeadEmailIfMissing } from '@/lib/enrichment/persist-email';
+import { normalizeDomain } from '@/lib/leads/normalize';
 
 function hashText(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 32);
@@ -37,7 +39,13 @@ export async function analyzeLeadWebsite(args: {
   leadId: string;
   env?: NodeJS.ProcessEnv;
   snapshot?: WebsiteSnapshot;
-}): Promise<{ analysis: WebsiteAnalysis; snapshot: WebsiteSnapshot; opportunity: BusinessOpportunity }> {
+}): Promise<{
+  analysis: WebsiteAnalysis;
+  snapshot: WebsiteSnapshot;
+  opportunity: BusinessOpportunity;
+  email: string | null;
+  emailSaved: boolean;
+}> {
   const env = args.env ?? process.env;
   const { data: lead, error } = await args.admin
     .from('leads')
@@ -50,6 +58,17 @@ export async function analyzeLeadWebsite(args: {
   if (error || !lead) throw new Error(error?.message ?? 'Lead non trovato');
 
   const snapshot = args.snapshot ?? await retrieveLeadWebsiteSnapshot(lead.website_url);
+  const persistedEmail = await persistLeadEmailIfMissing(args.admin, {
+    workspaceId: args.workspaceId,
+    leadId: args.leadId,
+    emails: snapshot.emails,
+    siteDomain: normalizeDomain(lead.website_url),
+    source: 'WEBSITE_SCRAPE',
+    label: 'sito pubblico',
+  });
+  if (persistedEmail.email) {
+    lead.email = persistedEmail.email;
+  }
   const provider = getAICommercialProvider(env);
   const route = resolveModel('analyze_website', env);
   const persist = createSupabaseAiRunStore(args.admin);
@@ -141,5 +160,5 @@ export async function analyzeLeadWebsite(args: {
     schema_version: PROMPT_VERSIONS.websiteAnalysis,
   });
 
-  return { analysis, snapshot, opportunity };
+  return { analysis, snapshot, opportunity, email: persistedEmail.email, emailSaved: persistedEmail.saved };
 }

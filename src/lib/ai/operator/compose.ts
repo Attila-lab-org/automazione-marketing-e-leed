@@ -91,6 +91,13 @@ export function composeOperatorReply(
     parts.push(analyze.summary);
     if (opp?.reasons?.length) parts.push(`Motivi: ${opp.reasons.join('; ')}.`);
     if (analysis?.recommendedOffer) parts.push(`Azione: ${analysis.recommendedOffer}.`);
+    if (typeof analyze.data.email === 'string' && analyze.data.email.includes('@')) {
+      parts.push(
+        analyze.data.emailSaved
+          ? `Email letta dal sito e salvata sul contatto: ${analyze.data.email}.`
+          : `Email del contatto: ${analyze.data.email}.`,
+      );
+    }
     const leadId = typeof analyze.data.leadId === 'string' ? analyze.data.leadId : null;
     if (leadId) actions.push({ type: 'open_lead', leadId, label: 'Apri attività' });
   }
@@ -98,18 +105,28 @@ export function composeOperatorReply(
   if (create || prepare) {
     const selected = Number(prepare?.data.selected ?? create?.data.leadCount ?? 0);
     const skipped = Number(create?.data.skipped ?? 0);
+    const emailsFromSites = Number(prepare?.data.emailsFromSites ?? create?.data.emailsFromSites ?? 0);
+    const emailsStillMissing = Number(prepare?.data.emailsStillMissing ?? create?.data.emailsStillMissing ?? 0);
     const campaignId = String(prepare?.data.campaignId ?? create?.data.campaignId ?? '');
     const isDemoBatch = /demo|anteprim|propost[ae] visiv|siti? dimostrativ/.test(q);
+    const emailNote =
+      emailsFromSites > 0
+        ? ` Ho letto ${emailsFromSites} email dai siti e le ho salvate sui contatti.`
+        : '';
+    const missingNote =
+      emailsStillMissing > 0
+        ? ` ${emailsStillMissing} ancora senza email visibile in pagina.`
+        : '';
     parts.push(
       isDemoBatch
         ? `${selected} attività selezionate. ${
             typeof prepare?.data.enqueued === 'number'
               ? `Preparazione di ${prepare.data.enqueued} demo avviata: analisi, personalizzazione e copy.`
               : 'Non ho potuto avviare la preparazione delle demo.'
-          } ${skipped} attività bloccate. 0 messaggi inviati.`
+          }${emailNote}${missingNote} ${skipped} attività bloccate. 0 messaggi inviati.`
         : `Invio email ${create?.ok ? 'creato' : 'non creato'}. ${selected} contatti selezionati. ${
             typeof prepare?.data.enqueued === 'number' ? `${prepare.data.enqueued} in preparazione.` : ''
-          } ${skipped} bloccati in partenza. 0 messaggi inviati.`,
+          }${emailNote}${missingNote} ${skipped} bloccati in partenza. 0 messaggi inviati.`,
     );
     if (campaignId) {
       actions.push({ type: 'open_campaign', campaignId, label: 'Apri campagna' });

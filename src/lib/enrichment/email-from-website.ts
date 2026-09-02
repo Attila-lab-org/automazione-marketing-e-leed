@@ -129,6 +129,33 @@ function extractEmails(html: string): { emails: string[]; mailto: string[] } {
   return { emails: [...found], mailto: [...mailto] };
 }
 
+const JUNK_EMAIL_HOSTS = [
+  'w3.org',
+  'schema.org',
+  'example.com',
+  'example.org',
+  'sentry.io',
+  'google.com',
+  'gstatic.com',
+  'cloudflare.com',
+  'googleapis.com',
+  'github.com',
+  'wix.com',
+  'wixpress.com',
+  'squarespace.com',
+  'wordpress.org',
+  'wordpress.com',
+  'webflow.io',
+  'godaddy.com',
+  'shopify.com',
+];
+
+export function isJunkPublicEmail(email: string): boolean {
+  const host = email.split('@')[1]?.toLowerCase() ?? '';
+  if (!host) return true;
+  return JUNK_EMAIL_HOSTS.some((junk) => host === junk || host.endsWith(`.${junk}`));
+}
+
 function rankEmails(emails: string[], domain: string | null, mailto: Set<string>): string[] {
   const developerHints = ['wix', 'squarespace', 'wordpress', 'webflow', 'godaddy', 'shopify'];
   return [...emails].sort((a, b) => {
@@ -143,6 +170,31 @@ function rankEmails(emails: string[], domain: string | null, mailto: Set<string>
     };
     return score(a) - score(b);
   });
+}
+
+/** Prima email usabile vista in pagina: stesso dominio, mailto, oppure testo visibile. */
+export function pickPublicEmail(
+  emails: string[],
+  siteDomain?: string | null,
+  mailto: Iterable<string> = [],
+): string | null {
+  const mailtoSet = new Set([...mailto].map((item) => item.trim().toLowerCase()));
+  const clean = [
+    ...new Set(
+      emails
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => item.includes('@') && !isJunkPublicEmail(item)),
+    ),
+  ];
+  if (clean.length === 0) return null;
+  const domain = siteDomain?.replace(/^www\./, '').toLowerCase() || null;
+  const ranked = rankEmails(clean, domain, mailtoSet);
+  return (
+    ranked.find((email) => domain && email.endsWith(`@${domain}`)) ??
+    ranked.find((email) => mailtoSet.has(email)) ??
+    ranked[0] ??
+    null
+  );
 }
 
 function confidenceFor(
@@ -264,11 +316,12 @@ export class HttpEmailEnrichmentProvider implements EmailEnrichmentProvider {
       if (candidates.size > 0 && mailtoSet.size > 0) break;
     }
 
-    const ranked = rankEmails([...candidates], domain, mailtoSet);
-    const best =
-      ranked.find((e) => domain && e.endsWith(`@${domain}`)) ??
-      ranked.find((e) => mailtoSet.has(e)) ??
-      null;
+    const ranked = rankEmails(
+      [...candidates].filter((email) => !isJunkPublicEmail(email)),
+      domain,
+      mailtoSet,
+    );
+    const best = pickPublicEmail(ranked, domain, mailtoSet);
 
     const candidateEvidence: EmailCandidateEvidence[] = ranked.map((email) => {
       const ev = evidenceByEmail.get(email);

@@ -1789,7 +1789,11 @@ export type SecurityTargetStatus =
   | 'skipped'
   | 'email_draft'
   | 'email_sent'
-  | 'failed';
+  | 'failed'
+  | 'deep_open'
+  | 'deep_done';
+
+export type SecurityConsentChannel = 'phone' | 'letter' | 'in_person';
 
 export type SecurityOutreachStatus = 'draft' | 'sent' | 'mock_sent' | 'failed';
 
@@ -1804,6 +1808,10 @@ export interface SecurityTargetRow {
   score: number | null;
   latest_audit_id: string | null;
   public_slug: string;
+  consent_channel: SecurityConsentChannel | null;
+  consent_note: string | null;
+  consent_at: string | null;
+  deep_notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1819,6 +1827,10 @@ export interface SecurityTargetInsert {
   score?: number | null;
   latest_audit_id?: string | null;
   public_slug: string;
+  consent_channel?: SecurityConsentChannel | null;
+  consent_note?: string | null;
+  consent_at?: string | null;
+  deep_notes?: string | null;
   created_at?: string;
   updated_at?: string;
 }

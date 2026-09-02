@@ -7,6 +7,8 @@ export const SECURITY_STATUS_LABELS: Record<SecurityTargetStatus, string> = {
   email_draft: 'Email pronta',
   email_sent: 'Email inviata',
   failed: 'Pagina non aperta',
+  deep_open: 'Controllo approfondito aperto',
+  deep_done: 'Controllo approfondito fatto',
 };
 
 export function securityScoreClass(score: number | null): string {

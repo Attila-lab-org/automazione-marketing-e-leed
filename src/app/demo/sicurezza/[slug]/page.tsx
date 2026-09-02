@@ -1,3 +1,4 @@
+import { explainFinding } from '@/lib/security/explain';
 import { securityScoreClass } from '@/lib/security/labels';
 import { loadPublicSecurityReport } from '@/lib/security/run-audit';
 import { scoreBandLabel } from '@/lib/security/surface-audit';
@@ -62,12 +63,20 @@ export default async function PublicSecurityPage({ params }: PageProps) {
         Aprendo la pagina pubblica come un visitatore, senza provare ingressi né percorsi nascosti, si vede:
       </p>
       <ul className="mt-4 space-y-3">
-        {report.findings.map((item) => (
-          <li key={item.code} className="rounded-xl border border-stone-200 bg-white p-4">
-            <h2 className="font-semibold text-stone-900">{item.title}</h2>
-            <p className="mt-1 text-sm text-stone-600">{item.detail}</p>
-          </li>
-        ))}
+        {report.findings.map((item) => {
+          const explained = explainFinding(item.code);
+          return (
+            <li key={item.code} className="rounded-xl border border-stone-200 bg-white p-4">
+              <h2 className="font-semibold text-stone-900">{item.title}</h2>
+              <p className="mt-2 text-sm text-stone-700">
+                <span className="font-medium">Cosa significa.</span> {explained.meaning}
+              </p>
+              <p className="mt-2 text-sm text-stone-600">
+                <span className="font-medium">Esempio.</span> {explained.example}
+              </p>
+            </li>
+          );
+        })}
       </ul>
 
       <div className="mt-8 flex flex-wrap gap-3">
