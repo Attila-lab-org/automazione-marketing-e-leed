@@ -198,7 +198,7 @@ export async function executePreparePlan(args: {
     ];
   }
 
-  const deliveryMode = args.intent.deliveryMode ?? 'TEST';
+  const deliveryMode = args.intent.deliveryMode ?? 'PRODUCTION';
   const allowlist = parseTestRecipientAllowlist(env);
   if (deliveryMode === 'TEST' && allowlist.length === 0) {
     return [
@@ -230,7 +230,7 @@ export async function executePreparePlan(args: {
   const enrichMs = Date.now() - enrichStartedAt;
 
   const city = args.intent.city ?? 'selezione';
-  const name = `${deliveryMode} · ${city} · ${selected.length} attività`;
+  const name = `${city} · ${selected.length} attività`;
   const campaignCreateStartedAt = Date.now();
   const created = await createCampaignWithLeads(args.admin, args.workspaceId, {
     name,

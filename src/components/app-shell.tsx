@@ -191,7 +191,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           });
         } else if (resend.status === "ready") {
           setResendBadge({
-            label: "EMAIL ATTIVE · SOLO TEST",
+            label: "EMAIL ATTIVE",
             detail: resend.detail,
             mode: "live",
           });

@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { consentChannelLabel } from "@/lib/security/deep-consent";
 import type { DeepAnalysis, DeepFinding } from "@/lib/security/deep-scan";
-import { DEEP_CHECK_STEPS, explainFinding, riskIfUnfixed } from "@/lib/security/explain";
+import {
+  DEEP_CHECK_STEPS,
+  explainFinding,
+  plainFindingTitle,
+  riskIfUnfixed,
+} from "@/lib/security/explain";
 import { securityScoreClass } from "@/lib/security/labels";
 import { findingsByCategory, scoreBandLabel } from "@/lib/security/surface-audit";
 import type { SurfaceAnalysis, SurfaceFinding } from "@/lib/security/surface-audit";
@@ -36,10 +41,12 @@ type ReportPayload = {
     completed_at: string | null;
   } | null;
   deepAnalysis: DeepAnalysis | null;
+  deepComparisonCurrent: boolean;
   emailPreview: { subject: string; html: string; text: string } | null;
   letter: string;
   canSendEmail: boolean;
   hasConfirmedProblems: boolean;
+  hasActionableFindings: boolean;
   audit: { error: string | null; http_status: number | null; final_url: string | null } | null;
   error?: string;
 };
@@ -51,15 +58,19 @@ function severityClass(severity: SurfaceFinding["severity"]): string {
 }
 
 function severityLabel(severity: SurfaceFinding["severity"]): string {
-  if (severity === "HIGH") return "Evidenza forte";
-  if (severity === "MEDIUM") return "Evidenza media";
-  return "Evidenza lieve";
+  if (severity === "HIGH") return "Priorità alta";
+  if (severity === "MEDIUM") return "Priorità media";
+  return "Priorità bassa";
 }
 
 function confidenceLabel(confidence: SurfaceFinding["confidence"]): string {
-  if (confidence === "confirmed") return "Attendibilità: confermata";
-  if (confidence === "likely") return "Attendibilità: probabile";
-  return "Informazione osservata";
+  if (confidence === "confirmed") return "Verificato";
+  if (confidence === "likely") return "Da confermare";
+  return "Informazione";
+}
+
+function friendlyTitle(item: Pick<SurfaceFinding, "code" | "title">): string {
+  return plainFindingTitle(item.code, item.title);
 }
 
 function CheckRow({ ok, label, missing }: { ok: boolean | null; label: string; missing: string }) {
@@ -87,7 +98,7 @@ function FindingCard({ item }: { item: SurfaceFinding }) {
   return (
     <li className={`rounded-xl border p-4 ${severityClass(item.severity)}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-semibold">{item.title}</h3>
+        <h3 className="font-semibold">{friendlyTitle(item)}</h3>
         <span className="text-[11px] uppercase tracking-wide">
           {confidenceLabel(item.confidence)} · {severityLabel(item.severity)}
         </span>
@@ -109,10 +120,15 @@ function FindingCard({ item }: { item: SurfaceFinding }) {
         </p>
       ) : null}
       <p className="mt-2 text-xs opacity-80">
-        <span className="font-medium">Cosa questa prova non dimostra.</span>{" "}
-        {item.limit || explained.limit || "Non prova ingressi riusciti né falle non visibili da fuori."}
+        <span className="font-medium">Prova osservata:</span> {item.evidence}
       </p>
-      <p className="mt-2 text-xs opacity-70">Prova: {item.evidence}</p>
+      <details className="mt-3 text-xs opacity-80">
+        <summary className="cursor-pointer font-medium">Cosa non dimostra</summary>
+        <p className="mt-2">
+          <span className="font-medium">Cosa non dimostra:</span>{" "}
+          {item.limit || explained.limit || "Non prova ingressi riusciti né falle non visibili da fuori."}
+        </p>
+      </details>
     </li>
   );
 }
@@ -128,15 +144,22 @@ function FindingSection({
 }) {
   if (!items.length) return null;
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-5">
-      <h2 className="text-sm font-semibold text-stone-900">{title}</h2>
-      <p className="mt-1 text-sm text-stone-500">{hint}</p>
+    <details
+      open={title === "Da sistemare"}
+      className="rounded-xl border border-stone-200 bg-white p-5"
+    >
+      <summary className="cursor-pointer">
+        <span className="text-sm font-semibold text-stone-900">
+          {title} · {items.length}
+        </span>
+        <span className="ml-2 text-sm text-stone-500">{hint}</span>
+      </summary>
       <ul className="mt-3 space-y-3">
         {items.map((item) => (
           <FindingCard key={item.code} item={item} />
         ))}
       </ul>
-    </section>
+    </details>
   );
 }
 
@@ -145,7 +168,7 @@ function DeepFindingCard({ item }: { item: DeepFinding }) {
   return (
     <li className={`rounded-xl border p-4 ${severityClass(item.severity)}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="font-semibold">{item.title}</h4>
+        <h4 className="font-semibold">{friendlyTitle(item)}</h4>
         <span className="text-[11px] uppercase tracking-wide">
           {confidenceLabel(item.confidence)}
         </span>
@@ -162,12 +185,17 @@ function DeepFindingCard({ item }: { item: DeepFinding }) {
         </p>
       ) : null}
       <p className="mt-2 text-xs opacity-80">
-        <span className="font-medium">Cosa questa prova non dimostra.</span> {item.limit}
+        <span className="font-medium">Prova osservata:</span> {item.evidence}
       </p>
-      <p className="mt-2 text-xs opacity-70">
-        Vista su {item.pageUrls.length} pagina{item.pageUrls.length === 1 ? "" : "e"} · Prova:{" "}
-        {item.evidence}
-      </p>
+      <details className="mt-3 text-xs opacity-80">
+        <summary className="cursor-pointer font-medium">Mostra pagine e limiti</summary>
+        <p className="mt-2">
+          Vista su {item.pageUrls.length} pagina{item.pageUrls.length === 1 ? "" : "e"}.
+        </p>
+        <p className="mt-1">
+          <span className="font-medium">Cosa non dimostra:</span> {item.limit}
+        </p>
+      </details>
     </li>
   );
 }
@@ -182,6 +210,7 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
   const [consentChannel, setConsentChannel] = useState<SecurityConsentChannel>("phone");
   const [consentNote, setConsentNote] = useState("");
   const [deepNotes, setDeepNotes] = useState("");
+  const [view, setView] = useState<"summary" | "first" | "deep" | "email">("summary");
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/security/targets/${targetId}`, { cache: "no-store" });
@@ -237,6 +266,16 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
       setNotice(reason instanceof Error ? reason.message : "Invio non riuscito");
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function copyEmail() {
+    if (!report?.emailPreview) return;
+    try {
+      await navigator.clipboard.writeText(report.emailPreview.text);
+      setNotice("Testo dell’email copiato.");
+    } catch {
+      setNotice("Non sono riuscito a copiare il testo. Puoi selezionarlo dall’anteprima.");
     }
   }
 
@@ -323,8 +362,8 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
     return <p className="text-sm text-stone-500">Apro il report…</p>;
   }
 
-  const score = report.target.score;
   const analysis = report.analysis;
+  const score = analysis?.score ?? null;
   const grouped = analysis ? findingsByCategory(analysis.findings) : null;
   const deepAnalysis = report.deepAnalysis;
   const deepGrouped = deepAnalysis ? findingsByCategory(deepAnalysis.findings) : null;
@@ -335,6 +374,11 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
       : analysis?.headers.csp === "weak"
         ? "Troppo larga"
         : "Assente";
+  const firstActionable = grouped ? [...grouped.problems, ...grouped.protections] : [];
+  const currentActionable =
+    report.deepComparisonCurrent && deepGrouped
+      ? [...deepGrouped.problems, ...deepGrouped.protections]
+      : firstActionable;
 
   return (
     <div className="space-y-6">
@@ -358,8 +402,8 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
       </div>
 
       <p className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
-        Questo report elenca solo cose visibili aprendo la pagina pubblica, come un visitatore. Niente
-        percorsi nascosti, niente moduli inviati, niente ipotesi.
+        Il report separa ciò che è stato osservato dai rischi possibili. Il primo controllo apre solo
+        la pagina pubblica: non prova percorsi nascosti e non invia moduli.
       </p>
 
       {report.audit?.error ? (
@@ -368,10 +412,129 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
         </p>
       ) : null}
 
-      {analysis ? (
+      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-stone-200 bg-stone-50 p-1">
+        {[
+          { id: "summary" as const, label: "Sintesi" },
+          { id: "first" as const, label: "1 · Primo report" },
+          { id: "email" as const, label: report.emailPreview ? "2 · Email pronta" : "2 · Email" },
+          { id: "deep" as const, label: "3 · Dopo il consenso" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setView(tab.id)}
+            className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium ${
+              view === tab.id
+                ? "bg-white text-stone-900 shadow-sm"
+                : "text-stone-500 hover:text-stone-800"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {view === "summary" ? (
+        <section className="space-y-5 rounded-xl border border-stone-200 bg-white p-5">
+          <div>
+            <h2 className="text-lg font-semibold text-stone-900">Risultato in breve</h2>
+            <p className="mt-1 text-sm text-stone-600">
+              Prima controlliamo la pagina principale. Dopo il consenso controlliamo anche le altre
+              pagine pubbliche e confrontiamo i risultati.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => setView("first")}
+              className="order-1 rounded-xl border border-stone-200 p-4 text-left hover:bg-stone-50"
+            >
+              <p className="text-xs uppercase tracking-wide text-stone-500">Primo report</p>
+              <p className="mt-1 text-3xl font-semibold text-stone-900">{score ?? "—"}</p>
+              <p className="mt-1 text-sm text-stone-600">
+                {grouped?.problems.length ?? 0} problemi · {grouped?.protections.length ?? 0} protezioni
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("deep")}
+              className="order-3 rounded-xl border border-stone-200 p-4 text-left hover:bg-stone-50"
+            >
+              <p className="text-xs uppercase tracking-wide text-stone-500">Report approfondito</p>
+              <p className="mt-1 text-3xl font-semibold text-stone-900">
+                {deepAnalysis && report.deepComparisonCurrent ? deepAnalysis.score : "—"}
+              </p>
+              <p className="mt-1 text-sm text-stone-600">
+                {deepAnalysis && report.deepComparisonCurrent
+                  ? `${deepAnalysis.pages.length} pagine controllate`
+                  : deepAnalysis
+                    ? "Da rifare dopo l’ultimo primo report"
+                  : "Da avviare dopo il consenso"}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("email")}
+              className="order-2 rounded-xl border border-stone-200 p-4 text-left hover:bg-stone-50"
+            >
+              <p className="text-xs uppercase tracking-wide text-stone-500">Email al cliente</p>
+              <p className="mt-2 text-lg font-semibold text-stone-900">
+                {report.emailPreview ? "Bozza pronta" : "Nessuna bozza"}
+              </p>
+              <p className="mt-1 text-sm text-stone-600">
+                {report.emailPreview
+                  ? report.lead.email || "Manca l’indirizzo email"
+                  : "Non ci sono elementi da comunicare"}
+              </p>
+            </button>
+          </div>
+
+          <div className="rounded-xl bg-stone-50 p-4">
+            <h3 className="font-semibold text-stone-900">Cosa richiede attenzione</h3>
+            <p className="mt-1 text-xs text-stone-500">
+              {report.deepComparisonCurrent
+                ? "Risultato più recente: controllo dopo il consenso"
+                : "Risultato più recente: prima pagina"}
+            </p>
+            {currentActionable.length ? (
+              <ul className="mt-2 space-y-2 text-sm text-stone-700">
+                {currentActionable.slice(0, 4).map((item) => (
+                  <li key={item.code}>• {friendlyTitle(item)}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-stone-600">
+                La prima pagina non mostra problemi o protezioni mancanti da comunicare.
+              </p>
+            )}
+            {currentActionable.length > 4 ? (
+              <button
+                type="button"
+                onClick={() => setView(report.deepComparisonCurrent ? "deep" : "first")}
+                className="mt-3 text-sm font-medium text-stone-900 underline"
+              >
+                Vedi tutti i dettagli
+              </button>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {analysis && view === "first" ? (
         <>
           <section className="rounded-xl border border-stone-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-stone-900">Cosa ha risposto il sito</h2>
+            <h2 className="text-lg font-semibold text-stone-900">Primo report: pagina principale</h2>
+            <p className="mt-1 text-sm text-stone-600">
+              Punteggio {score ?? "—"} · {grouped?.problems.length ?? 0} problemi ·{" "}
+              {grouped?.protections.length ?? 0} protezioni consigliate
+            </p>
+          </section>
+
+          <details className="rounded-xl border border-stone-200 bg-white p-5">
+            <summary className="cursor-pointer text-sm font-semibold text-stone-900">
+              Dettagli tecnici della risposta
+            </summary>
             <ul className="mt-3 space-y-2">
               <CheckRow
                 ok={analysis.headers.https}
@@ -434,11 +597,13 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
             {report.audit?.final_url ? (
               <p className="mt-3 truncate text-xs text-stone-400">Pagina aperta: {report.audit.final_url}</p>
             ) : null}
-          </section>
+          </details>
 
           {analysis.technologies.length > 0 ? (
-            <section className="rounded-xl border border-stone-200 bg-white p-5">
-              <h2 className="text-sm font-semibold text-stone-900">Scritto in pagina</h2>
+            <details className="rounded-xl border border-stone-200 bg-white p-5">
+              <summary className="cursor-pointer text-sm font-semibold text-stone-900">
+                Programmi dichiarati dal sito · {analysis.technologies.length}
+              </summary>
               <div className="mt-3 flex flex-wrap gap-2">
                 {analysis.technologies.map((item) => (
                   <span
@@ -450,7 +615,7 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
                   </span>
                 ))}
               </div>
-            </section>
+            </details>
           ) : null}
 
           {grouped && analysis.findings.length === 0 ? (
@@ -500,8 +665,20 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
         </>
       ) : null}
 
+      {view === "email" ? (
       <section className="rounded-xl border border-stone-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-stone-900">Cosa fare adesso</h2>
+        <h2 className="text-lg font-semibold text-stone-900">Bozza email del primo report</h2>
+        <p className="mt-1 text-sm text-stone-600">
+          Serve per presentare il primo controllo prima del consenso. Leggila prima dell’invio:
+          non parte automaticamente.
+        </p>
+        {report.emailPreview ? (
+          <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Anteprima</p>
+            <p className="mt-1 text-sm font-semibold text-stone-900">{report.emailPreview.subject}</p>
+            <pre className="mt-2 whitespace-pre-wrap text-sm text-stone-700">{report.emailPreview.text}</pre>
+          </div>
+        ) : null}
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
@@ -521,7 +698,7 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
           </button>
           <button
             type="button"
-            disabled={busy !== null || !report.emailPreview}
+            disabled={busy !== null || !report.canSendEmail}
             onClick={() => void send()}
             className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
@@ -531,7 +708,17 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
                 ? report.canSendEmail
                   ? "Confermo: invia l’email"
                   : "Manca l’email del contatto"
-                : "Prepara / invia email"}
+                : report.emailPreview
+                  ? "Invia questa email"
+                  : "Nessuna email da inviare"}
+          </button>
+          <button
+            type="button"
+            disabled={!report.emailPreview}
+            onClick={() => void copyEmail()}
+            className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-60"
+          >
+            Copia il testo
           </button>
         </div>
         {report.lead.email ? (
@@ -542,14 +729,14 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
               : ""}
           </p>
         ) : null}
-        {!report.hasConfirmedProblems ? (
+        {!report.hasActionableFindings ? (
           <p className="mt-2 text-sm text-stone-600">
-            La prima analisi non contiene problemi confermati: l’email di allarme non viene preparata.
+            La prima analisi non contiene problemi o protezioni da sistemare: non serve preparare una mail.
           </p>
         ) : !report.canSendEmail ? (
           <p className="mt-2 text-sm text-amber-800">
-            In questa pagina pubblica non ho visto un’email da salvare. Puoi comunque chiamare e, se
-            il titolare dà il permesso al telefono, aprire subito il controllo approfondito.
+            In questa pagina pubblica non ho visto un’email da salvare. La bozza resta disponibile:
+            puoi copiarla oppure contattare il titolare in un altro modo.
           </p>
         ) : null}
         {confirmSend && report.canSendEmail ? (
@@ -559,15 +746,10 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
         ) : null}
         {notice ? <p className="mt-3 text-sm text-emerald-800">{notice}</p> : null}
 
-        {report.emailPreview ? (
-          <div className="mt-4 rounded-lg border border-stone-100 bg-stone-50 p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Anteprima email</p>
-            <p className="mt-1 text-sm font-semibold text-stone-900">{report.emailPreview.subject}</p>
-            <pre className="mt-2 whitespace-pre-wrap text-sm text-stone-700">{report.emailPreview.text}</pre>
-          </div>
-        ) : null}
       </section>
+      ) : null}
 
+      {view === "deep" ? (
       <section className="rounded-xl border border-dashed border-stone-300 bg-white p-5">
         <h2 className="text-sm font-semibold text-stone-900">Secondo report approfondito</h2>
         <p className="mt-1 text-sm text-stone-600">
@@ -579,7 +761,7 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
           <p className="mt-2 text-sm text-stone-700">
             Da sistemare / proteggere:{" "}
             {[...grouped.problems, ...grouped.protections]
-              .map((item) => item.title)
+              .map((item) => friendlyTitle(item))
               .slice(0, 8)
               .join("; ")}
             {[...grouped.problems, ...grouped.protections].length > 8 ? "…" : "."}
@@ -606,11 +788,14 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
                     ? " L’ultimo tentativo non è riuscito."
                     : " Scansione pronta."}
             </p>
-            <ol className="list-decimal space-y-1 pl-5 text-sm text-stone-700">
-              {DEEP_CHECK_STEPS.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
+            <details className="rounded-lg bg-stone-50 p-3 text-sm text-stone-700">
+              <summary className="cursor-pointer font-medium">Come funziona questo controllo</summary>
+              <ol className="mt-2 list-decimal space-y-1 pl-5">
+                {DEEP_CHECK_STEPS.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </details>
 
             {report.deepAudit?.error ? (
               <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -618,7 +803,14 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
               </p>
             ) : null}
 
-            {deepAnalysis && deepGrouped ? (
+            {deepAnalysis && !report.deepComparisonCurrent ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Hai riletto la pagina principale dopo questo approfondimento. Per evitare confronti
+                sbagliati, il vecchio confronto è nascosto: avvia di nuovo il report approfondito.
+              </p>
+            ) : null}
+
+            {deepAnalysis && deepGrouped && report.deepComparisonCurrent ? (
               <div className="space-y-5 rounded-xl border border-stone-200 bg-stone-50 p-4">
                 <div className="flex flex-wrap items-center gap-4">
                   <div>
@@ -635,47 +827,53 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
                     </p>
                   </div>
                   <p className="text-sm text-stone-600">
-                    {deepAnalysis.pages.length} pagine · {deepAnalysis.metadata.requestsMade} richieste
+                    {deepAnalysis.pages.length} pagine pubbliche controllate
                   </p>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-lg border border-stone-200 bg-white p-3">
-                    <h3 className="text-sm font-semibold text-stone-900">Confermati</h3>
+                  <details className="rounded-lg border border-stone-200 bg-white p-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-stone-900">
+                      Visti in entrambi · {deepAnalysis.comparison.confirmed.length}
+                    </summary>
                     <ul className="mt-2 space-y-1 text-sm text-stone-700">
                       {deepAnalysis.comparison.confirmed.length ? (
                         deepAnalysis.comparison.confirmed.map((item) => (
-                          <li key={item.code}>• {item.title}</li>
+                          <li key={item.code}>• {friendlyTitle(item)}</li>
                         ))
                       ) : (
                         <li>Nessuno</li>
                       )}
                     </ul>
-                  </div>
-                  <div className="rounded-lg border border-stone-200 bg-white p-3">
-                    <h3 className="text-sm font-semibold text-stone-900">Nuovi nel secondo report</h3>
+                  </details>
+                  <details className="rounded-lg border border-stone-200 bg-white p-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-stone-900">
+                      Trovati solo approfondendo · {deepAnalysis.comparison.newFindings.length}
+                    </summary>
                     <ul className="mt-2 space-y-1 text-sm text-stone-700">
                       {deepAnalysis.comparison.newFindings.length ? (
                         deepAnalysis.comparison.newFindings.map((item) => (
-                          <li key={item.code}>• {item.title}</li>
+                          <li key={item.code}>• {friendlyTitle(item)}</li>
                         ))
                       ) : (
                         <li>Nessuno</li>
                       )}
                     </ul>
-                  </div>
-                  <div className="rounded-lg border border-stone-200 bg-white p-3">
-                    <h3 className="text-sm font-semibold text-stone-900">Non riprodotti</h3>
+                  </details>
+                  <details className="rounded-lg border border-stone-200 bg-white p-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-stone-900">
+                      Da ricontrollare · {deepAnalysis.comparison.notReproduced.length}
+                    </summary>
                     <ul className="mt-2 space-y-1 text-sm text-stone-700">
                       {deepAnalysis.comparison.notReproduced.length ? (
                         deepAnalysis.comparison.notReproduced.map((item) => (
-                          <li key={item.code}>• {item.title}</li>
+                          <li key={item.code}>• {friendlyTitle(item)}</li>
                         ))
                       ) : (
                         <li>Nessuno</li>
                       )}
                     </ul>
-                  </div>
+                  </details>
                 </div>
 
                 {[
@@ -684,19 +882,27 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
                   { title: "Informazioni pubbliche", items: deepGrouped.infos },
                 ].map((section) =>
                   section.items.length ? (
-                    <div key={section.title}>
-                      <h3 className="text-sm font-semibold text-stone-900">{section.title}</h3>
+                    <details
+                      key={section.title}
+                      open={section.title === "Da sistemare"}
+                      className="rounded-lg border border-stone-200 bg-white p-3"
+                    >
+                      <summary className="cursor-pointer text-sm font-semibold text-stone-900">
+                        {section.title} · {section.items.length}
+                      </summary>
                       <ul className="mt-2 space-y-3">
                         {section.items.map((item) => (
                           <DeepFindingCard key={item.code} item={item as DeepFinding} />
                         ))}
                       </ul>
-                    </div>
+                    </details>
                   ) : null,
                 )}
 
-                <div>
-                  <h3 className="text-sm font-semibold text-stone-900">Pagine controllate</h3>
+                <details className="rounded-lg border border-stone-200 bg-white p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-stone-900">
+                    Pagine controllate · {deepAnalysis.pages.length}
+                  </summary>
                   <ul className="mt-2 space-y-1 text-xs text-stone-600">
                     {deepAnalysis.pages.map((page) => (
                       <li key={page.url} className="truncate">
@@ -704,20 +910,23 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
                       </li>
                     ))}
                   </ul>
-                </div>
+                </details>
 
-                <div>
-                  <h3 className="text-sm font-semibold text-stone-900">Limiti del controllo</h3>
+                <details className="rounded-lg border border-stone-200 bg-white p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-stone-900">
+                    Cosa non è stato fatto
+                  </summary>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-stone-600">
                     {deepAnalysis.metadata.limits.map((limit) => (
                       <li key={limit}>{limit}</li>
                     ))}
                   </ul>
-                </div>
+                </details>
               </div>
             ) : null}
 
-            {!deepAnalysis && report.target.status !== "deep_running" ? (
+            {(!deepAnalysis || !report.deepComparisonCurrent) &&
+            report.target.status !== "deep_running" ? (
               <button
                 type="button"
                 disabled={busy !== null}
@@ -789,9 +998,12 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
           </div>
         )}
 
-        <pre className="mt-4 whitespace-pre-wrap rounded-lg bg-stone-50 p-4 text-xs text-stone-700">
-          {report.letter}
-        </pre>
+        <details className="mt-4 rounded-lg bg-stone-50 p-4">
+          <summary className="cursor-pointer text-sm font-medium text-stone-800">
+            Modello per annotare il consenso
+          </summary>
+          <pre className="mt-3 whitespace-pre-wrap text-xs text-stone-700">{report.letter}</pre>
+        </details>
         {score !== null ? (
           <p className="mt-3 text-xs text-stone-500">
             Anteprima pubblica (non indicizzata):{" "}
@@ -801,6 +1013,7 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
           </p>
         ) : null}
       </section>
+      ) : null}
     </div>
   );
 }

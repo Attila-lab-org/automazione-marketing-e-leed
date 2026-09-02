@@ -1,5 +1,5 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
-import { explainFinding } from './explain';
+import { explainFinding, plainFindingTitle } from './explain';
 import { analysisFromAudit } from './run-audit';
 import type { SecurityOperatorReport } from '@/lib/ai/operator/registry';
 
@@ -98,7 +98,11 @@ async function loadByTargetId(
         item.category === 'info'
           ? item.limit || explained.limit || 'Informazione pubblica: non abbassa il punteggio da sola.'
           : explained.risk;
-      return { title: item.title, meaning: explained.meaning, risk };
+      return {
+        title: plainFindingTitle(item.code, item.title),
+        meaning: explained.meaning,
+        risk,
+      };
     });
 
   return {

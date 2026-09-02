@@ -1,7 +1,7 @@
 export const ADMIN_SESSION_COOKIE = 'sales-os-admin-session';
 
 /** Route pubbliche (no auth). QA fixtures are NEVER public. */
-export const PUBLIC_PATH_PREFIXES = ['/demo/', '/login'] as const;
+export const PUBLIC_PATH_PREFIXES = ['/demo/', '/login', '/unsubscribe', '/privacy'] as const;
 
 export const PUBLIC_API_PREFIXES = ['/api/auth/', '/api/webhooks/', '/api/place-photo'] as const;
 

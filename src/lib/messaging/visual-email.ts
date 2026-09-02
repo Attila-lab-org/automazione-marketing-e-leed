@@ -1,6 +1,7 @@
 import { resolveAppUrl } from '@/lib/app-url';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadDemoById } from '@/lib/demos/load';
+import { appendEmailComplianceFooter } from '@/lib/suppression/email-compliance';
 import {
   getOwnerDeliveryTime,
   getOwnerOfferPrice,
@@ -259,6 +260,7 @@ export async function buildVisualEmailDraft(
       .join('');
   }
   body = ensureStudioPresent(body);
+  body = appendEmailComplianceFooter(body, workspaceId, cl.lead_id, env);
   if (/\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(subject) || /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(body)) {
     throw new Error('Draft: il modello contiene variabili non riconosciute');
   }
@@ -416,7 +418,7 @@ export async function buildFollowupDraft(
     templateVersionId: campaign.message_template_version_id,
     sequenceStep,
     subject: tpl.subject,
-    body: tpl.body,
+    body: appendEmailComplianceFooter(tpl.body, workspaceId, cl.lead_id, env),
     resolved: {
       business_name: businessName,
       demo_url: demoUrl,

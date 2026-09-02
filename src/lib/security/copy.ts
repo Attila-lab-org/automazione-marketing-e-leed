@@ -1,4 +1,4 @@
-import { explainFinding, riskIfUnfixed } from './explain';
+import { explainFinding, plainFindingTitle, riskIfUnfixed } from './explain';
 import { findingsByCategory, type SurfaceAnalysis, type SurfaceFinding } from './surface-audit';
 
 function escapeHtml(value: string): string {
@@ -10,12 +10,15 @@ function escapeHtml(value: string): string {
 }
 
 export function findingsToPlainList(findings: SurfaceFinding[]): string[] {
-  return findings.map((item) => `${item.title}: ${item.detail}`);
+  return findings.map((item) => `${plainFindingTitle(item.code, item.title)}: ${item.detail}`);
 }
 
 function bulletForFinding(item: SurfaceFinding): string[] {
   const explained = explainFinding(item.code);
-  const lines = [`• ${item.title}`, `  In pratica: ${explained.meaning}`];
+  const lines = [
+    `• ${plainFindingTitle(item.code, item.title)}`,
+    `  In pratica: ${explained.meaning}`,
+  ];
   if (item.category === 'info') {
     lines.push(`  Nota: ${item.limit || explained.limit || 'Non è da sola un problema da sistemare.'}`);
   } else {
@@ -34,7 +37,13 @@ function htmlRowForFinding(item: SurfaceFinding): string {
   const remediation = explained.remediation
     ? `<br/><span style="color:#57534e"><strong>Come sistemarlo:</strong> ${escapeHtml(explained.remediation)}</span>`
     : '';
-  return `<li style="margin:0 0 12px"><strong>${escapeHtml(item.title)}</strong><br/><span style="color:#57534e">${escapeHtml(explained.meaning)}</span>${third}${remediation}</li>`;
+  return `<li style="margin:0 0 12px"><strong>${escapeHtml(plainFindingTitle(item.code, item.title))}</strong><br/><span style="color:#57534e">${escapeHtml(explained.meaning)}</span>${third}${remediation}</li>`;
+}
+
+export function shouldPrepareSecurityEmail(analysis: SurfaceAnalysis): boolean {
+  if (analysis.findings.some((item) => item.category === 'problem')) return true;
+  const protections = analysis.findings.filter((item) => item.category === 'protection');
+  return protections.length >= 2 || analysis.score <= 90;
 }
 
 export function buildSecurityEmail(input: {
@@ -57,16 +66,6 @@ export function buildSecurityEmail(input: {
     sections.push('Protezione consigliata:', ...grouped.protections.flatMap(bulletForFinding), '');
     htmlSections.push(
       `<p><strong>Protezione consigliata</strong></p><ul style="padding-left:18px">${grouped.protections.map(htmlRowForFinding).join('')}</ul>`,
-    );
-  }
-  if (grouped.infos.length) {
-    sections.push(
-      'Informazioni pubbliche (non abbassano il punteggio da sole):',
-      ...grouped.infos.flatMap(bulletForFinding),
-      '',
-    );
-    htmlSections.push(
-      `<p><strong>Informazioni pubbliche</strong></p><ul style="padding-left:18px">${grouped.infos.map(htmlRowForFinding).join('')}</ul>`,
     );
   }
   if (!sections.length) {

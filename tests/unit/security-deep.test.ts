@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  deepAnalysisFromRow,
   extractSafeSameSiteLinks,
   isSameAuthorizedSite,
   runAuthorizedDeepScan,
@@ -7,6 +8,7 @@ import {
 import type { FetchedPage } from '@/lib/security/fetch-page';
 import { fetchPublicPage } from '@/lib/security/fetch-page';
 import type { SurfaceFinding } from '@/lib/security/surface-audit';
+import type { SecurityDeepAuditRow } from '@/lib/types/database';
 
 const HARDENED = {
   'strict-transport-security': 'max-age=31536000; includeSubDomains',
@@ -18,12 +20,17 @@ const HARDENED = {
   'content-type': 'text/html; charset=utf-8',
 };
 
-function page(url: string, html: string, status = 200): FetchedPage {
+function page(
+  url: string,
+  html: string,
+  status = 200,
+  headers: Record<string, string> = HARDENED,
+): FetchedPage {
   return {
     requestedUrl: url,
     finalUrl: url,
     httpStatus: status,
-    headers: HARDENED,
+    headers,
     html,
     htmlTruncated: false,
     redirectChain: [url],
@@ -53,6 +60,7 @@ describe('deep scan autorizzata', () => {
     const links = extractSafeSameSiteLinks(
       [
         '<a href="/contatti?campaign=1#form">Contatti</a>',
+        '<a href="/chi-siamo#team">Chi siamo</a>',
         '<a href="/logout">Esci</a>',
         '<a href="/brochure.pdf">PDF</a>',
         '<a href="https://other.example/path">Fuori</a>',
@@ -61,7 +69,7 @@ describe('deep scan autorizzata', () => {
       'https://example.it/',
       'https://example.it/',
     );
-    expect(links).toEqual(['https://example.it/contatti']);
+    expect(links).toEqual(['https://example.it/chi-siamo']);
   });
 
   it('crea un secondo report, trova il campo carta e confronta il baseline', async () => {
@@ -140,6 +148,115 @@ describe('deep scan autorizzata', () => {
       fetcher,
     );
     expect(result.comparison.confirmed.some((item) => item.code === 'CARD_FORM_OWN')).toBe(true);
+  });
+
+  it('una pagina interna 404 è un link rotto, non una homepage guasta', async () => {
+    const fetcher = async (url: string): Promise<FetchedPage> => {
+      if (url.endsWith('/.well-known/security.txt') || url.endsWith('/robots.txt')) {
+        return page(url, '', 404);
+      }
+      if (url.endsWith('/vecchia-pagina')) {
+        return page(url, '<title>Non trovata</title>', 404, {
+          'content-type': 'text/html; charset=utf-8',
+        });
+      }
+      return page(
+        'https://example.it/',
+        '<title>Home</title><a href="/vecchia-pagina">Pagina vecchia</a>',
+      );
+    };
+
+    const result = await runAuthorizedDeepScan(
+      { targetUrl: 'https://example.it/', baselineFindings: [] },
+      fetcher,
+    );
+    expect(result.findings.some((item) => item.code === 'HOMEPAGE_ERROR')).toBe(false);
+    expect(result.findings.find((item) => item.code === 'BROKEN_PUBLIC_PAGE')?.category).toBe('info');
+    expect(result.comparison.newFindings).toEqual([]);
+    expect(result.score).toBe(100);
+  });
+
+  it('non conferma sulla homepage un problema visto soltanto in una pagina interna', async () => {
+    const fetcher = async (url: string): Promise<FetchedPage> => {
+      if (url.endsWith('/.well-known/security.txt') || url.endsWith('/robots.txt')) {
+        return page(url, '', 404);
+      }
+      if (url.endsWith('/interna')) {
+        return page(url, '<title>Interna</title>', 200, {
+          'content-type': 'text/html; charset=utf-8',
+        });
+      }
+      return page('https://example.it/', '<title>Home</title><a href="/interna">Interna</a>');
+    };
+
+    const result = await runAuthorizedDeepScan(
+      { targetUrl: 'https://example.it/', baselineFindings: [baselineNoCsp] },
+      fetcher,
+    );
+    expect(result.comparison.confirmed.some((item) => item.code === 'NO_CSP')).toBe(false);
+    expect(result.comparison.newFindings.some((item) => item.code === 'NO_CSP')).toBe(true);
+    expect(result.comparison.notReproduced.some((item) => item.code === 'NO_CSP')).toBe(true);
+  });
+
+  it('corregge in lettura i vecchi report che chiamavano homepage una pagina interna 404', () => {
+    const row = {
+      id: 'deep-1',
+      workspace_id: 'workspace-1',
+      target_id: 'target-1',
+      lead_id: 'lead-1',
+      baseline_audit_id: 'base-1',
+      consent_channel: 'phone',
+      consent_at: '2026-09-02T10:00:00.000Z',
+      requested_url: 'https://example.it/',
+      final_url: 'https://example.it/',
+      status: 'completed',
+      score: 55,
+      pages_scanned: [],
+      findings: [
+        {
+          code: 'HOMEPAGE_ERROR',
+          severity: 'HIGH',
+          category: 'problem',
+          confidence: 'confirmed',
+          title: 'Homepage guasta',
+          detail: 'HTTP 404',
+          evidence: 'HTTP 404',
+          limit: 'Solo questa pagina.',
+          pageUrls: ['https://example.it/about-us/'],
+          occurrences: 1,
+        },
+        {
+          ...baselineNoCsp,
+          pageUrls: ['https://example.it/about-us/'],
+          occurrences: 1,
+        },
+      ],
+      comparison: {
+        confirmed: 'dato vecchio non valido',
+        newFindings: [
+          { code: 'HOMEPAGE_ERROR', title: 'Homepage guasta' },
+          { code: 'NO_CSP', title: 'CSP assente' },
+        ],
+        notReproduced: [],
+      },
+      metadata: {
+        maxPages: 12,
+        maxDepth: 2,
+        requestsMade: 3,
+        securityTxt: 'missing',
+        robotsTxt: 'present',
+        limits: [],
+      },
+      error: null,
+      started_at: '2026-09-02T10:00:00.000Z',
+      completed_at: '2026-09-02T10:01:00.000Z',
+    } satisfies SecurityDeepAuditRow;
+
+    const result = deepAnalysisFromRow(row);
+    expect(result?.score).toBe(100);
+    expect(result?.findings[0]?.code).toBe('BROKEN_PUBLIC_PAGE');
+    expect(result?.findings[0]?.category).toBe('info');
+    expect(result?.comparison.newFindings).toEqual([]);
   });
 });
 

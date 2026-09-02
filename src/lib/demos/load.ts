@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isDemoExpired } from '@/lib/demos/retention';
 import { mergeDemoInstanceData } from '@/lib/templates/merge';
 import { mergeDemoInstanceDataV2 } from '@/lib/templates/merge-v2';
 import { mergeDemoInstanceDataV3 } from '@/lib/templates/merge-v3';
@@ -166,6 +167,9 @@ export async function loadDemoById(
     .maybeSingle();
   if (error) throw new Error(`Demo: lettura fallita — ${error.message}`);
   if (!site) return null;
+  if (site.status === 'DISABLED' || site.status === 'EXPIRED' || isDemoExpired(site.expires_at)) {
+    return null;
+  }
   return hydrateDemo(admin, site as Record<string, unknown>);
 }
 
@@ -180,7 +184,9 @@ export async function loadDemoBySlug(
     .maybeSingle();
   if (error) throw new Error(`Demo: lettura pubblica fallita — ${error.message}`);
   if (!site) return null;
-  if (site.status === 'DISABLED' || site.status === 'EXPIRED') return null;
+  if (site.status === 'DISABLED' || site.status === 'EXPIRED' || isDemoExpired(site.expires_at)) {
+    return null;
+  }
   return hydrateDemo(admin, site as Record<string, unknown>);
 }
 

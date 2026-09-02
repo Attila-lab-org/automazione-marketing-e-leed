@@ -6,7 +6,8 @@ import type {
   SecurityTargetRow,
 } from '@/lib/types/database';
 import { deepAnalysisFromRow, runAuthorizedDeepScan, type DeepAnalysis } from './deep-scan';
-import { analysisFromAudit } from './run-audit';
+import { analysisFromAudit, hasUsableAuditAnalysis } from './run-audit';
+import { normalizeDomain } from '@/lib/leads/normalize';
 
 export async function openDeepCheck(
   admin: AppSupabaseClient,
@@ -108,6 +109,19 @@ export async function runDeepCheck(
     .maybeSingle();
   if (baselineError) throw new Error(baselineError.message);
   if (!baseline) throw new Error('Il primo report non è più disponibile.');
+  if (
+    normalizeDomain(baseline.requested_url) !== normalizeDomain(target.url)
+  ) {
+    throw new Error(
+      'Il sito è cambiato dopo il consenso: rileggi la homepage e registra un nuovo consenso.',
+    );
+  }
+  const baselineAnalysis = analysisFromAudit(baseline);
+  if (!hasUsableAuditAnalysis(baseline)) {
+    throw new Error(
+      'Il primo controllo non è riuscito: rileggi la homepage prima di avviare l’approfondimento.',
+    );
+  }
 
   const startedAt = new Date().toISOString();
   const { data: running, error: insertError } = await admin
@@ -138,7 +152,7 @@ export async function runDeepCheck(
   try {
     const analysis = await runAuthorizedDeepScan({
       targetUrl: target.url,
-      baselineFindings: analysisFromAudit(baseline).findings,
+      baselineFindings: baselineAnalysis.findings,
     });
     analysis.metadata.baselineScore = baseline.score;
     analysis.metadata.baselineAuditId = baseline.id;

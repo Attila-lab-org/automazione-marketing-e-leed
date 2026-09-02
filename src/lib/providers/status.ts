@@ -307,7 +307,7 @@ function probeResend(env: NodeJS.ProcessEnv): ProviderStatusItem {
       id: 'resend',
       name: 'Resend',
       status: 'ready',
-      detail: 'RESEND LIVE · TEST ONLY (PRODUCTION hard-blocked)',
+      detail: 'RESEND LIVE · invio ai destinatari della campagna',
     };
   }
   return { id: 'resend', name: 'Resend', status: 'error', detail: `mode non valido: ${mode}` };
@@ -333,7 +333,7 @@ function probeTelegram(env: NodeJS.ProcessEnv): ProviderStatusItem {
 
 /** Single source of truth for header / operator badge. */
 export function getResendRuntimeBadge(env: NodeJS.ProcessEnv = process.env): {
-  label: 'RESEND MOCK' | 'RESEND LIVE · TEST ONLY' | 'RESEND ERROR';
+  label: 'RESEND MOCK' | 'RESEND LIVE' | 'RESEND ERROR';
   mode: 'mock' | 'live' | 'error';
   detail: string;
 } {
@@ -355,9 +355,9 @@ export function getResendRuntimeBadge(env: NodeJS.ProcessEnv = process.env): {
       };
     }
     return {
-      label: 'RESEND LIVE · TEST ONLY',
+      label: 'RESEND LIVE',
       mode: 'live',
-      detail: 'Live solo per campagne TEST allowlisted. PRODUCTION bloccata.',
+      detail: 'Invio live ai destinatari della campagna dopo approvazione.',
     };
   }
   return { label: 'RESEND ERROR', mode: 'error', detail: `mode non valido: ${mode}` };

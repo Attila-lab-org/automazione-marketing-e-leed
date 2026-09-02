@@ -22,6 +22,11 @@ const EXPLAIN: Record<string, FindingExplain> = {
     meaning: 'La homepage non ha restituito una pagina normale.',
     risk: 'il visitatore non vede il sito e va altrove. Da fuori non si può giudicare il resto.',
   },
+  BROKEN_PUBLIC_PAGE: {
+    meaning: 'Un link del sito porta a una pagina che non si apre.',
+    risk: 'il visitatore può interrompere la navigazione perché non trova il contenuto promesso.',
+    limit: 'Non è una falla di sicurezza e non abbassa il punteggio.',
+  },
   CARD_FORM_OWN: {
     meaning:
       'Il campo del numero carta compare direttamente nella pagina. Non possiamo considerarlo isolato solo perché è caricato anche un fornitore di pagamento.',
@@ -148,7 +153,53 @@ const EXPLAIN: Record<string, FindingExplain> = {
     risk: 'qualche dettaglio in fondo può non comparire in questo report.',
     limit: 'Non è un problema di sicurezza: è un limite di lettura.',
   },
+  SECURITY_TXT_PRESENT: {
+    meaning: 'Il sito indica pubblicamente come segnalare un problema di sicurezza.',
+    risk: 'chi trova un problema sa a chi comunicarlo.',
+    limit: 'La presenza del contatto non dimostra quanto velocemente verrà gestita una segnalazione.',
+  },
 };
+
+const PLAIN_TITLES: Record<string, string> = {
+  NO_HTTPS: 'Il sito non protegge la connessione',
+  BAD_CERT: 'Il lucchetto del sito non è valido',
+  HOMEPAGE_ERROR: 'La pagina principale non si apre correttamente',
+  BROKEN_PUBLIC_PAGE: 'Un link del sito porta a una pagina non disponibile',
+  CARD_FORM_OWN: 'I dati della carta potrebbero passare dal sito',
+  FORM_TO_HTTP: 'Un modulo invia dati senza protezione',
+  MIXED_CONTENT: 'Alcuni elementi della pagina non sono protetti',
+  COOKIE_INSECURE: 'Un cookie viaggia senza protezione completa',
+  COOKIE_NO_HTTPONLY: 'Un cookie di accesso è leggibile dalla pagina',
+  COOKIE_NO_SAMESITE: 'Un cookie di accesso ha una protezione in meno',
+  NO_HSTS: 'Il sito non obbliga il browser a mantenere il lucchetto',
+  HSTS_WEAK: 'La protezione del lucchetto dura troppo poco',
+  NO_CSP: 'Manca una regola che limita codice estraneo',
+  CSP_WEAK: 'La regola contro codice estraneo è troppo permissiva',
+  CSP_REPORT_ONLY: 'La regola contro codice estraneo avvisa ma non blocca',
+  NO_FRAME_PROTECTION: 'Il sito può essere mostrato dentro un altro sito',
+  NO_NOSNIFF: 'Manca un controllo sul tipo dei file',
+  NO_REFERRER_POLICY:
+    'Il sito condivide più informazioni di navigazione del necessario',
+  NO_PERMISSIONS_POLICY: 'Fotocamera e posizione non sono limitate in anticipo',
+  WP_PINGBACK: 'WordPress pubblica il collegamento per i pingback',
+  EMAILS_VISIBLE: 'L’indirizzo email è pubblico',
+  PHONES_VISIBLE: 'Il numero di telefono è pubblico',
+  GENERATOR_VERSION: 'Il sito mostra il programma e la versione utilizzati',
+  SERVER_BANNER: 'Il server mostra il proprio programma e la versione',
+  VISIBLE_MAPS_KEY: 'La chiave delle mappe è visibile',
+  VISIBLE_SECRET: 'Una chiave riservata compare nella pagina',
+  ADMIN_LINK: 'La pagina mostra dove si accede all’area riservata',
+  LOGIN_FORM: 'Nella pagina è presente un accesso con password',
+  FILE_UPLOAD: 'La pagina permette di inviare un file',
+  SOURCEMAP: 'Il sito pubblica informazioni utili agli sviluppatori',
+  OLD_COPYRIGHT: 'Nel sito compare un anno molto vecchio',
+  HTML_TRUNCATED: 'La pagina era troppo lunga per essere letta interamente',
+  SECURITY_TXT_PRESENT: 'Il sito indica come segnalare problemi di sicurezza',
+};
+
+export function plainFindingTitle(code: string, fallback: string): string {
+  return PLAIN_TITLES[code] ?? fallback;
+}
 
 export function explainFinding(code: string): FindingExplain {
   return (

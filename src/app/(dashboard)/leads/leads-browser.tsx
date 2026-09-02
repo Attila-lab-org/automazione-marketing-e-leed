@@ -149,8 +149,6 @@ export default function LeadsBrowser({
   const [campaignLeads, setCampaignLeads] = useState<LeadView[]>([]);
   const [campaignName, setCampaignName] = useState("");
   const [campaignMode, setCampaignMode] = useState<"MANUAL" | "SCORE_BASED">("MANUAL");
-  const [deliveryMode, setDeliveryMode] = useState<"PRODUCTION" | "TEST">("TEST");
-  const [testRecipient, setTestRecipient] = useState("");
   const [manualOpen, setManualOpen] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
   const [manualForm, setManualForm] = useState({
@@ -408,18 +406,12 @@ export default function LeadsBrowser({
     setCampaignLeads(selected);
     setCampaignName(`Invio email ${dateLabel}`);
     setCampaignMode("MANUAL");
-    setDeliveryMode("TEST");
-    setTestRecipient("");
     setCampaignModalOpen(true);
   }
 
   async function onCreateCampaign(e: FormEvent) {
     e.preventDefault();
     if (!campaignLeads.length || !campaignName.trim()) return;
-    if (deliveryMode === "TEST" && !testRecipient.trim()) {
-      setResultBanner("Invio di prova: inserisci l’indirizzo che deve ricevere le email.");
-      return;
-    }
     setCreatingCampaign(true);
     setResultBanner(null);
     try {
@@ -430,8 +422,7 @@ export default function LeadsBrowser({
           name: campaignName.trim(),
           leadIds: campaignLeads.map((l) => l.id),
           mode: campaignMode,
-          deliveryMode,
-          testRecipient: deliveryMode === "TEST" ? testRecipient.trim() : undefined,
+          deliveryMode: "PRODUCTION",
           prepare: true,
         }),
       });
@@ -826,56 +817,6 @@ export default function LeadsBrowser({
                 <option value="SCORE_BASED">Scelta automatica — in base al punteggio</option>
               </select>
             </label>
-
-            <fieldset className="mt-4">
-              <legend className="text-sm font-medium text-stone-700">Modalità invio</legend>
-              <div className="mt-2 flex gap-4 text-sm text-stone-700">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="deliveryMode"
-                    checked={deliveryMode === "PRODUCTION"}
-                    onChange={() => setDeliveryMode("PRODUCTION")}
-                    disabled
-                    title="L’invio ai clienti reali non è ancora abilitato."
-                  />
-                  Clienti reali (non ancora disponibile)
-                </label>
-                <label
-                  title="Le email arriveranno soltanto all’indirizzo di prova inserito."
-                  className="flex items-center gap-2"
-                >
-                  <input
-                    type="radio"
-                    name="deliveryMode"
-                    checked={deliveryMode === "TEST"}
-                    onChange={() => setDeliveryMode("TEST")}
-                    disabled={creatingCampaign}
-                  />
-                  Solo prova
-                </label>
-              </div>
-            </fieldset>
-
-            {deliveryMode === "TEST" ? (
-              <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2">
-                <p className="text-xs font-semibold text-violet-900">
-                  INVIO DI PROVA — Nessun cliente reale verrà contattato.
-                </p>
-                <label className="mt-2 block text-sm font-medium text-stone-700">
-                  Indirizzo che riceverà la prova
-                  <input
-                    required
-                    type="email"
-                    value={testRecipient}
-                    onChange={(e) => setTestRecipient(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
-                    disabled={creatingCampaign}
-                    placeholder="tua@email.it"
-                  />
-                </label>
-              </div>
-            ) : null}
 
             <div className="mt-6 flex justify-end gap-3">
               <button

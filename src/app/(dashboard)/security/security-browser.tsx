@@ -1,11 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import SectorSelect from "@/components/sector-select";
 import SmartDataTable, {
   type SmartDataTableColumn,
 } from "@/components/smart-data-table";
+import { normalizeDomain } from "@/lib/leads/normalize";
 import type { LeadRow } from "@/lib/types/database";
 import {
   SECURITY_STATUS_LABELS,
@@ -18,6 +27,146 @@ type DiscoverResponse = {
   error?: string;
   leads?: LeadRow[];
 };
+
+const CONTACT_PICKER_LIMIT = 8;
+
+function cityLabel(raw: string | null): string {
+  const value = raw?.trim().replace(/\s+/g, " ") ?? "";
+  if (!value) return "";
+  return value
+    .toLocaleLowerCase("it-IT")
+    .replace(/(^|[\s'-])\p{L}/gu, (match) => match.toLocaleUpperCase("it-IT"));
+}
+
+function contactSiteLabel(lead: LeadRow): string {
+  const domain = lead.normalized_domain || normalizeDomain(lead.website_url);
+  return [lead.name, cityLabel(lead.city), domain].filter(Boolean).join(" · ");
+}
+
+function ContactSitePicker({
+  contacts,
+  value,
+  onChange,
+  disabled,
+  action,
+}: {
+  contacts: LeadRow[];
+  value: string;
+  onChange: (id: string) => void;
+  disabled?: boolean;
+  action?: ReactNode;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selected = contacts.find((lead) => lead.id === value) ?? null;
+
+  useEffect(() => {
+    if (!open) setQuery("");
+  }, [open, value]);
+
+  useEffect(() => {
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return contacts;
+    return contacts.filter((lead) =>
+      [lead.name, lead.city ?? "", lead.normalized_domain ?? "", lead.website_url ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle),
+    );
+  }, [contacts, query]);
+  const matches = filtered.slice(0, CONTACT_PICKER_LIMIT);
+  const remaining = filtered.length - matches.length;
+
+  return (
+    <div ref={rootRef}>
+      <div className="grid items-end gap-3 md:grid-cols-[1fr_auto]">
+        <div className="relative mt-1">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+              <circle cx="11" cy="11" r="7" />
+              <path strokeLinecap="round" d="m20 20-3.5-3.5" />
+            </svg>
+          </span>
+          <input
+            type="search"
+            role="combobox"
+            aria-expanded={open}
+            aria-controls="security-contact-picker"
+            autoComplete="off"
+            disabled={disabled || contacts.length === 0}
+            value={open && (query || !selected) ? query : selected ? contactSiteLabel(selected) : ""}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setOpen(true);
+              if (value) onChange("");
+            }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setOpen(false);
+            }}
+            placeholder={contacts.length === 0 ? "Nessun contatto con sito" : "Cerca nome, città o sito…"}
+            className="w-full rounded-lg border border-stone-200 bg-stone-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-100 disabled:opacity-60"
+          />
+        </div>
+        {action}
+      </div>
+      {open && contacts.length > 0 ? (
+        <ul
+          id="security-contact-picker"
+          role="listbox"
+          className="mt-2 max-h-56 overflow-auto rounded-xl border border-stone-200 bg-white"
+        >
+          {matches.length === 0 ? (
+            <li className="px-4 py-3 text-sm text-stone-500">Nessun contatto corrisponde.</li>
+          ) : (
+            matches.map((lead) => (
+              <li key={lead.id} className="border-b border-stone-100 last:border-0">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={lead.id === value}
+                  onClick={() => {
+                    onChange(lead.id);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left hover:bg-stone-50 ${
+                    lead.id === value ? "bg-amber-50" : ""
+                  }`}
+                >
+                  <span>
+                    <span className="block text-sm font-medium text-stone-900">{lead.name}</span>
+                    <span className="mt-0.5 block truncate text-xs text-stone-500">
+                      {[cityLabel(lead.city), lead.normalized_domain || normalizeDomain(lead.website_url)]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))
+          )}
+          {remaining > 0 ? (
+            <li className="px-4 py-2 text-xs text-stone-400">
+              Altri {remaining}: continua a scrivere per restringere.
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 export default function SecurityBrowser() {
   const router = useRouter();
@@ -282,12 +431,15 @@ export default function SecurityBrowser() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-stone-200 bg-white p-5">
-        <h2 className="text-base font-semibold text-stone-900">1. Cerca i contatti</h2>
-        <p className="mt-1 text-sm text-stone-600">
-          Stessa ricerca di Contatti: settore e città. I risultati con un sito finiscono nella lista qui sotto.
-        </p>
-        <form onSubmit={onSearch} className="mt-4 grid gap-3 md:grid-cols-[1.2fr_1fr_auto]">
+      <section className="rounded-xl border border-stone-200 bg-white p-4">
+        <div>
+          <h2 className="text-sm font-semibold text-stone-900">Cerca e controlla un sito</h2>
+          <p className="mt-0.5 text-xs text-stone-500">
+            Stessa ricerca di Contatti. Poi scegli un’attività già salvata oppure scrivi l’indirizzo.
+          </p>
+        </div>
+
+        <form onSubmit={onSearch} className="mt-4 grid items-end gap-3 md:grid-cols-[1.2fr_1fr_auto]">
           <label className="text-sm font-medium text-stone-700">
             Settore
             <SectorSelect value={category} onChange={setCategory} disabled={busy} />
@@ -306,51 +458,35 @@ export default function SecurityBrowser() {
           <button
             type="submit"
             disabled={busy || !category}
-            className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60 md:self-end"
+            className="h-10 rounded-lg bg-stone-900 px-5 text-sm font-semibold text-white disabled:opacity-60"
           >
             {searching ? "Cerco…" : "Avvia ricerca"}
           </button>
         </form>
-      </section>
 
-      <section className="rounded-xl border border-stone-200 bg-white p-5">
-        <h2 className="text-base font-semibold text-stone-900">2. Scegli o inserisci un sito</h2>
-        <p className="mt-1 text-sm text-stone-600">
-          Prendi un contatto già salvato oppure scrivi l’indirizzo. Apro solo la homepage pubblica, come un visitatore.
-        </p>
-        {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
-        {checking ? <p className="mt-3 text-sm text-stone-600">Apro la pagina pubblica…</p> : null}
-        <form onSubmit={checkPickedContact} className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-          <label className="text-sm font-medium text-stone-700">
-            Contatto già in lista
-            <select
-              value={pickedLeadId}
-              onChange={(event) => setPickedLeadId(event.target.value)}
-              disabled={busy || contactsWithSite.length === 0}
-              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
-            >
-              <option value="">
-                {contactsWithSite.length === 0
-                  ? "Nessun contatto con sito"
-                  : "Scegli un’attività…"}
-              </option>
-              {contactsWithSite.map((lead) => (
-                <option key={lead.id} value={lead.id}>
-                  {lead.name}
-                  {lead.city ? ` · ${lead.city}` : ""} — {lead.website_url}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="submit"
-            disabled={busy || !pickedLeadId}
-            className="rounded-lg border border-stone-300 bg-white px-5 py-2 text-sm font-semibold text-stone-800 disabled:opacity-60 md:self-end"
-          >
-            {checking ? "Controllo…" : "Controlla questo"}
-          </button>
+        <form onSubmit={checkPickedContact} className="mt-5 border-t border-stone-100 pt-4">
+          <p className="text-sm font-medium text-stone-700">Contatto già salvato</p>
+          <ContactSitePicker
+            contacts={contactsWithSite}
+            value={pickedLeadId}
+            onChange={setPickedLeadId}
+            disabled={busy}
+            action={
+              <button
+                type="submit"
+                disabled={busy || !pickedLeadId}
+                className="h-10 rounded-lg border border-stone-300 bg-white px-5 text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60"
+              >
+                {checking ? "Controllo…" : "Controlla"}
+              </button>
+            }
+          />
         </form>
-        <form onSubmit={checkTypedSite} className="mt-4 grid gap-3 md:grid-cols-[1fr_1.4fr_auto]">
+
+        <form
+          onSubmit={checkTypedSite}
+          className="mt-4 grid items-end gap-3 border-t border-stone-100 pt-4 md:grid-cols-[1fr_1.4fr_auto]"
+        >
           <label className="text-sm font-medium text-stone-700">
             Nome attività
             <input
@@ -375,72 +511,77 @@ export default function SecurityBrowser() {
           <button
             type="submit"
             disabled={busy || !manualUrl.trim()}
-            className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60 md:self-end"
+            className="h-10 rounded-lg bg-stone-900 px-5 text-sm font-semibold text-white disabled:opacity-60"
           >
             {checking ? "Apro la pagina…" : "Controlla questo sito"}
           </button>
         </form>
+
+        {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
+        {checking ? <p className="mt-3 text-sm text-stone-600">Apro la pagina pubblica…</p> : null}
       </section>
 
-      <section className="rounded-xl border border-stone-200 bg-white p-5">
-        <h2 className="text-base font-semibold text-stone-900">3. Lista e report</h2>
-        <p className="mt-1 text-sm text-stone-600">
-          Puoi prenderne uno, alcuni, o tutti quelli visibili. Poi parte lo script: apre solo la pagina pubblica e scrive un report con prove, senza ipotesi.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(
-            [
-              ["all", "Tutti"],
-              ["listed", "Da analizzare"],
-              ["audited", "Con report"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setStatusFilter(id)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                statusFilter === id
-                  ? "border-stone-900 bg-stone-900 text-white"
-                  : "border-stone-300 bg-white text-stone-600"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-stone-900">Lista e report</h2>
+            <p className="mt-0.5 text-xs text-stone-500">
+              Apri una riga per il report, oppure analizza più siti insieme.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["all", "Tutti"],
+                ["listed", "Da analizzare"],
+                ["audited", "Con report"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setStatusFilter(id)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  statusFilter === id
+                    ? "border-stone-900 bg-stone-900 text-white"
+                    : "border-stone-300 bg-white text-stone-600"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-        {banner ? <p className="mt-3 text-sm text-emerald-800">{banner}</p> : null}
-        {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
+        {banner ? <p className="text-sm text-emerald-800">{banner}</p> : null}
+        {error ? <p className="text-sm text-red-700">{error}</p> : null}
         {analyzing || checking ? (
-          <p className="mt-3 text-sm text-stone-600">
+          <p className="text-sm text-stone-600">
             {checking
               ? "Apro la pagina pubblica…"
               : "Apro le pagine pubbliche, al massimo cinque alla volta…"}
           </p>
         ) : null}
         {loading ? (
-          <p className="mt-4 text-sm text-stone-500">Carico la lista…</p>
+          <p className="text-sm text-stone-500">Carico la lista…</p>
         ) : (
-          <div className="mt-4">
-            <SmartDataTable
-              columns={columns}
-              rows={visible}
-              rowKey={(row) => row.id}
-              searchText={(row) => `${row.name} ${row.domain} ${row.city ?? ""} ${row.email ?? ""}`}
-              filterPlaceholder="Filtra per nome, sito, città…"
-              onRowClick={(row) => router.push(`/security/${row.id}`)}
-              bulkActions={[
-                {
-                  label: analyzing ? "Analizzo…" : "Analizza i selezionati",
-                  onApply: (selected) => {
-                    if (!busy) void analyzeRows(selected);
-                  },
+          <SmartDataTable
+            columns={columns}
+            rows={visible}
+            rowKey={(row) => row.id}
+            searchText={(row) => `${row.name} ${row.domain} ${row.city ?? ""} ${row.email ?? ""}`}
+            filterPlaceholder="Filtra per nome, sito, città…"
+            onRowClick={(row) => router.push(`/security/${row.id}`)}
+            bulkActions={[
+              {
+                label: analyzing ? "Analizzo…" : "Analizza i selezionati",
+                onApply: (selected) => {
+                  if (!busy) void analyzeRows(selected);
                 },
-              ]}
-              emptyTitle="Nessun sito in lista"
-              emptyDescription="Cerca un settore, scegli un contatto già salvato oppure scrivi l’indirizzo del sito."
-            />
-          </div>
+              },
+            ]}
+            emptyTitle="Nessun sito in lista"
+            emptyDescription="Cerca un settore, scegli un contatto già salvato oppure scrivi l’indirizzo del sito."
+          />
         )}
       </section>
     </div>

@@ -31,6 +31,8 @@ import { applyAiOutboundIfAllowed } from '@/lib/messaging/ai-outbound';
 import { analyzeLeadWebsite } from '@/lib/intelligence/analyze';
 import { extractWebsiteSnapshot, type WebsiteSnapshot } from '@/lib/intelligence/extract';
 import { ensureMessageThread } from '@/lib/messaging/persist';
+import { appendEmailComplianceFooter } from '@/lib/suppression/email-compliance';
+import { buildUnsubscribeUrls } from '@/lib/suppression/unsubscribe-token';
 
 type JobRef = {
   id: string;
@@ -476,14 +478,7 @@ async function handleSendMessage(
     .eq('id', cl.lead_id)
     .maybeSingle();
 
-  // Live Resend unlocked only for TEST campaigns (PRODUCTION stays hard-blocked).
-  if (providerMode === 'live' && campaign.delivery_mode !== 'TEST') {
-    throw new Error(
-      'Invio live disabilitato per campagne PRODUCTION — usa Campaign TEST oppure RESEND_PROVIDER_MODE=mock',
-    );
-  }
-
-  // Live TEST must never emit localhost demo/preview URLs
+  // Live send must never emit localhost demo/preview URLs
   if (providerMode === 'live') {
     const { assertAppUrlSafeForLiveSend } = await import('@/lib/app-url');
     assertAppUrlSafeForLiveSend(env);
@@ -572,15 +567,24 @@ async function handleSendMessage(
       : env.RESEND_REPLY_TO?.trim() || fromAddress || 'onboarding@resend.dev';
   const resend = getResendProvider(env);
   const idempotencyKey = `SEND_MESSAGE:campaign_lead:${cl.id}:step:${sequenceStep}`;
+  const unsubscribe = buildUnsubscribeUrls(job.workspaceId, cl.lead_id, env);
+  const finalHtml = appendEmailComplianceFooter(
+    draft!.body!,
+    job.workspaceId,
+    cl.lead_id,
+    env,
+  );
   const sendResult = await resend.send({
     from: fromAddress || 'onboarding@resend.dev',
     to: delivery.actualDeliveryRecipient,
     subject: draft!.subject!,
-    html: draft!.body!,
-    text: emailHtmlToText(draft!.body!),
+    html: finalHtml,
+    text: emailHtmlToText(finalHtml),
     idempotencyKey,
     headers: {
       'Reply-To': replyTo,
+      'List-Unsubscribe': `<${unsubscribe.oneClickUrl}>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
     },
   });
 
@@ -601,7 +605,7 @@ async function handleSendMessage(
       intended_recipient: delivery.intendedRecipient,
       actual_delivery_recipient: delivery.actualDeliveryRecipient,
       subject: draft!.subject!,
-      body_snapshot: draft!.body!,
+      body_snapshot: finalHtml,
       sequence_step: sequenceStep,
       sent_at: sendResult.sentAt,
     })

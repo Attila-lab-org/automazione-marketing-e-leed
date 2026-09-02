@@ -9,7 +9,7 @@ import type {
 } from '@/lib/types/database';
 import { normalizeDomain } from '@/lib/leads/normalize';
 import { mapPool } from './concurrency';
-import { buildScopeLetter, buildSecurityEmail } from './copy';
+import { buildScopeLetter, buildSecurityEmail, shouldPrepareSecurityEmail } from './copy';
 import { fetchPublicHomepage, newPublicSlug, PageFetchError } from './fetch-page';
 import {
   analyzeSurfacePage,
@@ -37,10 +37,12 @@ export type SecurityReport = {
   analysis: SurfaceAnalysis | null;
   deepAudit: SecurityDeepAuditRow | null;
   deepAnalysis: DeepAnalysis | null;
+  deepComparisonCurrent: boolean;
   emailPreview: { subject: string; html: string; text: string } | null;
   letter: string;
   canSendEmail: boolean;
   hasConfirmedProblems: boolean;
+  hasActionableFindings: boolean;
 };
 
 function asJson(value: unknown): Json {
@@ -168,6 +170,14 @@ export function analysisFromAudit(audit: SecurityAuditRow): SurfaceAnalysis {
   };
 }
 
+export function hasUsableAuditAnalysis(audit: SecurityAuditRow): boolean {
+  return !(audit.error && parseFindings(audit.findings).length === 0);
+}
+
+export function securityTargetDomainChanged(previousUrl: string, nextUrl: string): boolean {
+  return normalizeDomain(previousUrl) !== normalizeDomain(nextUrl);
+}
+
 export async function ensureTargetForLead(
   admin: AppSupabaseClient,
   workspaceId: string,
@@ -177,7 +187,7 @@ export async function ensureTargetForLead(
   if (!url) {
     throw new Error('Questo contatto non ha un sito da aprire.');
   }
-  const domain = lead.normalized_domain || normalizeDomain(url) || 'sito';
+  const domain = normalizeDomain(url) || lead.normalized_domain || 'sito';
 
   const { data: existing, error: existingError } = await admin
     .from('security_targets')
@@ -189,12 +199,26 @@ export async function ensureTargetForLead(
     throw new Error(`Sicurezza: lettura lista fallita — ${existingError.message}`);
   }
   if (existing) {
+    const domainChanged = securityTargetDomainChanged(existing.url, url);
     const { data: updated, error: updateError } = await admin
       .from('security_targets')
       .update({
         url,
         domain,
         name: lead.name,
+        ...(domainChanged
+          ? {
+              status: 'listed' as const,
+              score: null,
+              latest_audit_id: null,
+              latest_deep_audit_id: null,
+              consent_channel: null,
+              consent_note: null,
+              consent_at: null,
+              deep_notes: null,
+              public_slug: newPublicSlug(),
+            }
+          : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', existing.id)
@@ -314,7 +338,7 @@ async function persistAudit(
     .from('security_targets')
     .update({
       status,
-      score,
+      score: analysis ? score : null,
       latest_audit_id: audit.id,
       updated_at: new Date().toISOString(),
     })
@@ -489,7 +513,7 @@ export async function loadSecurityReport(
     deepAudit = data ?? null;
   }
 
-  const analysis = audit ? analysisFromAudit(audit) : null;
+  const analysis = audit && hasUsableAuditAnalysis(audit) ? analysisFromAudit(audit) : null;
   if (analysis?.emailsFound.length) {
     const saved = await persistLeadEmailIfMissing(admin, {
       workspaceId,
@@ -506,10 +530,15 @@ export async function loadSecurityReport(
   const hasConfirmedProblems = Boolean(
     analysis?.findings.some((item) => item.category === 'problem'),
   );
+  const hasActionableFindings = analysis ? shouldPrepareSecurityEmail(analysis) : false;
   const emailPreview =
-    analysis && hasConfirmedProblems
+    analysis && hasActionableFindings
       ? buildSecurityEmail({ businessName: target.name, domain: target.domain, analysis })
       : null;
+  const deepAnalysis = deepAudit ? deepAnalysisFromRow(deepAudit) : null;
+  const deepComparisonCurrent = Boolean(
+    audit && deepAudit && deepAudit.baseline_audit_id === audit.id,
+  );
 
   return {
     target,
@@ -517,11 +546,13 @@ export async function loadSecurityReport(
     audit,
     analysis,
     deepAudit,
-    deepAnalysis: deepAudit ? deepAnalysisFromRow(deepAudit) : null,
+    deepAnalysis,
+    deepComparisonCurrent,
     emailPreview,
     letter: buildScopeLetter({ businessName: target.name, domain: target.domain }),
-    canSendEmail: hasConfirmedProblems && Boolean(lead.email?.includes('@')),
+    canSendEmail: hasActionableFindings && Boolean(lead.email?.includes('@')),
     hasConfirmedProblems,
+    hasActionableFindings,
   };
 }
 
@@ -548,6 +579,7 @@ export async function loadPublicSecurityReport(
     .eq('id', target.latest_audit_id)
     .maybeSingle();
   if (!audit) return null;
+  if (!hasUsableAuditAnalysis(audit)) return null;
   const analysis = analysisFromAudit(audit);
   const grouped = {
     problems: analysis.findings.filter((item) => item.category === 'problem'),

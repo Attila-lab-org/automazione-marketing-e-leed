@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { mapPool } from '@/lib/security/concurrency';
-import { buildScopeLetter, buildSecurityEmail } from '@/lib/security/copy';
-import { explainFinding, riskIfUnfixed } from '@/lib/security/explain';
+import {
+  buildScopeLetter,
+  buildSecurityEmail,
+  shouldPrepareSecurityEmail,
+} from '@/lib/security/copy';
+import { explainFinding, plainFindingTitle, riskIfUnfixed } from '@/lib/security/explain';
 import { displayNameForSite, homepageHref } from '@/lib/security/manual-site';
 import {
   analyzeSurfacePage,
@@ -10,6 +14,11 @@ import {
   findingsByCategory,
   scoreBand,
 } from '@/lib/security/surface-audit';
+import {
+  hasUsableAuditAnalysis,
+  securityTargetDomainChanged,
+} from '@/lib/security/run-audit';
+import type { SecurityAuditRow } from '@/lib/types/database';
 import { isBlockedHostname, isPrivateIp, parsePublicHttpUrl, UrlNotAllowedError } from '@/lib/security/url-guard';
 
 const HTTPS = 'https://www.studioesempio.it/';
@@ -396,8 +405,20 @@ describe('badCertAnalysis', () => {
 });
 
 describe('copy email e lettera', () => {
+  it('prepara la bozza per problemi o protezioni, non per semplici informazioni', () => {
+    const onlyContact = analyze('<html>info@studioesempio.it</html>', HARDENED);
+    const missingProtections = analyze('<html>info@studioesempio.it</html>', {});
+    const withoutOptionalPolicy = Object.fromEntries(
+      Object.entries(HARDENED).filter(([name]) => name !== 'permissions-policy'),
+    );
+    const oneOptionalProtection = analyze('<html></html>', withoutOptionalPolicy);
+    expect(shouldPrepareSecurityEmail(onlyContact)).toBe(false);
+    expect(shouldPrepareSecurityEmail(missingProtections)).toBe(true);
+    expect(shouldPrepareSecurityEmail(oneOptionalProtection)).toBe(false);
+  });
+
   it('l’email elenca fatti e non dice probabilmente', () => {
-    const analysis = analyze('<html>info@studioesempio.it</html>', HARDENED);
+    const analysis = analyze('<html>info@studioesempio.it</html>', {});
     const email = buildSecurityEmail({
       businessName: 'Studio Esempio',
       domain: 'studioesempio.it',
@@ -406,7 +427,9 @@ describe('copy email e lettera', () => {
     expect(email.subject).toMatch(/Cose visibili/);
     expect(email.text.toLowerCase()).not.toMatch(/probabilmente|vulnerabil|cve/);
     expect(email.text).toMatch(/come farebbe un visitatore/);
-    expect(email.text).toMatch(/Informazioni pubbliche/);
+    expect(email.text).toMatch(/Protezione consigliata/);
+    expect(email.text).not.toMatch(/Informazioni pubbliche/);
+    expect(email.text).toMatch(/Manca una regola che limita codice estraneo/);
   });
 
   it('la lettera accetta anche il permesso al telefono, non è un attacco', () => {
@@ -428,6 +451,57 @@ describe('copy email e lettera', () => {
     expect(email.text).toMatch(/Wi-Fi|fiducia/i);
     expect(email.text).toMatch(/prima di questa mail/);
     expect(email.text).toMatch(/Da sistemare/);
+  });
+});
+
+describe('validità del primo report', () => {
+  const failedAudit = {
+    id: 'audit-1',
+    workspace_id: 'workspace-1',
+    target_id: 'target-1',
+    lead_id: 'lead-1',
+    requested_url: 'https://example.it/',
+    final_url: null,
+    http_status: null,
+    score: 0,
+    headers: {},
+    technologies: [],
+    findings: [],
+    emails_found: [],
+    api_mentions: [],
+    ga_ids: [],
+    error: 'TIMEOUT',
+    created_at: '2026-09-02T10:00:00.000Z',
+  } satisfies SecurityAuditRow;
+
+  it('non usa come baseline una richiesta fallita senza alcuna evidenza', () => {
+    expect(hasUsableAuditAnalysis(failedAudit)).toBe(false);
+    expect(
+      hasUsableAuditAnalysis({
+        ...failedAudit,
+        findings: [
+          {
+            code: 'BAD_CERT',
+            severity: 'HIGH',
+            category: 'problem',
+            confidence: 'confirmed',
+            title: 'Certificato non valido',
+            detail: 'Il certificato HTTPS non è valido.',
+            evidence: 'CERT',
+            limit: 'La connessione è stata interrotta.',
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it('richiede nuovi report e consenso quando cambia il dominio', () => {
+    expect(
+      securityTargetDomainChanged('https://www.example.it/', 'https://example.it/contatti'),
+    ).toBe(false);
+    expect(
+      securityTargetDomainChanged('https://example.it/', 'https://nuovo-sito.it/'),
+    ).toBe(true);
   });
 });
 
@@ -460,6 +534,47 @@ describe('spiegazioni per l’utente medio', () => {
       expect(`${explained.meaning} ${explained.risk}`.toLowerCase()).not.toMatch(
         /probabilmente|cve|sfruttabil/,
       );
+    }
+  });
+
+  it('ogni codice mostrato ha un titolo comprensibile dedicato', () => {
+    const codes = [
+      'NO_HTTPS',
+      'BAD_CERT',
+      'HOMEPAGE_ERROR',
+      'BROKEN_PUBLIC_PAGE',
+      'CARD_FORM_OWN',
+      'FORM_TO_HTTP',
+      'MIXED_CONTENT',
+      'COOKIE_INSECURE',
+      'COOKIE_NO_HTTPONLY',
+      'COOKIE_NO_SAMESITE',
+      'VISIBLE_SECRET',
+      'VISIBLE_MAPS_KEY',
+      'ADMIN_LINK',
+      'WP_PINGBACK',
+      'LOGIN_FORM',
+      'FILE_UPLOAD',
+      'SERVER_BANNER',
+      'GENERATOR_VERSION',
+      'SOURCEMAP',
+      'NO_HSTS',
+      'HSTS_WEAK',
+      'NO_CSP',
+      'CSP_REPORT_ONLY',
+      'CSP_WEAK',
+      'NO_FRAME_PROTECTION',
+      'NO_NOSNIFF',
+      'NO_REFERRER_POLICY',
+      'NO_PERMISSIONS_POLICY',
+      'EMAILS_VISIBLE',
+      'PHONES_VISIBLE',
+      'OLD_COPYRIGHT',
+      'HTML_TRUNCATED',
+      'SECURITY_TXT_PRESENT',
+    ];
+    for (const code of codes) {
+      expect(plainFindingTitle(code, 'FALLBACK')).not.toBe('FALLBACK');
     }
   });
 });

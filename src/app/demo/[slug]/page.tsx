@@ -10,6 +10,7 @@ import {
   isOwnerWhatsAppConfigured,
 } from '@/lib/templates/owner-commercial';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import Link from 'next/link';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -68,6 +69,14 @@ export default async function PublicDemoPage({ params }: PageProps) {
         phoneEnabled={isOwnerPhoneConfigured()}
         siteEnabled={isOwnerContactConfigured()}
       />
+      <footer className="border-t border-stone-200 bg-white px-5 py-4 text-center text-xs leading-5 text-stone-500">
+        Anteprima dimostrativa creata da Atti-Lab usando informazioni pubblicamente visibili. Non è
+        il sito ufficiale dell’attività e viene cancellata dopo 36 ore.{' '}
+        <Link href="/privacy" className="underline">
+          Informazioni sui dati
+        </Link>
+        .
+      </footer>
     </>
   );
 }

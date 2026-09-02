@@ -56,12 +56,13 @@ export async function suppressLeadEmail(
   admin: AppSupabaseClient,
   workspaceId: string,
   leadId: string,
-  reason: 'UNSUBSCRIBE' | 'STOP_REQUEST',
+  reason: 'UNSUBSCRIBE' | 'STOP_REQUEST' | 'HARD_BOUNCE',
 ) {
   const { data: lead } = await admin
     .from('leads')
     .select('email, normalized_email')
     .eq('id', leadId)
+    .eq('workspace_id', workspaceId)
     .maybeSingle();
   const email = lead?.normalized_email || lead?.email;
   if (!email) return { suppressed: false };
@@ -78,13 +79,19 @@ export async function suppressLeadEmail(
       email,
       normalized_email: normalized,
       reason,
-      note: 'Deterministic inbound stop',
+      note:
+        reason === 'HARD_BOUNCE'
+          ? 'Provider delivery event'
+          : reason === 'UNSUBSCRIBE'
+            ? 'Recipient unsubscribe'
+            : 'Deterministic inbound stop',
     });
   }
   await admin
     .from('leads')
     .update({ business_status: 'SUPPRESSED', updated_at: new Date().toISOString() })
-    .eq('id', leadId);
+    .eq('id', leadId)
+    .eq('workspace_id', workspaceId);
   return { suppressed: true };
 }
 

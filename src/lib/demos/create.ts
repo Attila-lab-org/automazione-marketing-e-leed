@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { demoExpiresAt } from '@/lib/demos/retention';
 import { generateShortId, makePublicSlug } from '@/lib/demos/slug';
 import { ensureRestaurantPremiumV2 } from '@/lib/demos/ensure-template-v2';
 import { ensureRestaurantPremiumV3 } from '@/lib/demos/ensure-template-v3';
@@ -197,6 +198,7 @@ export async function createDemoFromLead(
     .eq('workspace_id', workspaceId)
     .eq('lead_id', typedLead.id)
     .eq('template_version_id', template.versionId)
+    .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -286,6 +288,7 @@ export async function createDemoFromLead(
         public_url: publicPath(slug),
         status: 'DRAFT',
         noindex: true,
+        expires_at: demoExpiresAt(),
       })
       .select('id, slug, lead_id, template_version_id, status')
       .single();

@@ -4,6 +4,7 @@ import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 import { runCommercialLearningCycle } from '@/lib/sales/learning';
 import { enqueueDueCommercialGoalTicks } from '@/lib/sales/goals/tick';
+import { purgeExpiredDemos } from '@/lib/demos/retention';
 
 export const runtime = 'nodejs';
 
@@ -28,6 +29,12 @@ async function run(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { limit?: number; workerId?: string };
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
+  const demoRetention = await purgeExpiredDemos(admin).catch((error) => ({
+    found: 0,
+    deleted: 0,
+    failed: 0,
+    error: error instanceof Error ? error.message : 'demo_retention_failed',
+  }));
   const goalTicks = await enqueueDueCommercialGoalTicks(admin, workspace.id).catch((error) => ({
     enqueued: 0,
     deduplicated: 0,
@@ -44,7 +51,13 @@ async function run(request: Request) {
     created: false,
     error: error instanceof Error ? error.message : 'learning_cycle_failed',
   }));
-  return NextResponse.json({ results, processed: results.length, learning, goalTicks });
+  return NextResponse.json({
+    results,
+    processed: results.length,
+    learning,
+    goalTicks,
+    demoRetention,
+  });
 }
 
 export const GET = run;

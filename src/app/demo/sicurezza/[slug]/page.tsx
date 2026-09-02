@@ -1,10 +1,11 @@
-import { explainFinding, riskIfUnfixed } from '@/lib/security/explain';
+import { explainFinding, plainFindingTitle, riskIfUnfixed } from '@/lib/security/explain';
 import { securityScoreClass } from '@/lib/security/labels';
 import { loadPublicSecurityReport } from '@/lib/security/run-audit';
 import { findingsByCategory, scoreBandLabel, type SurfaceFinding } from '@/lib/security/surface-audit';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { getOwnerWhatsApp, isOwnerContactConfigured } from '@/lib/templates/owner-commercial';
 import { buildWhatsAppUrl } from '@/lib/templates/v3-cta';
+import Link from 'next/link';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,9 @@ function PublicFinding({ item }: { item: SurfaceFinding }) {
   const isInfo = item.category === 'info';
   return (
     <li className="rounded-xl border border-stone-200 bg-white p-4">
-      <h3 className="font-semibold text-stone-900">{item.title}</h3>
+      <h3 className="font-semibold text-stone-900">
+        {plainFindingTitle(item.code, item.title)}
+      </h3>
       <p className="mt-2 text-sm text-stone-700">
         <span className="font-medium">Perché lo segnalo.</span> {explained.meaning}
       </p>
@@ -161,6 +164,14 @@ export default async function PublicSecurityPage({ params }: PageProps) {
           </a>
         ) : null}
       </div>
+      <p className="mt-8 border-t border-stone-200 pt-4 text-xs leading-5 text-stone-500">
+        Report dimostrativo di Atti-Lab basato su pagine pubbliche; non sostituisce un audit
+        certificato.{' '}
+        <Link href="/privacy" className="underline">
+          Informazioni sui dati
+        </Link>
+        .
+      </p>
     </main>
   );
 }

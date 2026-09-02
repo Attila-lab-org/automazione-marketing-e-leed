@@ -8,7 +8,7 @@ export default async function SecurityPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
         title="Sicurezza"
-        description="Cerca i contatti, scegli un’attività già salvata o scrivi tu l’indirizzo del sito. Si apre solo la pagina pubblica. Per ogni voce il report dice cosa si vede e cosa rischia se non sistema."
+        description="Cerca i contatti, scegli un’attività già salvata o scrivi l’indirizzo. Si apre solo la pagina pubblica."
       />
       <SecurityBrowser />
     </div>

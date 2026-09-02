@@ -4,6 +4,8 @@ import { getResendProvider } from '@/lib/providers/resend';
 import { loadSecurityReport } from '@/lib/security/run-audit';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
+import { appendEmailComplianceFooter } from '@/lib/suppression/email-compliance';
+import { buildUnsubscribeUrls } from '@/lib/suppression/unsubscribe-token';
 
 export const runtime = 'nodejs';
 
@@ -27,9 +29,9 @@ export const POST = withAdmin(async (request: Request, ctx?: unknown) => {
   if (!report.emailPreview) {
     return NextResponse.json(
       {
-        error: report.hasConfirmedProblems
+        error: report.hasActionableFindings
           ? 'Manca il report: analizza prima la pagina pubblica.'
-          : 'Non invio un allarme: la prima analisi non contiene problemi confermati.',
+          : 'Non preparo una mail: la prima analisi non contiene problemi o protezioni da sistemare.',
       },
       { status: 400 },
     );
@@ -47,25 +49,86 @@ export const POST = withAdmin(async (request: Request, ctx?: unknown) => {
   if (mode === 'live' && !process.env.RESEND_FROM?.trim()) {
     return NextResponse.json({ error: 'Manca il mittente email (RESEND_FROM).' }, { status: 503 });
   }
+  const unsubscribe = buildUnsubscribeUrls(workspace.id, report.lead.id, process.env);
+  const finalHtml = appendEmailComplianceFooter(
+    report.emailPreview.html,
+    workspace.id,
+    report.lead.id,
+    process.env,
+  );
+  const finalText = `${report.emailPreview.text}
 
-  const { data: outreach, error: insertError } = await admin
+Atti-Lab usa informazioni professionali pubblicamente visibili per questa proposta dimostrativa. La demo viene eliminata dopo 36 ore.
+Non vuoi ricevere altre email: ${unsubscribe.pageUrl}`;
+
+  const auditId = report.audit?.id;
+  if (!auditId) {
+    return NextResponse.json({ error: 'Il primo report non è disponibile.' }, { status: 400 });
+  }
+  const { data: existing } = await admin
     .from('security_outreach')
-    .insert({
-      workspace_id: workspace.id,
-      target_id: report.target.id,
-      audit_id: report.audit?.id ?? null,
-      to_email: to,
-      subject: report.emailPreview.subject,
-      body_html: report.emailPreview.html,
-      status: 'draft',
-    })
     .select('*')
-    .single();
-  if (insertError || !outreach) {
-    return NextResponse.json(
-      { error: insertError?.message ?? 'Salvataggio bozza fallito.' },
-      { status: 500 },
-    );
+    .eq('target_id', report.target.id)
+    .eq('audit_id', auditId)
+    .in('status', mode === 'live' ? ['draft', 'sent'] : ['draft', 'sent', 'mock_sent'])
+    .maybeSingle();
+  if (existing?.status === 'sent' || existing?.status === 'mock_sent') {
+    return NextResponse.json({
+      ok: true,
+      mock: existing.status === 'mock_sent',
+      message:
+        existing.status === 'mock_sent'
+          ? 'Questa email è già stata provata: non è partita davvero.'
+          : 'Questa email è già stata inviata. Non la invio due volte.',
+    });
+  }
+
+  let outreach = existing;
+  if (outreach) {
+    const { data: refreshed, error: refreshError } = await admin
+      .from('security_outreach')
+      .update({
+        to_email: to,
+        subject: report.emailPreview.subject,
+        body_html: finalHtml,
+        error: null,
+      })
+      .eq('id', outreach.id)
+      .select('*')
+      .single();
+    if (refreshError || !refreshed) {
+      return NextResponse.json(
+        { error: refreshError?.message ?? 'Recupero della bozza fallito.' },
+        { status: 500 },
+      );
+    }
+    outreach = refreshed;
+  } else {
+    const { data: created, error: insertError } = await admin
+      .from('security_outreach')
+      .insert({
+        workspace_id: workspace.id,
+        target_id: report.target.id,
+        audit_id: auditId,
+        to_email: to,
+        subject: report.emailPreview.subject,
+        body_html: finalHtml,
+        status: 'draft',
+      })
+      .select('*')
+      .single();
+    if (insertError || !created) {
+      return NextResponse.json(
+        {
+          error:
+            insertError?.code === '23505'
+              ? 'Un invio di questa email è già in corso.'
+              : insertError?.message ?? 'Salvataggio bozza fallito.',
+        },
+        { status: insertError?.code === '23505' ? 409 : 500 },
+      );
+    }
+    outreach = created;
   }
 
   try {
@@ -73,9 +136,13 @@ export const POST = withAdmin(async (request: Request, ctx?: unknown) => {
       from,
       to,
       subject: report.emailPreview.subject,
-      html: report.emailPreview.html,
-      text: report.emailPreview.text,
+      html: finalHtml,
+      text: finalText,
       idempotencyKey: `SECURITY_EMAIL:${outreach.id}`,
+      headers: {
+        'List-Unsubscribe': `<${unsubscribe.oneClickUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
     });
     const status = mode === 'live' ? 'sent' : 'mock_sent';
     await admin

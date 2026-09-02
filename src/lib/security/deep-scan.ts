@@ -77,11 +77,91 @@ export function deepAnalysisFromRow(row: SecurityDeepAuditRow): DeepAnalysis | n
     return null;
   }
   if (!row.metadata || typeof row.metadata !== 'object' || Array.isArray(row.metadata)) return null;
+  const rawFindings = (row.findings as unknown as DeepFinding[]).filter(
+    (item) =>
+      item &&
+      typeof item.code === 'string' &&
+      typeof item.title === 'string' &&
+      Array.isArray(item.pageUrls),
+  );
+  const legacyBrokenUrls = new Set(
+    rawFindings
+      .filter(
+        (item) =>
+          item.code === 'HOMEPAGE_ERROR' &&
+          row.final_url &&
+          !item.pageUrls.includes(row.final_url),
+      )
+      .flatMap((item) => item.pageUrls),
+  );
+  const correctedLegacyPageError = legacyBrokenUrls.size > 0;
+  const findings = rawFindings.flatMap((item) => {
+    if (
+      item.code === 'HOMEPAGE_ERROR' &&
+      item.pageUrls.some((url) => legacyBrokenUrls.has(url))
+    ) {
+      return [
+        {
+          ...item,
+          code: 'BROKEN_PUBLIC_PAGE',
+          severity: 'LOW' as const,
+          category: 'info' as const,
+          title: 'Un link pubblico porta a una pagina non disponibile',
+          detail:
+            'Una pagina interna collegata ha risposto con errore. La homepage ha risposto correttamente.',
+          limit:
+            'È un collegamento da correggere, non una prova di intrusione e non abbassa il punteggio di sicurezza.',
+        },
+      ];
+    }
+    if (item.pageUrls.length && item.pageUrls.every((url) => legacyBrokenUrls.has(url))) {
+      return [];
+    }
+    const validPageUrls = item.pageUrls.filter((url) => !legacyBrokenUrls.has(url));
+    return [
+      {
+        ...item,
+        pageUrls: validPageUrls,
+        occurrences:
+          typeof item.occurrences === 'number'
+            ? Math.min(item.occurrences, validPageUrls.length)
+            : validPageUrls.length,
+      },
+    ];
+  });
+  const comparisonRow = row.comparison as Record<string, unknown>;
+  const parseComparisonItems = (value: unknown): DeepComparisonItem[] =>
+    Array.isArray(value)
+      ? value.flatMap((item) =>
+          item &&
+          typeof item === 'object' &&
+          !Array.isArray(item) &&
+          typeof (item as Record<string, unknown>).code === 'string' &&
+          typeof (item as Record<string, unknown>).title === 'string'
+            ? [
+                {
+                  code: (item as Record<string, string>).code,
+                  title: (item as Record<string, string>).title,
+                },
+              ]
+            : [],
+        )
+      : [];
+  const retainedCodes = new Set(findings.map((item) => item.code));
+  const comparison: DeepComparison = {
+    confirmed: parseComparisonItems(comparisonRow.confirmed).filter(
+      (item) => retainedCodes.has(item.code) && item.code !== 'HOMEPAGE_ERROR',
+    ),
+    newFindings: parseComparisonItems(comparisonRow.newFindings).filter(
+      (item) => retainedCodes.has(item.code) && item.code !== 'HOMEPAGE_ERROR',
+    ),
+    notReproduced: parseComparisonItems(comparisonRow.notReproduced),
+  };
   return {
-    score: row.score,
+    score: correctedLegacyPageError ? computeSurfaceScore(findings) : row.score,
     pages: row.pages_scanned as unknown as DeepPageResult[],
-    findings: row.findings as unknown as DeepFinding[],
-    comparison: row.comparison as unknown as DeepComparison,
+    findings,
+    comparison,
     metadata: row.metadata as unknown as DeepScanMetadata,
     finalUrl: row.final_url,
   };
@@ -135,9 +215,9 @@ export function extractSafeSameSiteLinks(
     if (!['http:', 'https:'].includes(candidate.protocol)) continue;
     if (!isSameAuthorizedSite(candidate, authorized)) continue;
     if (!isSafeCrawlPath(candidate.pathname)) continue;
+    // Non riscriviamo URL dinamici: togliere la query può creare una pagina diversa o inesistente.
+    if (candidate.search) continue;
     candidate.hash = '';
-    // Query string possono attivare azioni o moltiplicare URL: non le seguiamo.
-    candidate.search = '';
     links.push(candidate.href);
   }
   return [...new Set(links)];
@@ -180,20 +260,39 @@ function mergeFindings(
 export function compareDeepWithBaseline(
   baseline: SurfaceFinding[],
   deep: DeepFinding[],
+  homepageUrl?: string,
 ): DeepComparison {
   const relevantBaseline = baseline.filter((item) => item.category !== 'info');
   const relevantDeep = deep.filter((item) => item.category !== 'info');
   const baselineCodes = new Set(relevantBaseline.map((item) => item.code));
-  const deepCodes = new Set(relevantDeep.map((item) => item.code));
+  const deepHomepageCodes = new Set(
+    relevantDeep
+      .filter((item) => !homepageUrl || item.pageUrls.includes(homepageUrl))
+      .map((item) => item.code),
+  );
   const toItem = (item: SurfaceFinding): DeepComparisonItem => ({
     code: item.code,
     title: item.title,
   });
 
   return {
-    confirmed: relevantDeep.filter((item) => baselineCodes.has(item.code)).map(toItem),
-    newFindings: relevantDeep.filter((item) => !baselineCodes.has(item.code)).map(toItem),
-    notReproduced: relevantBaseline.filter((item) => !deepCodes.has(item.code)).map(toItem),
+    confirmed: relevantDeep
+      .filter(
+        (item) =>
+          baselineCodes.has(item.code) &&
+          (!homepageUrl || item.pageUrls.includes(homepageUrl)),
+      )
+      .map(toItem),
+    newFindings: relevantDeep
+      .filter(
+        (item) =>
+          !baselineCodes.has(item.code) ||
+          Boolean(homepageUrl && !item.pageUrls.includes(homepageUrl)),
+      )
+      .map(toItem),
+    notReproduced: relevantBaseline
+      .filter((item) => !deepHomepageCodes.has(item.code))
+      .map(toItem),
   };
 }
 
@@ -315,6 +414,25 @@ export async function runAuthorizedDeepScan(
       htmlTruncated: page.htmlTruncated,
       redirectChain: page.redirectChain,
     });
+    if (
+      page.finalUrl !== homepage.finalUrl &&
+      (page.httpStatus >= 400 || !page.html.trim())
+    ) {
+      analysis.findings = [
+        {
+          code: 'BROKEN_PUBLIC_PAGE',
+          severity: 'LOW',
+          category: 'info',
+          confidence: 'confirmed',
+          title: 'Un link pubblico porta a una pagina non disponibile',
+          detail: `La pagina collegata ha risposto HTTP ${page.httpStatus}. La homepage continua a essere valutata separatamente.`,
+          evidence: `HTTP ${page.httpStatus}`,
+          limit:
+            'È un collegamento da correggere, non una prova di intrusione e non abbassa il punteggio di sicurezza.',
+        },
+      ];
+      analysis.score = 100;
+    }
     return { url: page.finalUrl, analysis };
   });
 
@@ -353,7 +471,7 @@ export async function runAuthorizedDeepScan(
       truncated: analysis.htmlTruncated,
     })),
     findings,
-    comparison: compareDeepWithBaseline(input.baselineFindings, findings),
+    comparison: compareDeepWithBaseline(input.baselineFindings, findings, homepage.finalUrl),
     metadata: {
       maxPages: DEEP_MAX_PAGES,
       maxDepth: DEEP_MAX_DEPTH,

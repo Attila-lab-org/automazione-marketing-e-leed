@@ -7,6 +7,7 @@ import {
 } from '@/lib/inbound/email';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
+import { stopLeadSequences, suppressLeadEmail } from '@/lib/sales/stop';
 
 export const runtime = 'nodejs';
 
@@ -95,12 +96,50 @@ export async function POST(request: Request) {
   if (!inbound) {
     return NextResponse.json({ ok: true, skipped: true, reason: 'UNMAPPED_EVENT' });
   }
+  const admin = createAdminSupabaseClient(process.env);
+  const workspace = await ensureDefaultWorkspace(admin);
   if (inbound.kind === 'delivery') {
+    if (inbound.type === 'email.bounced' || inbound.type === 'email.complained') {
+      const { data: sentMessage } = inbound.providerMessageId
+        ? await admin
+            .from('messages')
+            .select('lead_id')
+            .eq('workspace_id', workspace.id)
+            .eq('provider_message_id', inbound.providerMessageId)
+            .maybeSingle()
+        : { data: null };
+      const recipient =
+        inbound.to?.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0].toLowerCase() ??
+        null;
+      const { data: recipientLead } =
+        !sentMessage?.lead_id && recipient
+          ? await admin
+              .from('leads')
+              .select('id')
+              .eq('workspace_id', workspace.id)
+              .eq('normalized_email', recipient)
+              .maybeSingle()
+          : { data: null };
+      const leadId = sentMessage?.lead_id ?? recipientLead?.id ?? null;
+      if (leadId) {
+        await suppressLeadEmail(
+          admin,
+          workspace.id,
+          leadId,
+          inbound.type === 'email.bounced' ? 'HARD_BOUNCE' : 'STOP_REQUEST',
+        );
+        await stopLeadSequences(admin, workspace.id, leadId);
+      }
+      return NextResponse.json({
+        ok: true,
+        kind: 'delivery',
+        type: inbound.type,
+        suppressed: Boolean(leadId),
+      });
+    }
     return NextResponse.json({ ok: true, kind: 'delivery', type: inbound.type });
   }
 
-  const admin = createAdminSupabaseClient(process.env);
-  const workspace = await ensureDefaultWorkspace(admin);
   const result = await persistEmailReply({ admin, workspaceId: workspace.id, inbound });
   return NextResponse.json({ persisted: result.ok, ...result, kind: 'reply' });
 }
