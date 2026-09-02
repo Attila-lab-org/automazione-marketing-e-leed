@@ -9,6 +9,7 @@ import type {
 import type { OperatorToolName } from './registry';
 import { detectOperatorOpsAction } from './ops-writes';
 import { extractRequestedCity, inferRequestedCategory } from './intent';
+import { extractNamedSecurityQuery, isSecurityReportQuestion } from '@/lib/security/operator-query';
 
 function norm(text: string): string {
   return text
@@ -398,9 +399,25 @@ export function planOperatorTurnMock(input: SemanticPlanInput): OperatorPlan {
       prepareKind: 'none',
     },
     {
+      id: 'security',
+      class: 'READ',
+      score:
+        scoreCues(q, ['sicurezza', 'check-up', 'checkup', 'lucchetto', 'cose viste']) +
+        (isSecurityReportQuestion(input.question) ? 10 : 0),
+      tools: [
+        call('get_security_report', {
+          query: extractNamedSecurityQuery(input.question),
+        }),
+      ],
+      goal: 'Leggere il report Sicurezza e dire cosa rischia se non sistema',
+      prepareKind: 'none',
+    },
+    {
       id: 'daily',
       class: 'READ',
-      score: scoreCues(q, ['ieri', 'oggi', 'andata', 'report', 'numeri', 'briefing', 'brief']),
+      score: isSecurityReportQuestion(input.question)
+        ? 0
+        : scoreCues(q, ['ieri', 'oggi', 'andata', 'report', 'numeri', 'briefing', 'brief']),
       tools: [call('get_daily_report')],
       goal: 'Riassumere i numeri del periodo',
       prepareKind: 'none',

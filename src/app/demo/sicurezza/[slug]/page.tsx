@@ -1,4 +1,4 @@
-import { explainFinding } from '@/lib/security/explain';
+import { explainFinding, riskIfUnfixed } from '@/lib/security/explain';
 import { securityScoreClass } from '@/lib/security/labels';
 import { loadPublicSecurityReport } from '@/lib/security/run-audit';
 import { scoreBandLabel } from '@/lib/security/surface-audit';
@@ -69,10 +69,10 @@ export default async function PublicSecurityPage({ params }: PageProps) {
             <li key={item.code} className="rounded-xl border border-stone-200 bg-white p-4">
               <h2 className="font-semibold text-stone-900">{item.title}</h2>
               <p className="mt-2 text-sm text-stone-700">
-                <span className="font-medium">Cosa significa.</span> {explained.meaning}
+                <span className="font-medium">Cosa si vede.</span> {explained.meaning}
               </p>
-              <p className="mt-2 text-sm text-stone-600">
-                <span className="font-medium">Esempio.</span> {explained.example}
+              <p className="mt-2 text-sm font-medium text-stone-800">
+                {riskIfUnfixed(explained.risk)}
               </p>
             </li>
           );

@@ -38,6 +38,7 @@ export const TOOL_CONTRACTS: Record<string, ToolContract> = {
   get_blockers: { name: 'get_blockers', tier: 'READ', label: 'problemi aperti' },
   list_review_items: { name: 'list_review_items', tier: 'READ', label: 'review' },
   get_daily_report: { name: 'get_daily_report', tier: 'READ', label: 'report giornaliero' },
+  get_security_report: { name: 'get_security_report', tier: 'READ', label: 'report sicurezza' },
   get_daily_briefing: {
     name: 'get_daily_briefing',
     tier: 'READ',

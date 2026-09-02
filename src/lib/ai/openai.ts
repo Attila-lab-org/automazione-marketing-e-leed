@@ -387,6 +387,7 @@ export class OpenAICommercialProvider implements AICommercialProvider {
         'Creare una campagna TEST (senza inviare) è PREPARE/prepareKind=campaign per italiano naturale equivalente: crea campagna test, fammi una test, preparami una campagna di prova, facciamo un test, una campagna di prova.',
         'Una richiesta di produrre più demo o anteprime è PREPARE/prepareKind=campaign anche se non usa la parola campagna: per esempio prepara 10 demo, mi servono dieci proposte visive, scegli le migliori attività e crea le anteprime. Chiama search_leads con quantità, città e categoria dedotte. Se città o categoria non sono indicate, seleziona i lead migliori disponibili: non obbligare l’utente a parlare per comandi.',
         'Per una campagna TEST esplicita chiama search_leads. Se mancano città/lead, usa refs.lastLeadIds/lastLeadId se presenti; altrimenti clarification. La richiesta batch di demo è l’eccezione: può usare automaticamente i migliori lead disponibili. MAI campagna con 0 lead.',
+        '«Guarda il report di / dello studio X» o richieste su Sicurezza/check-up sito sono READ: chiama get_security_report con query=nome attività. Non è get_daily_report. Non inventare il report se il tool fallisce.',
         'Comprendi italiano naturale, typo e referenti (questa, il terzo).',
         'Le preferenze esplicite in refs.preferences sono memoria dell’operatore: rispettale come stile e priorità, mai come autorizzazione a inviare o compiere azioni rischiose.',
       ].join(' '),

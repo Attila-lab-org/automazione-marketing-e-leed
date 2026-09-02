@@ -7,6 +7,8 @@ import { envelopeFromPath } from '../../src/lib/ai/operator/envelope';
 import {
   executeOperatorTool,
   operatorTaskType,
+  parseToolArgs,
+  plannedFromOrchestratorCall,
   suggestOperatorTools,
 } from '../../src/lib/ai/operator/registry';
 import { collectOperatorTurn } from '../../src/lib/ai/operator/turn';
@@ -272,5 +274,63 @@ describe('AI-1 grounding', () => {
     expect(reply.reply).toContain('2 email dai siti');
     expect(reply.reply).toContain('1 ancora senza email');
     expect(reply.reply).not.toMatch(/non so|non conosco/i);
+  });
+
+  it('per il report di uno studio chiama Sicurezza, non i numeri del giorno', () => {
+    const planned = suggestOperatorTools(
+      'guarda il report dello studio mazzei',
+      envelopeFromPath('/security'),
+    );
+    expect(planned).toHaveLength(1);
+    expect(planned[0]?.name).toBe('get_security_report');
+    expect(String(planned[0]?.args.query ?? '').toLowerCase()).toMatch(/mazzei/);
+  });
+
+  it('non fallisce se al report giornaliero arrivano campi in più', () => {
+    expect(parseToolArgs('get_daily_report', { daysAgo: 1, query: 'studio mazzei' }).ok).toBe(true);
+    const planned = plannedFromOrchestratorCall({
+      name: 'get_daily_report',
+      city: null,
+      query: 'studio mazzei',
+      category: null,
+      campaignId: null,
+      leadId: null,
+      demoId: null,
+      templateId: null,
+      threadId: null,
+      limit: 1,
+    });
+    expect(planned.args).toEqual({ daysAgo: 1 });
+  });
+
+  it('racconta cosa rischia lo studio se non sistema', () => {
+    const targetId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const reply = composeOperatorReply('guarda il report dello studio mazzei', envelopeFromPath('/security'), [
+      {
+        name: 'get_security_report',
+        result: {
+          found: true,
+          name: 'Studio Mazzei',
+          domain: 'studiomazzei.it',
+          score: 62,
+          targetId,
+          findings: [
+            {
+              title: 'La pagina si apre senza lucchetto',
+              meaning: 'I dati viaggiano in chiaro.',
+              risk: 'Se non sistemi, un cliente che prenota dal Wi-Fi può farsi leggere i dati.',
+            },
+          ],
+        },
+      },
+    ]);
+    expect(reply.reply).toContain('Studio Mazzei');
+    expect(reply.reply).toMatch(/cosa rischia se non sistema/i);
+    expect(reply.reply).toMatch(/Se non sistemi: un cliente che prenota/);
+    expect(reply.reply).not.toMatch(/non è disponibile/i);
+    expect(reply.actions.some((a) => a.type === 'open_security' && a.targetId === targetId)).toBe(true);
+    expect(hrefForAction({ type: 'open_security', targetId, label: 'Apri report' })).toBe(
+      `/security/${targetId}`,
+    );
   });
 });

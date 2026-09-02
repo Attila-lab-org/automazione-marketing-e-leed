@@ -32,6 +32,7 @@ const READ_CAPABILITY_LABELS: Partial<Record<OperatorToolName, string>> = {
   get_lead_detail: 'analizzare attività e siti',
   get_blockers: 'spiegare cosa blocca un invio',
   get_daily_report: 'leggere performance e report',
+  get_security_report: 'leggere i report Sicurezza e spiegare i rischi',
   get_dashboard_summary: 'leggere performance e report',
   get_campaign_stats: 'leggere performance e report',
   list_campaigns: 'leggere e aprire campagne',

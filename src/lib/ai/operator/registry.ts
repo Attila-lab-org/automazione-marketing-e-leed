@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { extractNamedSecurityQuery, isSecurityReportQuestion } from '@/lib/security/operator-query';
 import type { OperatorEnvelope } from './envelope';
 import { classifyOperatorIntent, type OperatorIntent } from './intent';
 import type { DailyCommercialBriefing } from '@/lib/sales/daily-briefing';
@@ -14,6 +15,7 @@ export const OPERATOR_TOOL_NAMES = [
   'get_blockers',
   'list_review_items',
   'get_daily_report',
+  'get_security_report',
   'get_daily_briefing',
   'get_commercial_insights',
   'list_conversations',
@@ -188,10 +190,25 @@ export type CalendarSummary = {
   periodLabel: string;
 };
 
+export type SecurityOperatorReport = {
+  found: boolean;
+  reason?: string;
+  targetId?: string;
+  leadId?: string;
+  name?: string;
+  domain?: string;
+  score?: number | null;
+  status?: string;
+  email?: string | null;
+  findings?: Array<{ title: string; meaning: string; risk: string }>;
+  alternatives?: Array<{ targetId: string; name: string }>;
+};
+
 export type OperatorDataSource = {
   getDashboardSummary(): Promise<Record<string, number>>;
   searchLeads(input: { city?: string; query?: string; category?: string; limit?: number }): Promise<LeadSearchHit[]>;
   getLeadDetail(leadId: string): Promise<LeadSearchHit | null>;
+  getSecurityReport(input: { query?: string; targetId?: string }): Promise<SecurityOperatorReport>;
   listCampaigns(): Promise<CampaignSummary[]>;
   getCampaignDetail(campaignId: string): Promise<CampaignDetail | null>;
   getCampaignStats(campaignId: string): Promise<Record<string, number> | null>;
@@ -224,17 +241,23 @@ export function plannedFromOrchestratorCall(
   call: import('./orchestrator-schema').OperatorToolCallPlan,
 ): PlannedToolCall {
   const args: Record<string, unknown> = {};
-  if (call.city) args.city = call.city;
-  if (call.query) args.query = call.query;
-  if (call.category) args.category = call.category;
-  if (call.campaignId) args.campaignId = call.campaignId;
-  if (call.leadId) args.leadId = call.leadId;
-  if (call.demoId) args.demoId = call.demoId;
-  if (call.templateId) args.templateId = call.templateId;
-  if (call.threadId) args.threadId = call.threadId;
-  if (call.limit != null) {
-    if (call.name === 'get_daily_report') args.daysAgo = call.limit;
-    else args.limit = call.limit;
+  if (call.name === 'search_leads') {
+    if (call.city) args.city = call.city;
+    if (call.query) args.query = call.query;
+    if (call.category) args.category = call.category;
+    if (call.limit != null) args.limit = call.limit;
+  } else if (call.name === 'get_security_report') {
+    if (call.query) args.query = call.query;
+    if (call.leadId) args.targetId = call.leadId;
+  } else if (call.name === 'get_daily_report') {
+    if (call.limit != null) args.daysAgo = call.limit;
+  } else {
+    if (call.campaignId) args.campaignId = call.campaignId;
+    if (call.leadId) args.leadId = call.leadId;
+    if (call.demoId) args.demoId = call.demoId;
+    if (call.templateId) args.templateId = call.templateId;
+    if (call.threadId) args.threadId = call.threadId;
+    if (call.limit != null) args.limit = call.limit;
   }
   return { name: call.name, args };
 }
@@ -244,19 +267,21 @@ export type PlannedToolCall = {
   args: Record<string, unknown>;
 };
 
-const optionalId = z.object({ id: z.string().uuid().optional() }).strict();
-const searchLeadsInput = z
-  .object({
-    city: z.string().max(80).optional(),
-    query: z.string().max(120).optional(),
-    category: z.string().max(80).optional(),
-    limit: z.number().int().min(1).max(20).optional(),
-  })
-  .strict();
-const campaignIdInput = z.object({ campaignId: z.string().uuid().optional() }).strict();
-const leadIdInput = z.object({ leadId: z.string().uuid().optional() }).strict();
-const threadIdInput = z.object({ threadId: z.string().uuid().optional() }).strict();
-const dailyInput = z.object({ daysAgo: z.number().int().min(0).max(14).optional() }).strict();
+const optionalId = z.object({ id: z.string().uuid().optional() });
+const searchLeadsInput = z.object({
+  city: z.string().max(80).optional(),
+  query: z.string().max(120).optional(),
+  category: z.string().max(80).optional(),
+  limit: z.number().int().min(1).max(20).optional(),
+});
+const campaignIdInput = z.object({ campaignId: z.string().uuid().optional() });
+const leadIdInput = z.object({ leadId: z.string().uuid().optional() });
+const threadIdInput = z.object({ threadId: z.string().uuid().optional() });
+const dailyInput = z.object({ daysAgo: z.number().int().min(0).max(14).optional() });
+const securityReportInput = z.object({
+  query: z.string().max(120).optional(),
+  targetId: z.string().uuid().optional(),
+});
 const insightsInput = z.object({ windowDays: z.number().int().min(7).max(90).optional() }).strict();
 const demoIdInput = z.object({ demoId: z.string().uuid().optional() }).strict();
 const templateIdInput = z.object({ templateId: z.string().uuid().optional() }).strict();
@@ -291,6 +316,7 @@ export const TOOL_INPUT_SCHEMAS: Record<OperatorToolName, z.ZodType> = {
   get_blockers: campaignIdInput,
   list_review_items: optionalId,
   get_daily_report: dailyInput,
+  get_security_report: securityReportInput,
   get_daily_briefing: optionalId,
   get_commercial_insights: insightsInput,
   list_conversations: optionalId,
@@ -320,6 +346,7 @@ export const TOOL_LABELS: Record<OperatorToolName, { start: string; done: string
   get_blockers: { start: 'Sto controllando cosa blocca…', done: 'Ho controllato cosa blocca' },
   list_review_items: { start: 'Sto leggendo cosa c’è da controllare…', done: 'Coda di controllo caricata' },
   get_daily_report: { start: 'Sto leggendo i numeri del periodo…', done: 'Numeri del periodo caricati' },
+  get_security_report: { start: 'Sto aprendo il report Sicurezza…', done: 'Report Sicurezza caricato' },
   get_daily_briefing: {
     start: 'Sto confrontando agenda, email e Telegram…',
     done: 'Briefing commerciale pronto',
@@ -422,6 +449,17 @@ export async function executeOperatorTool(
         name,
         result: await data.getDailyReport(typeof args.daysAgo === 'number' ? args.daysAgo : 1),
       };
+    case 'get_security_report': {
+      const fromRoute = envelope.route.match(/^\/security\/([0-9a-f-]{36})/i)?.[1] ?? null;
+      return {
+        ok: true,
+        name,
+        result: await data.getSecurityReport({
+          query: typeof args.query === 'string' ? args.query : envelope.filters?.query,
+          targetId: typeof args.targetId === 'string' ? args.targetId : fromRoute ?? undefined,
+        }),
+      };
+    }
     case 'get_daily_briefing':
       return { ok: true, name, result: await data.getDailyBriefing() };
     case 'get_commercial_insights':
@@ -528,6 +566,17 @@ export function suggestOperatorTools(
 
   if (intent.kind === 'HELP' || intent.kind === 'UNKNOWN') return [];
 
+  if (isSecurityReportQuestion(question)) {
+    return [
+      {
+        name: 'get_security_report',
+        args: {
+          query: extractNamedSecurityQuery(question) ?? envelope.filters?.query,
+        },
+      },
+    ];
+  }
+
   if (intent.kind === 'DESTRUCTIVE') {
     return campaignCalls(envelope);
   }
@@ -566,7 +615,7 @@ export function suggestOperatorTools(
     return calls;
   }
 
-  if (/ieri|oggi|andata|report|numeri|briefing|brief/.test(q)) {
+  if (/ieri|oggi|andata|numeri|briefing|brief/.test(q) || (/report/.test(q) && !isSecurityReportQuestion(question))) {
     calls.push({ name: 'get_daily_report', args: { daysAgo: /oggi/.test(q) && !/ieri/.test(q) ? 0 : 1 } });
   }
   if (/lead|attivit|miglior|città|citta|ristorant/.test(q) || intent.city || intent.category) {

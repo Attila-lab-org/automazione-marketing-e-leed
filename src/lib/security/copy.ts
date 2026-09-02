@@ -1,4 +1,4 @@
-import { explainFinding } from './explain';
+import { explainFinding, riskIfUnfixed } from './explain';
 import type { SurfaceAnalysis, SurfaceFinding } from './surface-audit';
 
 function escapeHtml(value: string): string {
@@ -25,7 +25,7 @@ export function buildSecurityEmail(input: {
         return [
           `• ${item.title}`,
           `  In pratica: ${explained.meaning}`,
-          `  Esempio: ${explained.example}`,
+          `  ${riskIfUnfixed(explained.risk)}`,
         ];
       })
     : ['• Da questa pagina pubblica non ho visto le cose che di solito segnaliamo.'];
@@ -48,7 +48,7 @@ export function buildSecurityEmail(input: {
     ? input.analysis.findings
         .map((item) => {
           const explained = explainFinding(item.code);
-          return `<li style="margin:0 0 12px"><strong>${escapeHtml(item.title)}</strong><br/><span style="color:#57534e">${escapeHtml(explained.meaning)}</span><br/><span style="color:#78716c">Esempio: ${escapeHtml(explained.example)}</span></li>`;
+          return `<li style="margin:0 0 12px"><strong>${escapeHtml(item.title)}</strong><br/><span style="color:#57534e">${escapeHtml(explained.meaning)}</span><br/><span style="color:#78716c">${escapeHtml(riskIfUnfixed(explained.risk))}</span></li>`;
         })
         .join('')
     : '<li>Da questa pagina pubblica non ho visto le cose che di solito segnaliamo.</li>';

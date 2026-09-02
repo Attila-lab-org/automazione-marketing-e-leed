@@ -13,6 +13,7 @@ import { getCommercialLearningSnapshot } from '@/lib/sales/learning';
 import { getDailyCommercialBriefing } from '@/lib/sales/daily-briefing';
 import { getActiveCommercialGoal, getActiveGoalPlan } from '@/lib/sales/goals/store';
 import { discoveryCategoryLabel } from '@/lib/leads/discovery-categories';
+import { lookupSecurityReport } from '@/lib/security/operator-lookup';
 import type {
   BlockerItem,
   CalendarEventHit,
@@ -27,6 +28,7 @@ import type {
   DemoSummary,
   LeadSearchHit,
   OperatorDataSource,
+  SecurityOperatorReport,
   ReviewItem,
   TelegramInboundStatus,
   TemplateSummary,
@@ -99,6 +101,10 @@ export function createSupabaseOperatorData(
         qualificationStatus: row.qualification_status,
         websiteUrl: row.website_url,
       }));
+    },
+
+    async getSecurityReport(input) {
+      return lookupSecurityReport(admin, workspaceId, input);
     },
 
     async getLeadDetail(leadId) {
@@ -652,6 +658,7 @@ export function createMemoryOperatorData(seed?: {
   campaigns?: CampaignDetail[];
   blockers?: BlockerItem[];
   review?: ReviewItem[];
+  securityReports?: SecurityOperatorReport[];
   daily?: DailyReport;
   conversations?: ConversationHit[];
   dashboard?: Record<string, number>;
@@ -678,6 +685,23 @@ export function createMemoryOperatorData(seed?: {
     },
     async getLeadDetail(leadId) {
       return leads.find((lead) => lead.id === leadId) ?? null;
+    },
+    async getSecurityReport(input) {
+      const reports = seed?.securityReports ?? [];
+      if (input.targetId) {
+        return reports.find((row) => row.targetId === input.targetId) ?? { found: false, reason: 'Report non trovato.' };
+      }
+      if (input.query) {
+        const needle = input.query.toLowerCase();
+        const match = reports.find((row) => (row.name ?? '').toLowerCase().includes(needle));
+        if (match) return match;
+      }
+      return {
+        found: false,
+        reason: input.query
+          ? `Non ho un report Sicurezza per «${input.query}».`
+          : 'Dimmi il nome dell’attività.',
+      };
     },
     async listCampaigns() {
       return campaigns;

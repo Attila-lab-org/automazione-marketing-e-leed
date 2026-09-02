@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { consentChannelLabel } from "@/lib/security/deep-check";
-import { DEEP_CHECK_STEPS, explainFinding } from "@/lib/security/explain";
+import { DEEP_CHECK_STEPS, explainFinding, riskIfUnfixed } from "@/lib/security/explain";
 import { securityScoreClass } from "@/lib/security/labels";
 import { scoreBandLabel } from "@/lib/security/surface-audit";
 import type { SurfaceAnalysis, SurfaceFinding } from "@/lib/security/surface-audit";
@@ -299,10 +299,10 @@ export default function SecurityReportClient({ targetId }: { targetId: string })
                         <span className="text-[11px] uppercase tracking-wide">{severityLabel(item.severity)}</span>
                       </div>
                       <p className="mt-2 text-sm">
-                        <span className="font-medium">Cosa significa.</span> {explained.meaning}
+                        <span className="font-medium">Cosa si vede.</span> {explained.meaning}
                       </p>
-                      <p className="mt-2 text-sm opacity-90">
-                        <span className="font-medium">Esempio.</span> {explained.example}
+                      <p className="mt-2 text-sm font-medium">
+                        {riskIfUnfixed(explained.risk)}
                       </p>
                       <p className="mt-2 text-xs opacity-70">Prova: {item.evidence}</p>
                     </li>

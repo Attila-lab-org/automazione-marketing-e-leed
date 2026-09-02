@@ -4,6 +4,7 @@ import type { DailyReport, LeadSearchHit, OperatorToolName } from './registry';
 import type { OperatorEnvelope } from './envelope';
 import type { OperatorIntent } from './intent';
 import type { WriteResult } from './writes';
+import { riskIfUnfixed } from '@/lib/security/explain';
 
 function metricText(metric: DailyReport['metrics'][keyof DailyReport['metrics']]): string | null {
   if (!metric.available) return null;
@@ -82,6 +83,43 @@ export function composeOperatorReply(
   const analyze = writes.find((w) => w.tool === 'analyze_business');
   const send = writes.find((w) => w.tool === 'send_campaign');
   const policy = writes.find((w) => w.tool === 'propose_autonomy' || w.tool === 'enable_autonomy');
+
+  const security = byName.get('get_security_report') as
+    | {
+        found?: boolean;
+        reason?: string;
+        name?: string;
+        domain?: string;
+        score?: number | null;
+        email?: string | null;
+        targetId?: string;
+        findings?: Array<{ title: string; meaning: string; risk: string }>;
+        alternatives?: Array<{ targetId: string; name: string }>;
+      }
+    | undefined;
+  if (security) {
+    if (security.found && security.name) {
+      parts.push(
+        `Report Sicurezza di ${security.name}${security.domain ? ` (${security.domain})` : ''}${
+          security.score != null ? `: punteggio ${security.score} da fuori.` : '.'
+        }`,
+      );
+      if ((security.findings ?? []).length) {
+        parts.push('Per ogni voce, cosa rischia se non sistema:');
+      }
+      for (const finding of (security.findings ?? []).slice(0, 6)) {
+        parts.push(`${finding.title}. ${riskIfUnfixed(finding.risk)}`);
+      }
+      if (security.email) parts.push(`Email sul contatto: ${security.email}.`);
+      if (security.targetId) actions.push({ type: 'open_security', targetId: security.targetId, label: 'Apri report' });
+    } else {
+      parts.push(security.reason ?? 'Questo report Sicurezza non è disponibile.');
+      if (security.alternatives?.length) {
+        parts.push(`Trovate: ${security.alternatives.map((row) => row.name).join(', ')}.`);
+      }
+      actions.push({ type: 'open_page', page: 'security', label: 'Apri sicurezza' });
+    }
+  }
 
   if (discovery) parts.push(discovery.summary);
 

@@ -34,6 +34,11 @@ export const operatorActionSchema = z.discriminatedUnion('type', [
     label: z.literal('Apri attività'),
   }),
   z.object({
+    type: z.literal('open_security'),
+    targetId: z.string().uuid(),
+    label: z.literal('Apri report'),
+  }),
+  z.object({
     type: z.literal('open_review'),
     label: z.literal('Apri da controllare'),
   }),
@@ -214,6 +219,8 @@ export function hrefForAction(action: OperatorAction): string {
     }
     case 'open_lead':
       return `/leads?lead=${action.leadId}`;
+    case 'open_security':
+      return `/security/${action.targetId}`;
     case 'open_review':
       return '/review-queue';
     case 'open_demo':

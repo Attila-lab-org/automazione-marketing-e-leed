@@ -14,9 +14,11 @@ import type {
   DailyReport,
   DemoSummary,
   LeadSearchHit,
+  SecurityOperatorReport,
   TelegramInboundStatus,
   TemplateSummary,
 } from './registry';
+import { riskIfUnfixed } from '@/lib/security/explain';
 
 function succeeded<T>(input: OperatorComposeInput, name: string): T | undefined {
   const row = input.traces.find((t) => t.ok && t.name === name);
@@ -34,6 +36,23 @@ export function composeOrchestratorReply(input: OperatorComposeInput): OperatorF
 
   const parts: string[] = [];
   if (input.writeSummaries.length) parts.push(input.writeSummaries.join(' '));
+
+  const security = succeeded<SecurityOperatorReport>(input, 'get_security_report');
+  if (security) {
+    if (security.found && security.name) {
+      parts.push(
+        `Report Sicurezza di ${security.name}${security.score != null ? `: punteggio ${security.score}.` : '.'}`,
+      );
+      if ((security.findings ?? []).length) {
+        parts.push('Per ogni voce, cosa rischia se non sistema:');
+      }
+      for (const finding of (security.findings ?? []).slice(0, 6)) {
+        parts.push(`${finding.title}. ${riskIfUnfixed(finding.risk)}`);
+      }
+    } else {
+      parts.push(security.reason ?? 'Questo report Sicurezza non è disponibile.');
+    }
+  }
 
   const commercialGoal = succeeded<CommercialGoalRow>(input, 'get_active_commercial_goal');
   const goalPlan = succeeded<CommercialGoalPlanRow>(input, 'get_commercial_goal_plan');

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mapPool } from '@/lib/security/concurrency';
 import { buildScopeLetter, buildSecurityEmail } from '@/lib/security/copy';
-import { explainFinding } from '@/lib/security/explain';
+import { explainFinding, riskIfUnfixed } from '@/lib/security/explain';
 import {
   analyzeSurfacePage,
   scoreBand,
@@ -189,7 +189,7 @@ describe('copy email e lettera', () => {
     expect(letter.toLowerCase()).toMatch(/non è un attacco/);
   });
 
-  it('l’email spiega le cose viste con un esempio semplice', () => {
+  it('l’email dice cosa si vede e cosa rischia se non sistema', () => {
     const analysis = analyze('<html></html>', {}, HTTP);
     const email = buildSecurityEmail({
       businessName: 'Studio Esempio',
@@ -197,14 +197,14 @@ describe('copy email e lettera', () => {
       analysis,
     });
     expect(email.text).toMatch(/In pratica:/);
-    expect(email.text).toMatch(/Esempio:/);
-    expect(email.text).toMatch(/Wi-Fi|stessa rete/i);
+    expect(email.text).toMatch(/Se non sistemi:/);
+    expect(email.text).toMatch(/Wi-Fi|fiducia/i);
     expect(email.text).toMatch(/prima di questa mail/);
   });
 });
 
 describe('spiegazioni per l’utente medio', () => {
-  it('ogni falla nota ha significato ed esempio, senza dire probabilmente', () => {
+  it('ogni cosa vista ha significato e rischio se non sistema, senza dire probabilmente', () => {
     for (const code of [
       'NO_HTTPS',
       'BAD_CERT',
@@ -220,8 +220,10 @@ describe('spiegazioni per l’utente medio', () => {
     ]) {
       const explained = explainFinding(code);
       expect(explained.meaning.length).toBeGreaterThan(20);
-      expect(explained.example.length).toBeGreaterThan(20);
-      expect(`${explained.meaning} ${explained.example}`.toLowerCase()).not.toMatch(
+      expect(explained.risk.length).toBeGreaterThan(20);
+      expect(explained.risk.toLowerCase()).not.toMatch(/^se non sistemi/);
+      expect(riskIfUnfixed(explained.risk)).toMatch(/^Se non sistemi:/);
+      expect(`${explained.meaning} ${explained.risk}`.toLowerCase()).not.toMatch(
         /probabilmente|cve|sfruttabil/,
       );
     }
