@@ -62,11 +62,16 @@ export async function saveDeepCheck(
   },
 ): Promise<SecurityTargetRow> {
   const now = new Date().toISOString();
-  const patch: Record<string, unknown> = {
-    deep_notes: input.notes ?? null,
-    updated_at: now,
-  };
-  if (input.done) patch.status = 'deep_done';
+  const patch = input.done
+    ? {
+        deep_notes: input.notes ?? null,
+        updated_at: now,
+        status: 'deep_done' as const,
+      }
+    : {
+        deep_notes: input.notes ?? null,
+        updated_at: now,
+      };
 
   const { data: updated, error } = await admin
     .from('security_targets')
