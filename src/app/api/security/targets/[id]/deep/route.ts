@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
 import { withAdmin } from '@/lib/api/with-admin';
-import { isConsentChannel, openDeepCheck, saveDeepCheck } from '@/lib/security/deep-check';
+import {
+  openDeepCheck,
+  runDeepCheck,
+  saveDeepCheck,
+} from '@/lib/security/deep-check';
+import { isConsentChannel } from '@/lib/security/deep-consent';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export const POST = withAdmin(async (request: Request, ctx?: unknown) => {
   if (!isSupabaseConfigured(process.env) || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -22,18 +28,17 @@ export const POST = withAdmin(async (request: Request, ctx?: unknown) => {
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
 
-  if (typeof body?.notes === 'string' || body?.done === true) {
+  if (typeof body?.notes === 'string') {
     try {
       const target = await saveDeepCheck(admin, {
         workspaceId: workspace.id,
         targetId: id,
         notes: typeof body.notes === 'string' ? body.notes : undefined,
-        done: body?.done === true,
       });
       return NextResponse.json({
         ok: true,
         target,
-        message: body?.done === true ? 'Controllo approfondito segnato come fatto.' : 'Note salvate.',
+        message: 'Note salvate.',
       });
     } catch (err) {
       return NextResponse.json(
@@ -60,17 +65,22 @@ export const POST = withAdmin(async (request: Request, ctx?: unknown) => {
   }
 
   try {
-    const target = await openDeepCheck(admin, {
+    await openDeepCheck(admin, {
       workspaceId: workspace.id,
       targetId: id,
       channel: body.channel,
       note: typeof body.note === 'string' ? body.note : null,
     });
+    const result = await runDeepCheck(admin, {
+      workspaceId: workspace.id,
+      targetId: id,
+    });
     return NextResponse.json({
       ok: true,
-      target,
+      audit: result.audit,
+      analysis: result.analysis,
       message:
-        'Controllo approfondito aperto. Lo fai tu con il titolare: Attila non attacca e non parte da solo.',
+        `Secondo report completato: ${result.analysis.pages.length} pagine pubbliche controllate senza inviare moduli.`,
     });
   } catch (err) {
     return NextResponse.json(

@@ -26,7 +26,11 @@ export const POST = withAdmin(async (request: Request, ctx?: unknown) => {
   if (!report) return NextResponse.json({ error: 'Report non trovato.' }, { status: 404 });
   if (!report.emailPreview) {
     return NextResponse.json(
-      { error: 'Manca il report: analizza prima la pagina pubblica.' },
+      {
+        error: report.hasConfirmedProblems
+          ? 'Manca il report: analizza prima la pagina pubblica.'
+          : 'Non invio un allarme: la prima analisi non contiene problemi confermati.',
+      },
       { status: 400 },
     );
   }

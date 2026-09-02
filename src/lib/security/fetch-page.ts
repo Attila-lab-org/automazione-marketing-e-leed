@@ -14,6 +14,16 @@ export type FetchedPage = {
   httpStatus: number;
   headers: Record<string, string>;
   html: string;
+  htmlTruncated: boolean;
+  redirectChain: string[];
+};
+
+export type FetchPublicPageOptions = {
+  maxHtmlBytes?: number;
+  timeoutMs?: number;
+  maxRedirects?: number;
+  /** Se presente, blocca redirect verso host diversi dal sito autorizzato. */
+  allowedHostnames?: Set<string>;
 };
 
 export class PageFetchError extends Error {
@@ -62,29 +72,79 @@ function classifyFetchError(err: unknown): PageFetchError {
 
 async function consumeQuietly(res: Response) {
   try {
-    await res.arrayBuffer();
+    await res.body?.cancel();
   } catch {
     /* ignore */
   }
+}
+
+async function readBodyLimited(
+  res: Response,
+  maxBytes: number,
+): Promise<{ buffer: Buffer; truncated: boolean }> {
+  if (!res.body) return { buffer: Buffer.alloc(0), truncated: false };
+  const reader = res.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  let truncated = false;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.length) continue;
+      const remaining = maxBytes - total;
+      if (remaining <= 0) {
+        truncated = true;
+        break;
+      }
+      const chunk = Buffer.from(value);
+      if (chunk.length > remaining) {
+        chunks.push(chunk.subarray(0, remaining));
+        total += remaining;
+        truncated = true;
+        break;
+      }
+      chunks.push(chunk);
+      total += chunk.length;
+    }
+  } finally {
+    if (truncated) {
+      await reader.cancel().catch(() => undefined);
+    } else {
+      reader.releaseLock();
+    }
+  }
+  return { buffer: Buffer.concat(chunks, total), truncated };
 }
 
 /**
  * Una sola GET della homepage pubblica, come un visitatore.
  * Segue i reindirizzamenti solo se restano su http(s) pubblici.
  */
-export async function fetchPublicHomepage(rawUrl: string): Promise<FetchedPage> {
+export async function fetchPublicPage(
+  rawUrl: string,
+  options: FetchPublicPageOptions = {},
+): Promise<FetchedPage> {
   let current = await assertPublicHttpUrl(rawUrl);
   const requestedUrl = current.href;
   let lastHeaders: Record<string, string> = {};
-  let lastStatus = 0;
+  const redirectChain: string[] = [current.href];
 
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+  const maxRedirects = options.maxRedirects ?? MAX_REDIRECTS;
+  const timeoutMs = options.timeoutMs ?? FETCH_TIMEOUT_MS;
+  const maxHtmlBytes = options.maxHtmlBytes ?? MAX_HTML_BYTES;
+
+  if (options.allowedHostnames && !options.allowedHostnames.has(current.hostname.toLowerCase())) {
+    throw new PageFetchError('BLOCKED', 'La pagina è fuori dal sito autorizzato.');
+  }
+
+  for (let hop = 0; hop <= maxRedirects; hop += 1) {
     let res: Response;
     try {
       res = await fetch(current.href, {
         method: 'GET',
         redirect: 'manual',
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
         headers: {
           'User-Agent': BROWSER_USER_AGENT,
           Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
@@ -95,7 +155,6 @@ export async function fetchPublicHomepage(rawUrl: string): Promise<FetchedPage> 
       throw classifyFetchError(err);
     }
 
-    lastStatus = res.status;
     lastHeaders = headersToRecord(res.headers);
 
     if (isRedirect(res.status)) {
@@ -111,27 +170,45 @@ export async function fetchPublicHomepage(rawUrl: string): Promise<FetchedPage> 
         throw new PageFetchError('BLOCKED', 'Il reindirizzamento non è un indirizzo valido.');
       }
       current = await assertPublicHttpUrl(next.href);
+      if (
+        options.allowedHostnames &&
+        !options.allowedHostnames.has(current.hostname.toLowerCase())
+      ) {
+        throw new PageFetchError(
+          'BLOCKED',
+          'Il reindirizzamento porta fuori dal sito autorizzato.',
+        );
+      }
+      redirectChain.push(current.href);
       continue;
     }
 
-    const buffer = Buffer.from(await res.arrayBuffer());
-    const html = buffer.subarray(0, MAX_HTML_BYTES).toString('utf8');
+    const { buffer, truncated: htmlTruncated } = await readBodyLimited(res, maxHtmlBytes);
+    const html = buffer.toString('utf8');
     return {
       requestedUrl,
       finalUrl: res.url || current.href,
       httpStatus: res.status,
+      // Le protezioni vanno giudicate sulla pagina finale, non su una risposta 301 intermedia.
       headers: lastHeaders,
       html,
+      htmlTruncated,
+      redirectChain,
     };
   }
 
-  return {
-    requestedUrl,
-    finalUrl: current.href,
-    httpStatus: lastStatus,
-    headers: lastHeaders,
-    html: '',
-  };
+  throw new PageFetchError(
+    'EMPTY',
+    `Troppi reindirizzamenti (oltre ${maxRedirects}). Non ho raggiunto una pagina finale.`,
+  );
+}
+
+export async function fetchPublicHomepage(rawUrl: string): Promise<FetchedPage> {
+  const homepage = await assertPublicHttpUrl(rawUrl);
+  homepage.pathname = '/';
+  homepage.search = '';
+  homepage.hash = '';
+  return fetchPublicPage(homepage.href);
 }
 
 export function newPublicSlug(): string {

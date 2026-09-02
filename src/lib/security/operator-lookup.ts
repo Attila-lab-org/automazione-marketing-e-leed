@@ -86,10 +86,20 @@ async function loadByTargetId(
     .eq('id', target.lead_id)
     .maybeSingle();
   const analysis = audit ? analysisFromAudit(audit) : null;
-  const findings = (analysis?.findings ?? []).map((item) => {
-    const explained = explainFinding(item.code);
-    return { title: item.title, meaning: explained.meaning, risk: explained.risk };
-  });
+  const findings = (analysis?.findings ?? [])
+    .slice()
+    .sort((a, b) => {
+      const rank = { problem: 0, protection: 1, info: 2 } as const;
+      return rank[a.category] - rank[b.category];
+    })
+    .map((item) => {
+      const explained = explainFinding(item.code);
+      const risk =
+        item.category === 'info'
+          ? item.limit || explained.limit || 'Informazione pubblica: non abbassa il punteggio da sola.'
+          : explained.risk;
+      return { title: item.title, meaning: explained.meaning, risk };
+    });
 
   return {
     found: Boolean(analysis),

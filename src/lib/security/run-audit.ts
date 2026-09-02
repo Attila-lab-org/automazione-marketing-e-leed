@@ -3,6 +3,7 @@ import type {
   Json,
   LeadRow,
   SecurityAuditRow,
+  SecurityDeepAuditRow,
   SecurityTargetRow,
   SecurityTargetStatus,
 } from '@/lib/types/database';
@@ -12,12 +13,17 @@ import { buildScopeLetter, buildSecurityEmail } from './copy';
 import { fetchPublicHomepage, newPublicSlug, PageFetchError } from './fetch-page';
 import {
   analyzeSurfacePage,
+  badCertAnalysis,
+  type FindingCategory,
+  type FindingConfidence,
+  type PaymentSignal,
   type SurfaceAnalysis,
   type SurfaceFinding,
 } from './surface-audit';
 import { UrlNotAllowedError } from './url-guard';
 import type { SecurityTargetListItem } from './labels';
 import { persistLeadEmailIfMissing } from '@/lib/enrichment/persist-email';
+import { deepAnalysisFromRow, type DeepAnalysis } from './deep-scan';
 
 export type { SecurityTargetListItem } from './labels';
 
@@ -29,13 +35,37 @@ export type SecurityReport = {
   lead: Pick<LeadRow, 'id' | 'name' | 'email' | 'website_url' | 'city' | 'phone'>;
   audit: SecurityAuditRow | null;
   analysis: SurfaceAnalysis | null;
+  deepAudit: SecurityDeepAuditRow | null;
+  deepAnalysis: DeepAnalysis | null;
   emailPreview: { subject: string; html: string; text: string } | null;
   letter: string;
   canSendEmail: boolean;
+  hasConfirmedProblems: boolean;
 };
 
 function asJson(value: unknown): Json {
   return value as Json;
+}
+
+function asCategory(value: unknown): FindingCategory {
+  return value === 'problem' || value === 'protection' || value === 'info' ? value : 'info';
+}
+
+function asConfidence(value: unknown): FindingConfidence {
+  return value === 'confirmed' || value === 'likely' || value === 'info' ? value : 'info';
+}
+
+function asPayment(value: unknown): PaymentSignal {
+  return value === 'stripe' ||
+    value === 'paypal' ||
+    value === 'satispay' ||
+    value === 'nexi' ||
+    value === 'adyen' ||
+    value === 'square' ||
+    value === 'own-form' ||
+    value === 'none'
+    ? value
+    : 'none';
 }
 
 export function parseFindings(raw: Json): SurfaceFinding[] {
@@ -59,32 +89,57 @@ export function parseFindings(raw: Json): SurfaceFinding[] {
       {
         code: row.code,
         severity,
+        category: asCategory(row.category),
+        confidence: asConfidence(row.confidence),
         title: row.title,
         detail: row.detail,
         evidence: row.evidence,
+        limit:
+          typeof row.limit === 'string'
+            ? row.limit
+            : 'È solo ciò che la homepage pubblica mostra da sola.',
       },
     ];
   });
 }
 
+type StoredHeaderBlob = SurfaceAnalysis['headers'] & {
+  payment?: PaymentSignal;
+  httpStatus?: number;
+  htmlTruncated?: boolean;
+  redirectChain?: string[];
+};
+
 export function analysisFromAudit(audit: SecurityAuditRow): SurfaceAnalysis {
   const headers = (audit.headers && typeof audit.headers === 'object' && !Array.isArray(audit.headers)
     ? audit.headers
-    : {}) as SurfaceAnalysis['headers'];
+    : {}) as StoredHeaderBlob;
   return {
     score: audit.score,
     headers: {
       https: Boolean(headers.https),
-      hsts: typeof headers.hsts === 'boolean' ? headers.hsts : headers.hsts === null ? null : null,
+      hsts: typeof headers.hsts === 'boolean' ? headers.hsts : null,
       csp:
-        headers.csp === 'present' || headers.csp === 'report-only' || headers.csp === 'missing'
+        headers.csp === 'present' ||
+        headers.csp === 'report-only' ||
+        headers.csp === 'missing' ||
+        headers.csp === 'weak'
           ? headers.csp
           : 'missing',
       frameProtection: Boolean(headers.frameProtection),
       nosniff: Boolean(headers.nosniff),
       referrerPolicy: Boolean(headers.referrerPolicy),
+      permissionsPolicy: Boolean(headers.permissionsPolicy),
       cookieSecure:
         headers.cookieSecure === true || headers.cookieSecure === false ? headers.cookieSecure : null,
+      cookieHttpOnly:
+        headers.cookieHttpOnly === true || headers.cookieHttpOnly === false
+          ? headers.cookieHttpOnly
+          : null,
+      cookieSameSite:
+        headers.cookieSameSite === true || headers.cookieSameSite === false
+          ? headers.cookieSameSite
+          : null,
     },
     technologies: Array.isArray(audit.technologies)
       ? audit.technologies.flatMap((item) => {
@@ -104,7 +159,12 @@ export function analysisFromAudit(audit: SecurityAuditRow): SurfaceAnalysis {
     gaIds: Array.isArray(audit.ga_ids)
       ? audit.ga_ids.filter((item): item is string => typeof item === 'string')
       : [],
-    payment: 'none',
+    payment: asPayment(headers.payment),
+    httpStatus: typeof headers.httpStatus === 'number' ? headers.httpStatus : audit.http_status ?? 0,
+    htmlTruncated: Boolean(headers.htmlTruncated),
+    redirectChain: Array.isArray(headers.redirectChain)
+      ? headers.redirectChain.filter((item): item is string => typeof item === 'string')
+      : [],
   };
 }
 
@@ -205,6 +265,15 @@ async function persistAudit(
 ): Promise<SecurityAuditRow> {
   const analysis = input.analysis;
   const score = analysis?.score ?? 0;
+  const headersBlob = analysis
+    ? {
+        ...analysis.headers,
+        payment: analysis.payment,
+        httpStatus: analysis.httpStatus || input.page?.httpStatus || 0,
+        htmlTruncated: analysis.htmlTruncated,
+        redirectChain: analysis.redirectChain,
+      }
+    : {};
   const { data: audit, error } = await admin
     .from('security_audits')
     .insert({
@@ -213,9 +282,9 @@ async function persistAudit(
       lead_id: input.target.lead_id,
       requested_url: input.requestedUrl,
       final_url: input.page?.finalUrl ?? null,
-      http_status: input.page?.httpStatus ?? null,
+      http_status: input.page?.httpStatus ?? analysis?.httpStatus ?? null,
       score,
-      headers: asJson(analysis?.headers ?? {}),
+      headers: asJson(headersBlob),
       technologies: asJson(analysis?.technologies ?? []),
       findings: asJson(analysis?.findings ?? []),
       emails_found: asJson(analysis?.emailsFound ?? []),
@@ -231,7 +300,9 @@ async function persistAudit(
 
   const preserve =
     input.target.status === 'deep_open' ||
+    input.target.status === 'deep_running' ||
     input.target.status === 'deep_done' ||
+    input.target.status === 'deep_failed' ||
     input.target.status === 'email_sent' ||
     input.target.status === 'email_draft';
   const status: SecurityTargetStatus = preserve
@@ -277,6 +348,8 @@ export async function runSurfaceAudit(
       httpStatus: page.httpStatus,
       headers: page.headers,
       html: page.html,
+      htmlTruncated: page.htmlTruncated,
+      redirectChain: page.redirectChain,
     });
     const audit = await persistAudit(admin, {
       workspaceId,
@@ -292,35 +365,7 @@ export async function runSurfaceAudit(
         ? err.message
         : 'Non sono riuscito ad aprire la pagina pubblica.';
     const certFailed = err instanceof PageFetchError && err.code === 'CERT';
-    const analysis: SurfaceAnalysis | null = certFailed
-      ? {
-          score: 75,
-          headers: {
-            https: true,
-            hsts: null,
-            csp: 'missing',
-            frameProtection: false,
-            nosniff: false,
-            referrerPolicy: false,
-            cookieSecure: null,
-          },
-          technologies: [],
-          findings: [
-            {
-              code: 'BAD_CERT',
-              severity: 'HIGH',
-              title: 'Il lucchetto della pagina non è accettato',
-              detail:
-                'Aprendo la pagina pubblica, il certificato non è valido. Non è una prova di furti già avvenuti.',
-              evidence: message,
-            },
-          ],
-          emailsFound: [],
-          apiMentions: [],
-          gaIds: [],
-          payment: 'none',
-        }
-      : null;
+    const analysis: SurfaceAnalysis | null = certFailed ? badCertAnalysis(message) : null;
     await persistAudit(admin, {
       workspaceId,
       target,
@@ -434,6 +479,16 @@ export async function loadSecurityReport(
     audit = data ?? null;
   }
 
+  let deepAudit: SecurityDeepAuditRow | null = null;
+  if (target.latest_deep_audit_id) {
+    const { data } = await admin
+      .from('security_deep_audits')
+      .select('*')
+      .eq('id', target.latest_deep_audit_id)
+      .maybeSingle();
+    deepAudit = data ?? null;
+  }
+
   const analysis = audit ? analysisFromAudit(audit) : null;
   if (analysis?.emailsFound.length) {
     const saved = await persistLeadEmailIfMissing(admin, {
@@ -448,18 +503,25 @@ export async function loadSecurityReport(
       lead.email = saved.email;
     }
   }
-  const emailPreview = analysis
-    ? buildSecurityEmail({ businessName: target.name, domain: target.domain, analysis })
-    : null;
+  const hasConfirmedProblems = Boolean(
+    analysis?.findings.some((item) => item.category === 'problem'),
+  );
+  const emailPreview =
+    analysis && hasConfirmedProblems
+      ? buildSecurityEmail({ businessName: target.name, domain: target.domain, analysis })
+      : null;
 
   return {
     target,
     lead,
     audit,
     analysis,
+    deepAudit,
+    deepAnalysis: deepAudit ? deepAnalysisFromRow(deepAudit) : null,
     emailPreview,
     letter: buildScopeLetter({ businessName: target.name, domain: target.domain }),
-    canSendEmail: Boolean(lead.email?.includes('@')),
+    canSendEmail: hasConfirmedProblems && Boolean(lead.email?.includes('@')),
+    hasConfirmedProblems,
   };
 }
 
@@ -487,11 +549,17 @@ export async function loadPublicSecurityReport(
     .maybeSingle();
   if (!audit) return null;
   const analysis = analysisFromAudit(audit);
+  const grouped = {
+    problems: analysis.findings.filter((item) => item.category === 'problem'),
+    protections: analysis.findings.filter((item) => item.category === 'protection'),
+    infos: analysis.findings.filter((item) => item.category === 'info'),
+  };
+  const prioritized = [...grouped.problems, ...grouped.protections, ...grouped.infos].slice(0, 8);
   return {
     name: target.name,
     domain: target.domain,
     score: target.score,
-    findings: analysis.findings.slice(0, 3).map((item) => ({
+    findings: prioritized.map((item) => ({
       ...item,
       evidence: item.code === 'EMAILS_VISIBLE' ? 'In pagina è visibile un indirizzo email' : item.evidence,
       detail: item.detail,

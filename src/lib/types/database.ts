@@ -1791,7 +1791,9 @@ export type SecurityTargetStatus =
   | 'email_sent'
   | 'failed'
   | 'deep_open'
-  | 'deep_done';
+  | 'deep_running'
+  | 'deep_done'
+  | 'deep_failed';
 
 export type SecurityConsentChannel = 'phone' | 'letter' | 'in_person';
 
@@ -1807,6 +1809,7 @@ export interface SecurityTargetRow {
   status: SecurityTargetStatus;
   score: number | null;
   latest_audit_id: string | null;
+  latest_deep_audit_id: string | null;
   public_slug: string;
   consent_channel: SecurityConsentChannel | null;
   consent_note: string | null;
@@ -1826,6 +1829,7 @@ export interface SecurityTargetInsert {
   status?: SecurityTargetStatus;
   score?: number | null;
   latest_audit_id?: string | null;
+  latest_deep_audit_id?: string | null;
   public_slug: string;
   consent_channel?: SecurityConsentChannel | null;
   consent_note?: string | null;
@@ -1871,6 +1875,50 @@ export interface SecurityAuditInsert {
   ga_ids?: Json;
   error?: string | null;
   created_at?: string;
+}
+
+export type SecurityDeepAuditStatus = 'running' | 'completed' | 'failed';
+
+export interface SecurityDeepAuditRow {
+  id: string;
+  workspace_id: string;
+  target_id: string;
+  lead_id: string;
+  baseline_audit_id: string | null;
+  consent_channel: SecurityConsentChannel | null;
+  consent_at: string | null;
+  requested_url: string;
+  final_url: string | null;
+  status: SecurityDeepAuditStatus;
+  score: number | null;
+  pages_scanned: Json;
+  findings: Json;
+  comparison: Json;
+  metadata: Json;
+  error: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface SecurityDeepAuditInsert {
+  id?: string;
+  workspace_id: string;
+  target_id: string;
+  lead_id: string;
+  baseline_audit_id?: string | null;
+  consent_channel?: SecurityConsentChannel | null;
+  consent_at?: string | null;
+  requested_url: string;
+  final_url?: string | null;
+  status?: SecurityDeepAuditStatus;
+  score?: number | null;
+  pages_scanned?: Json;
+  findings?: Json;
+  comparison?: Json;
+  metadata?: Json;
+  error?: string | null;
+  started_at?: string;
+  completed_at?: string | null;
 }
 
 export interface SecurityOutreachRow {

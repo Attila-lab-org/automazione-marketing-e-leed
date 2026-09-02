@@ -5,20 +5,31 @@ import { explainFinding, riskIfUnfixed } from '@/lib/security/explain';
 import { displayNameForSite, homepageHref } from '@/lib/security/manual-site';
 import {
   analyzeSurfacePage,
+  badCertAnalysis,
+  computeSurfaceScore,
+  findingsByCategory,
   scoreBand,
 } from '@/lib/security/surface-audit';
 import { isBlockedHostname, isPrivateIp, parsePublicHttpUrl, UrlNotAllowedError } from '@/lib/security/url-guard';
 
 const HTTPS = 'https://www.studioesempio.it/';
 const HTTP = 'http://www.studioesempio.it/';
+const NBG = 'https://www.naturalborngamers.it/';
 
-function analyze(html: string, headers: Record<string, string>, url = HTTPS) {
+function analyze(
+  html: string,
+  headers: Record<string, string>,
+  url = HTTPS,
+  extra?: { httpStatus?: number; htmlTruncated?: boolean; redirectChain?: string[] },
+) {
   return analyzeSurfacePage({
     requestedUrl: url,
     finalUrl: url,
-    httpStatus: 200,
+    httpStatus: extra?.httpStatus ?? 200,
     headers,
     html,
+    htmlTruncated: extra?.htmlTruncated,
+    redirectChain: extra?.redirectChain,
   });
 }
 
@@ -27,6 +38,8 @@ const HARDENED = {
   'content-security-policy': "default-src 'self'; frame-ancestors 'none'",
   'x-frame-options': 'DENY',
   'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'permissions-policy': 'camera=(), microphone=()',
 };
 
 describe('parsePublicHttpUrl', () => {
@@ -87,24 +100,88 @@ describe('analyzeSurfacePage', () => {
     const finding = result.findings.find((item) => item.code === 'NO_HTTPS');
     expect(finding).toBeTruthy();
     expect(finding?.evidence).toBe(HTTP);
+    expect(finding?.category).toBe('problem');
     expect(finding?.detail.toLowerCase()).not.toMatch(/probabilmente|vulnerabil|sfruttabil/);
     expect(result.score).toBeLessThanOrEqual(75);
   });
 
-  it('segnala un modulo carta sul loro sito, non se c’è Stripe', () => {
-    const own = analyze(
-      '<form><input name="cardnumber" /></form>',
-      HARDENED,
-    );
+  it('segnala un vero campo carta anche se la pagina carica Stripe', () => {
+    const own = analyze('<form><input name="cardnumber" /></form>', HARDENED);
     expect(own.findings.some((item) => item.code === 'CARD_FORM_OWN')).toBe(true);
     expect(own.payment).toBe('own-form');
 
     const stripe = analyze(
-      '<script src="https://js.stripe.com/v3/"></script><input name="cardnumber" />',
+      '<script src="https://js.stripe.com/v3/"></script>',
       HARDENED,
     );
     expect(stripe.payment).toBe('stripe');
     expect(stripe.findings.some((item) => item.code === 'CARD_FORM_OWN')).toBe(false);
+
+    const suspiciousStripe = analyze(
+      '<script src="https://js.stripe.com/v3/"></script><form><input autocomplete="cc-number" /></form>',
+      HARDENED,
+    );
+    expect(suspiciousStripe.payment).toBe('own-form');
+    expect(suspiciousStripe.findings.some((item) => item.code === 'CARD_FORM_OWN')).toBe(true);
+  });
+
+  it('non prende twitter:card o un blog per un modulo della carta', () => {
+    const blog = analyze(
+      '<html><head><meta name="twitter:card" content="summary_large_image" /><meta name="generator" content="WordPress 6.8.8" /></head><body>Natural Born Gamers</body></html>',
+      HARDENED,
+      NBG,
+    );
+    expect(blog.payment).toBe('none');
+    expect(blog.findings.some((item) => item.code === 'CARD_FORM_OWN')).toBe(false);
+  });
+
+  it('Natural Born Gamers: niente falsi allarmi su card, pingback, link HTTP e numeri in script', () => {
+    const html = `
+      <html>
+        <head>
+          <meta name="twitter:card" content="summary_large_image" />
+          <link rel="pingback" href="https://www.naturalborngamers.it/xmlrpc.php" />
+          <meta name="generator" content="WordPress 6.8.8" />
+        </head>
+        <body>
+          <a href="http://affiliate.example.com/go?id=42">Partner</a>
+          <script>window.__cfg={phone:"3312345678",id:20240101};</script>
+          <p>Scrivici a info@naturalborngamers.it</p>
+          <a href="tel:+390212345678">02 12345678</a>
+        </body>
+      </html>
+    `;
+    const result = analyze(html, HARDENED, NBG);
+    const codes = result.findings.map((item) => item.code);
+    expect(codes).not.toContain('CARD_FORM_OWN');
+    expect(codes).not.toContain('MIXED_CONTENT');
+    expect(codes).not.toContain('ADMIN_LINK');
+    expect(codes).toContain('WP_PINGBACK');
+    expect(result.findings.find((item) => item.code === 'WP_PINGBACK')?.category).toBe('info');
+    expect(result.findings.some((item) => item.code === 'EMAILS_VISIBLE')).toBe(true);
+    expect(result.findings.find((item) => item.code === 'EMAILS_VISIBLE')?.category).toBe('info');
+    // telefono da tel: sì; il numero nello script non deve finire nella prova
+    expect(result.findings.some((item) => item.code === 'PHONES_VISIBLE')).toBe(true);
+    expect(result.findings.find((item) => item.code === 'PHONES_VISIBLE')?.evidence).not.toMatch(/3312345678/);
+  });
+
+  it('numeri solo dentro script non diventano PHONES_VISIBLE', () => {
+    const result = analyze(
+      '<html><body><script>const x="3312345678";</script><p>Ciao</p></body></html>',
+      HARDENED,
+    );
+    expect(result.findings.some((item) => item.code === 'PHONES_VISIBLE')).toBe(false);
+  });
+
+  it('segnala risorse HTTP caricate, non un semplice link affiliato', () => {
+    const mixed = analyze(
+      '<script src="http://cdn.studioesempio.it/app.js"></script><a href="http://partner.example/go">x</a>',
+      HARDENED,
+    );
+    expect(mixed.findings.some((item) => item.code === 'MIXED_CONTENT')).toBe(true);
+    expect(mixed.findings.find((item) => item.code === 'MIXED_CONTENT')?.evidence).toContain(
+      'http://cdn.studioesempio.it/app.js',
+    );
   });
 
   it('legge WordPress e email dal HTML, senza dire che la casella è violata', () => {
@@ -116,6 +193,19 @@ describe('analyzeSurfacePage', () => {
     expect(result.emailsFound).toContain('info@studioesempio.it');
     const emailFinding = result.findings.find((item) => item.code === 'EMAILS_VISIBLE');
     expect(emailFinding?.detail).toMatch(/non è una prova che la casella sia stata violata/i);
+    expect(emailFinding?.category).toBe('info');
+  });
+
+  it('email e telefono non abbassano il punteggio', () => {
+    const base = analyze('<html><body>Studio</body></html>', HARDENED);
+    const withContacts = analyze(
+      '<html><body>info@studioesempio.it <a href="tel:+393331112233">333 1112233</a></body></html>',
+      HARDENED,
+    );
+    expect(withContacts.findings.some((item) => item.code === 'EMAILS_VISIBLE')).toBe(true);
+    expect(withContacts.findings.some((item) => item.code === 'PHONES_VISIBLE')).toBe(true);
+    expect(withContacts.score).toBe(base.score);
+    expect(withContacts.score).toBe(100);
   });
 
   it('elenca /api/ e GA4 senza trattarli come falle', () => {
@@ -133,13 +223,37 @@ describe('analyzeSurfacePage', () => {
       'strict-transport-security': 'max-age=31536000',
     });
     const codes = result.findings.map((item) => item.code);
-    expect(codes).toEqual(expect.arrayContaining(['NO_CSP', 'NO_FRAME_PROTECTION', 'NO_NOSNIFF']));
+    expect(codes).toEqual(
+      expect.arrayContaining(['NO_CSP', 'NO_NOSNIFF', 'NO_REFERRER_POLICY', 'NO_PERMISSIONS_POLICY']),
+    );
+    // Con CSP assente non ripetiamo anche NO_FRAME_PROTECTION
+    expect(codes).not.toContain('NO_FRAME_PROTECTION');
     expect(codes.join(' ')).not.toMatch(/CVE|exploit/i);
     expect(scoreBand(result.score)).toMatch(/orange|red|green/);
   });
 
-  it('segnala un anno vecchio solo se è scritto in pagina', () => {
-    const result = analyze('<p>© 2018 Studio</p>', HARDENED, HTTPS);
+  it('non doppia la penalità tra CSP assente e frame protection', () => {
+    const result = analyze('<html></html>', {
+      'strict-transport-security': 'max-age=31536000',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'no-referrer',
+      'permissions-policy': 'camera=()',
+    });
+    expect(result.findings.some((item) => item.code === 'NO_CSP')).toBe(true);
+    expect(result.findings.some((item) => item.code === 'NO_FRAME_PROTECTION')).toBe(false);
+    expect(result.headers.frameProtection).toBe(false);
+    expect(result.score).toBe(computeSurfaceScore(result.findings));
+  });
+
+  it('segnala un anno vecchio solo con contesto CMS in pagina', () => {
+    const alone = analyze('<p>© 2018 Studio</p>', HARDENED, HTTPS);
+    expect(alone.findings.some((item) => item.code === 'OLD_COPYRIGHT')).toBe(false);
+
+    const result = analyze(
+      '<html><head><meta name="generator" content="WordPress 6.4"></head><body><p>© 2018 Studio</p></body></html>',
+      HARDENED,
+      HTTPS,
+    );
     expect(result.findings.some((item) => item.code === 'OLD_COPYRIGHT')).toBe(true);
     expect(result.findings.find((item) => item.code === 'OLD_COPYRIGHT')?.evidence).toBe('© 2018');
   });
@@ -174,15 +288,110 @@ describe('analyzeSurfacePage', () => {
     );
   });
 
+  it('segnala cookie di sessione senza HttpOnly', () => {
+    const result = analyze('<html></html>', {
+      ...HARDENED,
+      'set-cookie': 'sessionid=abc; Path=/; Secure; SameSite=Lax',
+    });
+    expect(result.findings.some((item) => item.code === 'COOKIE_NO_HTTPONLY')).toBe(true);
+  });
+
+  it('segnala cookie di sessione senza SameSite', () => {
+    const result = analyze('<html></html>', {
+      ...HARDENED,
+      'set-cookie': 'sessionid=abc; Path=/; Secure; HttpOnly',
+    });
+    expect(result.headers.cookieHttpOnly).toBe(true);
+    expect(result.headers.cookieSameSite).toBe(false);
+    expect(result.findings.some((item) => item.code === 'COOKIE_NO_SAMESITE')).toBe(true);
+  });
+
+  it('accetta solo valori X-Frame-Options validi', () => {
+    const invalid = analyze('<html></html>', {
+      ...HARDENED,
+      'content-security-policy': "default-src 'self'",
+      'x-frame-options': 'ALLOW-FROM https://example.it',
+    });
+    expect(invalid.headers.frameProtection).toBe(false);
+    expect(invalid.findings.some((item) => item.code === 'NO_FRAME_PROTECTION')).toBe(true);
+  });
+
+  it('valuta CSP debole e HSTS breve', () => {
+    const result = analyze('<html></html>', {
+      'strict-transport-security': 'max-age=60',
+      'content-security-policy': "default-src * 'unsafe-inline' 'unsafe-eval'",
+      'x-frame-options': 'DENY',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'no-referrer',
+      'permissions-policy': 'camera=()',
+    });
+    expect(result.headers.csp).toBe('weak');
+    expect(result.findings.some((item) => item.code === 'CSP_WEAK')).toBe(true);
+    expect(result.findings.some((item) => item.code === 'HSTS_WEAK')).toBe(true);
+  });
+
+  it('404/500 e body vuoto non producono un punteggio alto', () => {
+    const notFound = analyze('<html>missing</html>', HARDENED, HTTPS, { httpStatus: 404 });
+    expect(notFound.findings.some((item) => item.code === 'HOMEPAGE_ERROR')).toBe(true);
+    expect(notFound.score).toBeLessThanOrEqual(74);
+
+    const empty = analyze('   ', HARDENED, HTTPS, { httpStatus: 200 });
+    expect(empty.findings.some((item) => item.code === 'HOMEPAGE_ERROR')).toBe(true);
+    expect(empty.score).toBeLessThanOrEqual(80);
+  });
+
+  it('segna HTML troncato come informazione', () => {
+    const result = analyze('<html><body>ok</body></html>', HARDENED, HTTPS, { htmlTruncated: true });
+    const truncated = result.findings.find((item) => item.code === 'HTML_TRUNCATED');
+    expect(truncated?.category).toBe('info');
+    expect(result.score).toBe(100);
+  });
+
   it('tronca una chiave visibile e non la stampa intera', () => {
-    const result = analyze(
-      '<script>const k="sk_live_abcdefghijklmnopqrstuv"</script>',
-      HARDENED,
-    );
+    const result = analyze('<script>const k="sk_live_abcdefghijklmnopqrstuv"</script>', HARDENED);
     const secret = result.findings.find((item) => item.code === 'VISIBLE_SECRET');
     expect(secret).toBeTruthy();
     expect(secret?.evidence).toMatch(/^sk_live_/);
     expect(secret?.evidence).not.toContain('abcdefghijklmnopqrstuv');
+    expect(secret?.category).toBe('problem');
+  });
+
+  it('non scambia chiavi pubblicabili Stripe o JWT client per segreti confermati', () => {
+    const result = analyze(
+      '<script>window.pk="pk_live_abcdefghijklmnopqrst"; window.session="eyJabcdefghijabcdefghijabcdefghij.abcdefghijabcdefghij.abcdefghijabcdefghij";</script>',
+      HARDENED,
+    );
+    expect(result.findings.some((item) => item.code === 'VISIBLE_SECRET')).toBe(false);
+  });
+
+  it('un problema HIGH non resta in fascia verde', () => {
+    const result = analyze('<form><input name="cardnumber" /></form>', HARDENED);
+    expect(result.findings.some((item) => item.code === 'CARD_FORM_OWN' && item.severity === 'HIGH')).toBe(
+      true,
+    );
+    expect(result.score).toBeLessThanOrEqual(74);
+  });
+
+  it('raggruppa problemi, protezioni e informazioni', () => {
+    const result = analyze(
+      '<html><body>info@studio.esempio.it<a href="/wp-login.php">x</a></body></html>',
+      {},
+    );
+    const grouped = findingsByCategory(result.findings);
+    expect(grouped.problems.length + grouped.protections.length + grouped.infos.length).toBe(
+      result.findings.length,
+    );
+    expect(grouped.infos.some((item) => item.code === 'EMAILS_VISIBLE')).toBe(true);
+  });
+});
+
+describe('badCertAnalysis', () => {
+  it('classifica il certificato non valido e applica lo stesso punteggio', () => {
+    const analysis = badCertAnalysis('CERT_HAS_EXPIRED');
+    expect(analysis.findings[0]?.code).toBe('BAD_CERT');
+    expect(analysis.findings[0]?.category).toBe('problem');
+    expect(analysis.score).toBe(computeSurfaceScore(analysis.findings));
+    expect(analysis.score).toBeLessThanOrEqual(74);
   });
 });
 
@@ -197,6 +406,7 @@ describe('copy email e lettera', () => {
     expect(email.subject).toMatch(/Cose visibili/);
     expect(email.text.toLowerCase()).not.toMatch(/probabilmente|vulnerabil|cve/);
     expect(email.text).toMatch(/come farebbe un visitatore/);
+    expect(email.text).toMatch(/Informazioni pubbliche/);
   });
 
   it('la lettera accetta anche il permesso al telefono, non è un attacco', () => {
@@ -217,6 +427,7 @@ describe('copy email e lettera', () => {
     expect(email.text).toMatch(/Se non sistemi:/);
     expect(email.text).toMatch(/Wi-Fi|fiducia/i);
     expect(email.text).toMatch(/prima di questa mail/);
+    expect(email.text).toMatch(/Da sistemare/);
   });
 });
 
@@ -225,15 +436,21 @@ describe('spiegazioni per l’utente medio', () => {
     for (const code of [
       'NO_HTTPS',
       'BAD_CERT',
+      'HOMEPAGE_ERROR',
       'CARD_FORM_OWN',
       'NO_HSTS',
+      'HSTS_WEAK',
       'NO_CSP',
+      'CSP_WEAK',
       'NO_FRAME_PROTECTION',
       'EMAILS_VISIBLE',
       'FORM_TO_HTTP',
       'MIXED_CONTENT',
       'ADMIN_LINK',
+      'WP_PINGBACK',
       'VISIBLE_SECRET',
+      'COOKIE_NO_HTTPONLY',
+      'HTML_TRUNCATED',
     ]) {
       const explained = explainFinding(code);
       expect(explained.meaning.length).toBeGreaterThan(20);

@@ -91,6 +91,8 @@ import type {
   SalesThreadMemoryRow,
   SecurityAuditInsert,
   SecurityAuditRow,
+  SecurityDeepAuditInsert,
+  SecurityDeepAuditRow,
   SecurityOutreachInsert,
   SecurityOutreachRow,
   SecurityTargetInsert,
@@ -194,6 +196,7 @@ export type Database = {
       calendar_events: Tbl<CalendarEventRow, CalendarEventInsert>;
       security_targets: Tbl<SecurityTargetRow, SecurityTargetInsert>;
       security_audits: Tbl<SecurityAuditRow, SecurityAuditInsert>;
+      security_deep_audits: Tbl<SecurityDeepAuditRow, SecurityDeepAuditInsert>;
       security_outreach: Tbl<SecurityOutreachRow, SecurityOutreachInsert>;
     };
     Views: {
