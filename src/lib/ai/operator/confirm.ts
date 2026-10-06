@@ -1,5 +1,5 @@
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
-import { approveCampaignLeads } from '@/lib/campaigns/review-queue';
+import { approveCampaignLeads, describeSendRelease } from '@/lib/campaigns/review-queue';
 import { getPendingAction, hashPayload, markPending, claimPendingForExecution } from '@/lib/ai/operator/pending';
 import { archiveCampaign, pauseCampaign, recordAiAudit } from '@/lib/ai/operator/writes';
 import { activateAutonomyPolicy } from '@/lib/sales/autonomy';
@@ -55,7 +55,9 @@ export async function confirmPendingAction(args: {
   try {
     if (row.tool === 'send_campaign') {
       const campaignId = String(params.campaignId ?? '');
-      result = await approveCampaignLeads(args.admin, args.workspaceId, campaignId);
+      const released = await approveCampaignLeads(args.admin, args.workspaceId, campaignId);
+      result = released;
+      summary = describeSendRelease(released);
     } else if (row.tool === 'enable_autonomy') {
       await activateAutonomyPolicy(args.admin, args.workspaceId, String(params.policyId ?? ''));
       result = { activated: true };

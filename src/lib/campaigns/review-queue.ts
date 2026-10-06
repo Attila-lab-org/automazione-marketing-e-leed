@@ -213,18 +213,70 @@ export async function updateDraftContent(
   return draft;
 }
 
+export type SendReleaseDecision = 'queue' | 'requeue' | 'waiting' | 'already_sent' | 'missing_draft';
+
+export type SendReleaseResult = {
+  approved: number;
+  queued: number;
+  requeued: number;
+  waiting: number;
+  alreadySent: number;
+  missingDraft: number;
+};
+
+const ACTIVE_SEND_JOBS = new Set(['QUEUED', 'RUNNING', 'RETRYING']);
+const FINISHED_SEND_JOBS = new Set(['FAILED', 'CANCELLED', 'SUCCEEDED']);
+
+export function sendJobKey(campaignLeadId: string, sequenceStep: number): string {
+  return `SEND_MESSAGE:campaign_lead:${campaignLeadId}:step:${sequenceStep}`;
+}
+
+/** A contact already marked approved must still be queued if no email has left. */
+export function decideSendRelease(input: {
+  hasDraft: boolean;
+  hasOutbound: boolean;
+  jobStatus: string | null;
+}): SendReleaseDecision {
+  if (input.hasOutbound) return 'already_sent';
+  if (!input.hasDraft) return 'missing_draft';
+  if (input.jobStatus && ACTIVE_SEND_JOBS.has(input.jobStatus)) return 'waiting';
+  if (input.jobStatus && FINISHED_SEND_JOBS.has(input.jobStatus)) return 'requeue';
+  return 'queue';
+}
+
+export function emptySendRelease(): SendReleaseResult {
+  return { approved: 0, queued: 0, requeued: 0, waiting: 0, alreadySent: 0, missingDraft: 0 };
+}
+
+export function describeSendRelease(result: SendReleaseResult): string {
+  const started = result.queued + result.requeued;
+  if (started > 0) {
+    return `Ho messo in coda ${started} ${started === 1 ? 'invio' : 'invii'}. Partono al prossimo giro di elaborazione.`;
+  }
+  if (result.waiting > 0) {
+    return `${result.waiting} ${result.waiting === 1 ? 'invio è' : 'invii sono'} già in coda. Non serve un altro sblocco.`;
+  }
+  if (result.alreadySent > 0) {
+    return 'Questi messaggi risultano già spediti.';
+  }
+  if (result.missingDraft > 0) {
+    return 'Manca la bozza del messaggio, quindi non posso spedire.';
+  }
+  return 'Nessun contatto pronto da spedire.';
+}
+
 export async function approveCampaignLeads(
   admin: AppSupabaseClient,
   workspaceId: string,
   campaignId: string,
   campaignLeadIds?: string[],
-) {
+): Promise<SendReleaseResult> {
   let query = admin
     .from('campaign_leads')
-    .select('id, sequence_step, demo_site_id, lead_id')
+    .select('id, sequence_step, lead_id, status')
     .eq('workspace_id', workspaceId)
     .eq('campaign_id', campaignId)
-    .in('status', ['REVIEW', 'READY']);
+    .in('status', ['REVIEW', 'READY', 'APPROVED']);
 
   if (campaignLeadIds?.length) {
     query = query.in('id', campaignLeadIds);
@@ -232,34 +284,103 @@ export async function approveCampaignLeads(
 
   const { data: rows, error } = await query;
   if (error) throw new Error(`Approve: ${error.message}`);
-  if (!rows?.length) return { approved: 0 };
+  const result = emptySendRelease();
+  if (!rows?.length) return result;
 
-  const ids = rows.map((r) => r.id);
-  const { error: updError } = await admin
-    .from('campaign_leads')
-    .update({ status: 'APPROVED', updated_at: new Date().toISOString() })
-    .in('id', ids);
-  if (updError) throw new Error(`Approve: update fallito — ${updError.message}`);
+  const ids = rows.map((row) => row.id);
+  const keys = rows.map((row) => sendJobKey(row.id, row.sequence_step ?? 0));
+  const [{ data: drafts, error: draftError }, { data: messages, error: messageError }, { data: jobs, error: jobError }] =
+    await Promise.all([
+      admin.from('message_drafts').select('campaign_lead_id, sequence_step').in('campaign_lead_id', ids),
+      admin
+        .from('messages')
+        .select('campaign_lead_id, sequence_step')
+        .eq('direction', 'OUTBOUND')
+        .in('campaign_lead_id', ids),
+      admin.from('automation_jobs').select('id, status, idempotency_key').in('idempotency_key', keys),
+    ]);
+  if (draftError) throw new Error(`Approve: bozze — ${draftError.message}`);
+  if (messageError) throw new Error(`Approve: messaggi — ${messageError.message}`);
+  if (jobError) throw new Error(`Approve: lavori — ${jobError.message}`);
 
+  const draftKeys = new Set(
+    (drafts ?? []).map((row) => `${row.campaign_lead_id}:${row.sequence_step ?? 0}`),
+  );
+  const sentKeys = new Set(
+    (messages ?? []).map((row) => `${row.campaign_lead_id}:${row.sequence_step ?? 0}`),
+  );
+  const jobsByKey = new Map((jobs ?? []).map((row) => [row.idempotency_key, row]));
+  const toApprove: string[] = [];
   const queue = new SupabaseJobQueue(admin);
+
   for (const row of rows) {
-    if (!row.demo_site_id) continue;
+    const step = row.sequence_step ?? 0;
+    const pair = `${row.id}:${step}`;
+    const decision = decideSendRelease({
+      hasDraft: draftKeys.has(pair),
+      hasOutbound: sentKeys.has(pair),
+      jobStatus: jobsByKey.get(sendJobKey(row.id, step))?.status ?? null,
+    });
+    if (decision === 'already_sent') {
+      result.alreadySent += 1;
+      continue;
+    }
+    if (decision === 'missing_draft') {
+      result.missingDraft += 1;
+      continue;
+    }
+    if (row.status === 'REVIEW' || row.status === 'READY') toApprove.push(row.id);
+    if (decision === 'waiting') {
+      result.waiting += 1;
+      continue;
+    }
+    if (decision === 'requeue') {
+      const job = jobsByKey.get(sendJobKey(row.id, step));
+      const { error: retryError } = await admin
+        .from('automation_jobs')
+        .update({
+          status: 'QUEUED',
+          attempt_count: 0,
+          error_code: null,
+          error_detail: null,
+          next_retry_at: null,
+          lease_owner: null,
+          lease_expires_at: null,
+          started_at: null,
+          completed_at: null,
+          cancelled_at: null,
+        })
+        .eq('id', job!.id);
+      if (retryError) throw new Error(`Approve: riaccodo fallito — ${retryError.message}`);
+      result.requeued += 1;
+      continue;
+    }
     await queue.enqueue({
       workspaceId,
       jobType: 'SEND_MESSAGE',
       entityType: 'campaign_lead',
       entityId: row.id,
-      idempotencyKey: `SEND_MESSAGE:campaign_lead:${row.id}:step:${row.sequence_step ?? 0}`,
+      idempotencyKey: sendJobKey(row.id, step),
       inputSnapshot: {
-        sequenceStep: row.sequence_step ?? 0,
+        sequenceStep: step,
         leadId: row.lead_id,
-        manualFollowup: (row.sequence_step ?? 0) >= 1,
+        manualFollowup: step >= 1,
       },
       priority: 80,
     });
+    result.queued += 1;
   }
 
-  return { approved: rows.length };
+  if (toApprove.length > 0) {
+    const { error: updError } = await admin
+      .from('campaign_leads')
+      .update({ status: 'APPROVED', updated_at: new Date().toISOString() })
+      .in('id', toApprove);
+    if (updError) throw new Error(`Approve: update fallito — ${updError.message}`);
+    result.approved = toApprove.length;
+  }
+
+  return result;
 }
 
 export async function updateCampaignLeadStatus(
