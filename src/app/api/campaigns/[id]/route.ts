@@ -12,6 +12,7 @@ import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 import { emailHtmlToText } from '@/lib/messaging/html-to-text';
 import { archiveCampaignWork } from '@/lib/campaigns/archive';
+import { getResendRuntimeBadge } from '@/lib/providers/status';
 
 export const runtime = 'nodejs';
 
@@ -39,7 +40,7 @@ export const GET = withAdmin(async (_request: Request, ctx?: unknown) => {
 
   const { data: leads, error: leadsError } = await admin
     .from('campaign_leads')
-    .select('id, lead_id, status, sequence_step, next_action_at')
+    .select('id, lead_id, status, sequence_step, next_action_at, preparation')
     .eq('workspace_id', workspace.id)
     .eq('campaign_id', id);
 
@@ -136,9 +137,26 @@ export const GET = withAdmin(async (_request: Request, ctx?: unknown) => {
     }))
     .sort((a, b) => String(a.availableAt).localeCompare(String(b.availableAt)));
 
+  const skipReasons: Record<string, number> = {};
+  for (const row of leads ?? []) {
+    if (row.status !== 'SKIPPED') continue;
+    const preparation =
+      row.preparation && typeof row.preparation === 'object' ? row.preparation : {};
+    const blockers = Array.isArray((preparation as { blockers?: unknown }).blockers)
+      ? ((preparation as { blockers: unknown[] }).blockers.filter(
+          (item): item is string => typeof item === 'string',
+        ))
+      : [];
+    const reason = blockers[0] ?? 'UNKNOWN';
+    skipReasons[reason] = (skipReasons[reason] ?? 0) + 1;
+  }
+  const resend = getResendRuntimeBadge(process.env);
+
   return NextResponse.json({
     campaign,
     counts,
+    skipReasons,
+    resend: { mode: resend.mode, label: resend.label },
     manualFollowups,
     sentMessages,
     totals: {

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import EmptyState from "@/components/empty-state";
+import { campaignActivityLabel, type CampaignProgress } from "@/lib/campaigns/activity-label";
+import { pumpCampaignJobs } from "@/lib/campaigns/pump-jobs";
 import { discoveryCategoryLabel } from "@/lib/leads/discovery-categories";
 
 type Campaign = {
@@ -13,6 +15,7 @@ type Campaign = {
   delivery_mode?: string;
   created_at: string;
   lead_count: number;
+  progress?: CampaignProgress;
   categories: string[];
 };
 
@@ -50,6 +53,9 @@ export default function CampaignsClient() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Impossibile caricare gli invii email");
         setCampaigns(data.campaigns ?? []);
+        if ((data.campaigns ?? []).some((campaign: Campaign) => campaign.status === "ACTIVE")) {
+          void pumpCampaignJobs(8);
+        }
       })
       .catch((reason) =>
         setLoadError(reason instanceof Error ? reason.message : "Impossibile caricare gli invii email"),
@@ -230,13 +236,17 @@ export default function CampaignsClient() {
                   <p className="mt-1 text-sm text-stone-600">
                     {c.lead_count} {c.lead_count === 1 ? "destinatario" : "destinatari"}
                     {" · "}
-                    {c.status === "DRAFT"
-                      ? "Prossimo passo: prepara e controlla i messaggi"
-                      : c.status === "ACTIVE"
-                        ? "Invio in corso"
-                        : c.status === "PAUSED"
-                          ? "In pausa"
-                          : "Invio chiuso o fermo"}
+                    {campaignActivityLabel(c.status, c.lead_count, c.progress ?? {
+                      pending: 0,
+                      generating: 0,
+                      review: 0,
+                      ready: 0,
+                      approved: 0,
+                      sending: 0,
+                      sent: 0,
+                      skipped: 0,
+                      failed: 0,
+                    })}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">

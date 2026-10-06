@@ -79,11 +79,17 @@ export const PATCH = withAdmin(async (request: Request) => {
       byCampaign.set(row.campaign_id, list);
     }
     let approved = 0;
+    let queued = 0;
+    let requeued = 0;
+    let waiting = 0;
     for (const [campaignId, ids] of byCampaign) {
       const result = await approveCampaignLeads(admin, workspace.id, campaignId, ids);
       approved += result.approved;
+      queued += result.queued;
+      requeued += result.requeued;
+      waiting += result.waiting;
     }
-    return NextResponse.json({ approved });
+    return NextResponse.json({ approved, queued, requeued, waiting });
   }
 
   if (!body.campaignLeadId || !body.action) {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ReviewCard from "@/components/review-card";
 import EmptyState from "@/components/empty-state";
+import { pumpCampaignJobs } from "@/lib/campaigns/pump-jobs";
 
 type QueueItem = {
   id: string;
@@ -115,6 +116,7 @@ export default function ReviewQueueClient() {
       const raw = await res.text();
       const data = raw ? (JSON.parse(raw) as { error?: string }) : {};
       if (!res.ok) throw new Error(data.error ?? "Operazione non riuscita");
+      if (action === "approve") void pumpCampaignJobs(4);
       setSelected((prev) => {
         const next = new Set(prev);
         next.delete(id);
@@ -167,6 +169,7 @@ export default function ReviewQueueClient() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Approvazione fallita");
+      void pumpCampaignJobs(8);
       setMessage(
         testSelected.length
           ? `Approvate ${data.approved ?? ids.length} attività. La prova è in attesa di invio.`

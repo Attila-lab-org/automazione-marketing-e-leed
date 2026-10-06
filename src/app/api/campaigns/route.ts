@@ -27,7 +27,7 @@ export const GET = withAdmin(async (request: Request) => {
   const { data: memberships } = campaignIds.length
     ? await admin
         .from('campaign_leads')
-        .select('campaign_id, lead_id')
+        .select('campaign_id, lead_id, status')
         .eq('workspace_id', workspace.id)
         .in('campaign_id', campaignIds)
     : { data: [] };
@@ -42,7 +42,7 @@ export const GET = withAdmin(async (request: Request) => {
   const categoryByLead = new Map((leads ?? []).map((lead) => [lead.id, lead.category]));
   const membershipsByCampaign = new Map<
     string,
-    Array<{ campaign_id: string; lead_id: string }>
+    Array<{ campaign_id: string; lead_id: string; status: string }>
   >();
   for (const membership of memberships ?? []) {
     const current = membershipsByCampaign.get(membership.campaign_id) ?? [];
@@ -51,9 +51,25 @@ export const GET = withAdmin(async (request: Request) => {
   }
   const campaigns = visible.map((campaign) => {
     const campaignMemberships = membershipsByCampaign.get(campaign.id) ?? [];
+    const progress = {
+      pending: 0,
+      generating: 0,
+      review: 0,
+      ready: 0,
+      approved: 0,
+      sending: 0,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+    };
+    for (const membership of campaignMemberships) {
+      const key = membership.status.toLowerCase();
+      if (key in progress) progress[key as keyof typeof progress] += 1;
+    }
     return {
       ...campaign,
       lead_count: campaignMemberships.length,
+      progress,
       categories: [
         ...new Set(
           campaignMemberships

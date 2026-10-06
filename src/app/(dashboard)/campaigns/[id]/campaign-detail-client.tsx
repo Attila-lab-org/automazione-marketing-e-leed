@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { pumpCampaignJobs } from "@/lib/campaigns/pump-jobs";
 
 type CampaignDetail = {
   id: string;
@@ -109,6 +110,8 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
   const [busy, setBusy] = useState(false);
   const [manualFollowups, setManualFollowups] = useState<ManualFollowup[]>([]);
   const [sentMessages, setSentMessages] = useState<SentMessage[]>([]);
+  const [skipReasons, setSkipReasons] = useState<Record<string, number>>({});
+  const [resendMode, setResendMode] = useState<"mock" | "live" | "error" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,6 +126,8 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
         setTotals(data.totals ?? null);
         setManualFollowups(data.manualFollowups ?? []);
         setSentMessages(data.sentMessages ?? []);
+        setSkipReasons(data.skipReasons ?? {});
+        setResendMode(data.resend?.mode ?? null);
       } catch (err: unknown) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Errore");
       }
@@ -141,24 +146,30 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
     setTotals(data.totals ?? null);
     setManualFollowups(data.manualFollowups ?? []);
     setSentMessages(data.sentMessages ?? []);
+    setSkipReasons(data.skipReasons ?? {});
+    setResendMode(data.resend?.mode ?? null);
   }, [campaignId]);
 
+  const workInProgress = Boolean(
+    campaign &&
+      totals &&
+      campaign.status !== "PAUSED" &&
+      campaign.status !== "COMPLETED" &&
+      (totals.pending > 0 ||
+        totals.generating > 0 ||
+        totals.approved > 0 ||
+        totals.sending > 0),
+  );
+
   useEffect(() => {
-    if (
-      !campaign ||
-      !totals ||
-      campaign.status === "PAUSED" ||
-      campaign.status === "COMPLETED" ||
-      (totals.pending === 0 &&
-        totals.generating === 0 &&
-        totals.approved === 0 &&
-        totals.sending === 0)
-    ) {
-      return;
-    }
-    const timer = window.setInterval(() => void refresh(), 5000);
+    if (!workInProgress) return;
+    const tick = () => {
+      void pumpCampaignJobs(4).finally(() => void refresh());
+    };
+    tick();
+    const timer = window.setInterval(tick, 8000);
     return () => window.clearInterval(timer);
-  }, [campaign, totals, refresh]);
+  }, [workInProgress, refresh]);
 
   async function runCloseAction(action: "archive" | "delete") {
     const ok = window.confirm(
@@ -609,6 +620,12 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
         )}
       </section>
 
+      {resendMode === "mock" ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          Questo ambiente simula Resend: prepara demo e messaggi, ma non consegna email vere.
+        </section>
+      ) : null}
+
       {problems > 0 ? (
         <section className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
           <p className="text-sm font-semibold text-red-800">
@@ -616,7 +633,22 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
           </p>
           <p className="mt-1 text-xs text-red-700">
             {totals.failed ? `${totals.failed} non riuscite. ` : ""}
-            {totals.skipped ? `${totals.skipped} saltate perché non idonee.` : ""}
+            {skipReasons.EMAIL_NOT_FOUND
+              ? `${skipReasons.EMAIL_NOT_FOUND} senza email del cliente: nell’invio reale non partono. `
+              : ""}
+            {skipReasons.TEMPLATE_NOT_COMPATIBLE
+              ? `${skipReasons.TEMPLATE_NOT_COMPATIBLE} non sono ristoranti o bar, quindi questo modello non le accetta. `
+              : ""}
+            {totals.skipped -
+              (skipReasons.EMAIL_NOT_FOUND ?? 0) -
+              (skipReasons.TEMPLATE_NOT_COMPATIBLE ?? 0) >
+            0
+              ? `${
+                  totals.skipped -
+                  (skipReasons.EMAIL_NOT_FOUND ?? 0) -
+                  (skipReasons.TEMPLATE_NOT_COMPATIBLE ?? 0)
+                } saltate per un altro motivo.`
+              : ""}
           </p>
         </section>
       ) : null}
