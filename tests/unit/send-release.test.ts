@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { decideSendRelease, describeSendRelease, emptySendRelease } from '@/lib/campaigns/review-queue';
+import {
+  decideSendRelease,
+  describeSendRelease,
+  emptySendRelease,
+  reviewBlockers,
+} from '@/lib/campaigns/review-queue';
 
 describe('sblocco invio dei contatti già approvati', () => {
   it('mette in coda un contatto approvato che ha la bozza e non ha ancora un lavoro', () => {
@@ -19,6 +24,21 @@ describe('sblocco invio dei contatti già approvati', () => {
 
   it('non spedisce senza bozza', () => {
     expect(decideSendRelease({ hasDraft: false, hasOutbound: false, jobStatus: null })).toBe('missing_draft');
+  });
+
+  it('non chiama pronto un contatto che ha la demo ma non il testo email', () => {
+    expect(
+      reviewBlockers({
+        deliveryMode: 'PRODUCTION',
+        leadEmail: 'cliente@example.com',
+        emailStatus: 'FOUND',
+        testRecipient: null,
+        testRecipientAllowed: false,
+        hasDemo: true,
+        failed: false,
+        hasMessage: false,
+      }),
+    ).toContain('MESSAGE_NOT_READY');
   });
 
   it('dice in chiaro se ha messo in coda, se era già in coda, o se non può spedire', () => {

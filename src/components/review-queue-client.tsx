@@ -31,6 +31,7 @@ const BLOCKER_LABELS: Record<string, string> = {
   TEST_RECIPIENT_MISSING: "Indirizzo di prova mancante",
   TEST_RECIPIENT_NOT_ALLOWED: "Indirizzo di prova non autorizzato",
   DEMO_NOT_READY: "Anteprima non ancora pronta",
+  MESSAGE_NOT_READY: "Testo email non ancora scritto",
   PREPARATION_FAILED: "Preparazione non riuscita",
   TEMPLATE_NOT_COMPATIBLE: "Nessun modello compatibile",
 };
@@ -55,6 +56,18 @@ export default function ReviewQueueClient() {
     setItems(data.items ?? []);
     setLoading(false);
   }, []);
+
+  const waitingForMessages = items.some((item) => item.blockers.includes("MESSAGE_NOT_READY"));
+
+  useEffect(() => {
+    if (!waitingForMessages) return;
+    const tick = () => {
+      void pumpCampaignJobs(6).finally(() => void refresh());
+    };
+    tick();
+    const timer = window.setInterval(tick, 8000);
+    return () => window.clearInterval(timer);
+  }, [waitingForMessages, refresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,11 +182,19 @@ export default function ReviewQueueClient() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Approvazione fallita");
-      void pumpCampaignJobs(8);
+      const queued = Number(data.queued ?? 0) + Number(data.requeued ?? 0);
+      const missing = Number(data.missingDraft ?? 0);
+      const waiting = Number(data.waiting ?? 0);
+      if (missing > 0) void pumpCampaignJobs(8);
+      else if (queued > 0) void pumpCampaignJobs(8);
       setMessage(
-        testSelected.length
-          ? `Approvate ${data.approved ?? ids.length} attività. La prova è in attesa di invio.`
-          : `Approvate ${data.approved ?? ids.length} attività. Le email sono in attesa di invio.`,
+        queued > 0
+          ? `Ho messo in invio ${queued} ${queued === 1 ? "email" : "email"}.`
+          : missing > 0
+            ? `Non ho inviato nulla. Manca ancora il testo di ${missing} email: lo sto scrivendo adesso.`
+            : waiting > 0
+              ? `${waiting} invii erano già in coda.`
+              : "Non ho inviato nulla.",
       );
       setSelected(new Set());
       await refresh();
@@ -260,6 +281,12 @@ export default function ReviewQueueClient() {
             : `Approva e avvia ${approvableSelected.length || ""}`}
         </button>
       </div>
+
+      {waitingForMessages ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          Il testo delle email non è ancora scritto. Lo sto preparando: il pulsante di invio si accende solo quando c’è il messaggio da leggere.
+        </p>
+      ) : null}
 
       {message ? <p className="text-sm text-stone-700">{message}</p> : null}
 
@@ -355,7 +382,7 @@ export default function ReviewQueueClient() {
                 ]
               : []),
             {
-              label: item.previewImageUrl ? "Anteprima pronta" : "Anteprima assente",
+              label: item.previewImageUrl ? "Demo pronta" : "Demo assente",
               ok: Boolean(item.previewImageUrl),
             },
             {

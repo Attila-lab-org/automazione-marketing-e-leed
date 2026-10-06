@@ -157,6 +157,8 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       campaign.status !== "COMPLETED" &&
       (totals.pending > 0 ||
         totals.generating > 0 ||
+        totals.review > 0 ||
+        totals.ready > 0 ||
         totals.approved > 0 ||
         totals.sending > 0),
   );
@@ -299,9 +301,8 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
   const preparing = totals.pending + totals.generating;
   const reviewable = totals.review + totals.ready;
   const problems = totals.failed + totals.skipped;
-  const finished = totals.sent + totals.skipped;
   const progress =
-    totals.leads > 0 ? Math.min(100, Math.round((finished / totals.leads) * 100)) : 0;
+    totals.leads > 0 ? Math.min(100, Math.round((totals.sent / totals.leads) * 100)) : 0;
 
   let nextAction: NextAction;
   let nextTitle: string;
@@ -316,9 +317,9 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       kind: "review",
       label: `Controlla ${reviewable} ${reviewable === 1 ? "attività" : "attività"}`,
     };
-    nextTitle = "Le anteprime sono pronte";
+    nextTitle = "Controlla prima di inviare";
     nextDescription =
-      "Controlla demo e messaggio. L’approvazione e l’invio avvengono nella schermata di controllo.";
+      "Apri il controllo. Se il testo dell’email non è ancora scritto, il pulsante di invio resta fermo e la pagina lo prepara.";
   } else if (preparing > 0) {
     nextAction = { kind: "wait", label: "Preparazione in corso" };
     nextTitle = totals.generating > 0 ? "Sto creando anteprime e messaggi" : "Preparazione in coda";
@@ -329,7 +330,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
     nextTitle = "Le attività approvate sono in lavorazione";
     nextDescription =
       "Send Guard e il provider stanno gestendo gli invii. La pagina si aggiorna automaticamente.";
-  } else if (totals.leads > 0 && finished >= totals.leads) {
+  } else if (totals.leads > 0 && totals.sent + totals.skipped >= totals.leads) {
     nextAction = { kind: "complete", label: "Torna alle campagne" };
     nextTitle = "Campagna completata";
     nextDescription = `${totals.sent} ${

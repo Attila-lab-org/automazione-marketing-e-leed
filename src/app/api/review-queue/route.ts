@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { withAdmin } from '@/lib/api/with-admin';
 import {
   listReviewQueue,
+  queueMissingMessageDrafts,
   updateCampaignLeadStatus,
   approveCampaignLeads,
   updateDraftContent,
@@ -19,6 +20,7 @@ export const GET = withAdmin(async () => {
   const admin = createAdminSupabaseClient(process.env);
   const workspace = await ensureDefaultWorkspace(admin);
   const appUrl = resolveAppUrl(process.env);
+  await queueMissingMessageDrafts(admin, workspace.id);
   const items = await listReviewQueue(admin, workspace.id, appUrl);
   return NextResponse.json({ items, count: items.length });
 });

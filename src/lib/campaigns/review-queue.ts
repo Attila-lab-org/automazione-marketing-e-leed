@@ -27,6 +27,114 @@ export interface ReviewQueueItem {
   blockers: string[];
 }
 
+export function reviewBlockers(input: {
+  deliveryMode: 'PRODUCTION' | 'TEST';
+  leadEmail: string | null;
+  emailStatus: string | null;
+  testRecipient: string | null;
+  testRecipientAllowed: boolean;
+  hasDemo: boolean;
+  failed: boolean;
+  hasMessage: boolean;
+}): string[] {
+  const blockers: string[] = [];
+  if (input.deliveryMode === 'PRODUCTION') {
+    if (!input.leadEmail) blockers.push('EMAIL_NOT_FOUND');
+    if (input.emailStatus === 'NOT_FOUND' || input.emailStatus === 'EMAIL_NOT_FOUND') {
+      blockers.push('EMAIL_NOT_FOUND');
+    }
+  } else if (!input.testRecipient) {
+    blockers.push('TEST_RECIPIENT_MISSING');
+  } else if (!input.testRecipientAllowed) {
+    blockers.push('TEST_RECIPIENT_NOT_ALLOWED');
+  }
+  if (!input.hasDemo) blockers.push('DEMO_NOT_READY');
+  if (input.failed) blockers.push('PREPARATION_FAILED');
+  if (!input.hasMessage) blockers.push('MESSAGE_NOT_READY');
+  return blockers;
+}
+
+export async function queueMissingMessageDrafts(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+): Promise<number> {
+  const { data: rows, error } = await admin
+    .from('campaign_leads')
+    .select('id, lead_id, demo_site_id, sequence_step')
+    .eq('workspace_id', workspaceId)
+    .in('status', ['READY', 'REVIEW'])
+    .not('demo_site_id', 'is', null);
+  if (error) throw new Error(`Messaggi mancanti: ${error.message}`);
+  const candidates = (rows ?? []).filter((row) => (row.sequence_step ?? 0) === 0);
+  if (!candidates.length) return 0;
+
+  const ids = candidates.map((row) => row.id);
+  const keys = ids.map((id) => `MESSAGE_GENERATION:campaign_lead:${id}:step:0`);
+  const [{ data: drafts, error: draftError }, { data: jobs, error: jobError }] = await Promise.all([
+    admin
+      .from('message_drafts')
+      .select('campaign_lead_id, sequence_step, subject, body')
+      .in('campaign_lead_id', ids),
+    admin.from('automation_jobs').select('id, status, idempotency_key').in('idempotency_key', keys),
+  ]);
+  if (draftError) throw new Error(`Messaggi mancanti: ${draftError.message}`);
+  if (jobError) throw new Error(`Messaggi mancanti: ${jobError.message}`);
+
+  const written = new Set(
+    (drafts ?? [])
+      .filter(
+        (row) =>
+          (row.sequence_step ?? 0) === 0 && Boolean(row.subject?.trim()) && Boolean(row.body?.trim()),
+      )
+      .map((row) => row.campaign_lead_id),
+  );
+  const jobsByKey = new Map((jobs ?? []).map((row) => [row.idempotency_key, row]));
+  const queue = new SupabaseJobQueue(admin);
+  let queued = 0;
+
+  for (const row of candidates) {
+    if (written.has(row.id)) continue;
+    const key = `MESSAGE_GENERATION:campaign_lead:${row.id}:step:0`;
+    const job = jobsByKey.get(key);
+    if (job && ['QUEUED', 'RUNNING', 'RETRYING'].includes(job.status)) continue;
+    if (job) {
+      const { error: retryError } = await admin
+        .from('automation_jobs')
+        .update({
+          status: 'QUEUED',
+          attempt_count: 0,
+          error_code: null,
+          error_detail: null,
+          next_retry_at: null,
+          lease_owner: null,
+          lease_expires_at: null,
+          started_at: null,
+          completed_at: null,
+          cancelled_at: null,
+        })
+        .eq('id', job.id);
+      if (retryError) throw new Error(`Messaggi mancanti: ${retryError.message}`);
+      queued += 1;
+      continue;
+    }
+    await queue.enqueue({
+      workspaceId,
+      jobType: 'MESSAGE_GENERATION',
+      entityType: 'campaign_lead',
+      entityId: row.id,
+      idempotencyKey: key,
+      inputSnapshot: {
+        leadId: row.lead_id,
+        demoId: row.demo_site_id,
+        sequenceStep: 0,
+      },
+      priority: 70,
+    });
+    queued += 1;
+  }
+  return queued;
+}
+
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -128,19 +236,16 @@ export async function listReviewQueue(
     const testRecipient =
       typeof campaign?.test_recipient === 'string' ? campaign.test_recipient : null;
 
-    const blockers: string[] = [];
-    if (deliveryMode === 'PRODUCTION') {
-      if (!lead.email) blockers.push('EMAIL_NOT_FOUND');
-      if (emailStatus === 'NOT_FOUND' || emailStatus === 'EMAIL_NOT_FOUND') {
-        blockers.push('EMAIL_NOT_FOUND');
-      }
-    } else if (!testRecipient) {
-      blockers.push('TEST_RECIPIENT_MISSING');
-    } else if (!isTestRecipientAllowlisted(testRecipient)) {
-      blockers.push('TEST_RECIPIENT_NOT_ALLOWED');
-    }
-    if (!row.demo_site_id) blockers.push('DEMO_NOT_READY');
-    if (row.status === 'FAILED') blockers.push('PREPARATION_FAILED');
+    const blockers = reviewBlockers({
+      deliveryMode,
+      leadEmail: lead.email ?? null,
+      emailStatus,
+      testRecipient,
+      testRecipientAllowed: Boolean(testRecipient && isTestRecipientAllowlisted(testRecipient)),
+      hasDemo: Boolean(row.demo_site_id),
+      failed: row.status === 'FAILED',
+      hasMessage: Boolean(draft?.subject?.trim() && draft.body?.trim()),
+    });
 
     return {
       id: row.id,
