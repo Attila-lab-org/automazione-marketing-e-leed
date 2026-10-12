@@ -17,6 +17,14 @@ import {
   discoveryCategoryLabel,
 } from "@/lib/leads/discovery-categories";
 
+type PastSearch = {
+  location: string;
+  category: string;
+  lastAt: string;
+  times: number;
+  found: number;
+};
+
 type DiscoverResponse = {
   found?: number;
   created?: number;
@@ -144,6 +152,8 @@ export default function LeadsBrowser({
   const router = useRouter();
   const [creatingDemo, setCreatingDemo] = useState(false);
   const [rows, setRows] = useState<LeadView[]>([]);
+  const [searches, setSearches] = useState<PastSearch[]>([]);
+  const [contactedIds, setContactedIds] = useState<Set<string>>(new Set());
   const [selectedLead, setSelectedLead] = useState<LeadView | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -186,11 +196,17 @@ export default function LeadsBrowser({
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Impossibile caricare i lead");
-        return (data.leads as LeadRow[] | undefined) ?? [];
+        return data as {
+          leads?: LeadRow[];
+          searches?: PastSearch[];
+          contactedLeadIds?: string[];
+        };
       })
-      .then((leads) => {
+      .then((data) => {
         if (cancelled) return;
-        setRows(leads.map(toView));
+        setRows((data.leads ?? []).map(toView));
+        setSearches(data.searches ?? []);
+        setContactedIds(new Set(data.contactedLeadIds ?? []));
         setLoadError(null);
         setLoading(false);
       })
@@ -198,6 +214,8 @@ export default function LeadsBrowser({
         if (cancelled || (err instanceof DOMException && err.name === "AbortError")) return;
         setLoadError(err instanceof Error ? err.message : "Errore di caricamento");
         setRows([]);
+        setSearches([]);
+        setContactedIds(new Set());
         setLoading(false);
       });
 
@@ -279,6 +297,9 @@ export default function LeadsBrowser({
       key: "mail",
       header: "Invio",
       render: (lead) => {
+        if (contactedIds.has(lead.id)) {
+          return <span className="text-sm font-medium text-stone-500">Già scritta</span>;
+        }
         const fit = mailFit(lead);
         return (
           <span className={`text-sm ${fit.ok ? "font-medium text-emerald-800" : "text-stone-500"}`}>
@@ -383,6 +404,14 @@ export default function LeadsBrowser({
   async function onCreateCampaign(e: FormEvent) {
     e.preventDefault();
     if (!campaignLeads.length || !campaignName.trim()) return;
+    const leadIds = campaignLeads
+      .filter((lead) => mailFit(lead).ok && !contactedIds.has(lead.id))
+      .map((lead) => lead.id);
+    if (!leadIds.length) {
+      setResultBanner("Tra i selezionati non c’è nessuno di nuovo a cui scrivere.");
+      setCampaignModalOpen(false);
+      return;
+    }
     setCreatingCampaign(true);
     setResultBanner(null);
     try {
@@ -391,7 +420,7 @@ export default function LeadsBrowser({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: campaignName.trim(),
-          leadIds: campaignLeads.map((l) => l.id),
+          leadIds,
           mode: "MANUAL",
           deliveryMode: "PRODUCTION",
           prepare: true,
@@ -519,6 +548,19 @@ export default function LeadsBrowser({
               disabled={searching}
               className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
             />
+            {(() => {
+              const known = searches.find(
+                (item) => searchKey(item.location) === searchKey(location) && item.location.trim(),
+              );
+              if (!known) return null;
+              return (
+                <span className="mt-1 block text-xs font-medium text-amber-800">
+                  {cityLabel(known.location)} è già stata cercata il{" "}
+                  {new Date(known.lastAt).toLocaleDateString("it-IT")}
+                  {known.category ? ` per ${known.category}` : ""}.
+                </span>
+              );
+            })()}
           </label>
           <button
             type="submit"
@@ -539,6 +581,35 @@ export default function LeadsBrowser({
           </p>
         ) : null}
       </form>
+
+      <section className="rounded-xl border border-stone-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-stone-900">Città già cercate</h2>
+        <p className="mt-0.5 text-xs text-stone-500">
+          Qui resta scritto dove hai già cercato. Un contatto con «Già scritta» ha ricevuto la mail e non entra in un invio nuovo.
+        </p>
+        {searches.length ? (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {searches.map((item) => (
+              <li key={`${item.category}-${item.location}`}>
+                <button
+                  type="button"
+                  onClick={() => setFilterCity(cityLabel(item.location))}
+                  className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-left text-xs text-stone-700 hover:bg-stone-100"
+                >
+                  <span className="font-semibold text-stone-900">{cityLabel(item.location)}</span>
+                  {" · "}
+                  {item.category}
+                  {" · "}
+                  {new Date(item.lastAt).toLocaleDateString("it-IT")}
+                  {item.times > 1 ? ` · cercata ${item.times} volte` : ""}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-sm text-stone-500">Nessuna ricerca salvata.</p>
+        )}
+      </section>
 
       <div className="rounded-xl border border-stone-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -749,9 +820,12 @@ export default function LeadsBrowser({
               L’email non parte adesso. Prima scrivo il testo, poi lo invii tu.
             </p>
             <p className="mt-3 text-sm text-stone-800">
-              {campaignLeads.filter((lead) => mailFit(lead).ok).length} di {campaignLeads.length} possono riceverla.
-              {campaignLeads.some((lead) => !mailFit(lead).ok)
-                ? " Gli altri restano nell’invio ma non ricevono la mail: manca l’email oppure non sono un ristorante o un bar."
+              {campaignLeads.filter((lead) => mailFit(lead).ok && !contactedIds.has(lead.id)).length} nuovi possono riceverla.
+              {campaignLeads.filter((lead) => contactedIds.has(lead.id)).length
+                ? ` ${campaignLeads.filter((lead) => contactedIds.has(lead.id)).length} già scritti restano fuori.`
+                : ""}
+              {campaignLeads.some((lead) => !mailFit(lead).ok && !contactedIds.has(lead.id))
+                ? " Chi non ha l’email, o non è un ristorante o un bar, non entra."
                 : ""}
             </p>
 

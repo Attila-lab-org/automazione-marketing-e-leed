@@ -261,6 +261,66 @@ export async function runLeadDiscovery(
   };
 }
 
+export type DiscoverySearch = {
+  location: string;
+  category: string;
+  lastAt: string;
+  times: number;
+  found: number;
+};
+
+export async function listContactBoard(env: NodeJS.ProcessEnv = process.env): Promise<{
+  searches: DiscoverySearch[];
+  contactedLeadIds: string[];
+}> {
+  const admin = createAdminSupabaseClient(env);
+  const workspace = await ensureDefaultWorkspace(admin);
+  const [{ data: events, error: eventError }, { data: sent, error: sentError }] = await Promise.all([
+    admin
+      .from('cost_events')
+      .select('created_at, quantity, meta')
+      .eq('workspace_id', workspace.id)
+      .eq('operation', 'discovery')
+      .order('created_at', { ascending: false })
+      .limit(200),
+    admin
+      .from('messages')
+      .select('lead_id')
+      .eq('workspace_id', workspace.id)
+      .eq('direction', 'OUTBOUND'),
+  ]);
+  if (eventError) throw new Error(`Ricerche: ${eventError.message}`);
+  if (sentError) throw new Error(`Inviati: ${sentError.message}`);
+
+  const grouped = new Map<string, DiscoverySearch>();
+  for (const event of events ?? []) {
+    const meta = (event.meta ?? {}) as { location?: unknown; category?: unknown };
+    const location = typeof meta.location === 'string' ? meta.location.trim() : '';
+    const category = typeof meta.category === 'string' ? meta.category.trim() : '';
+    if (!location) continue;
+    const key = `${category.toLocaleLowerCase('it-IT')}|${location.toLocaleLowerCase('it-IT')}`;
+    const current = grouped.get(key);
+    const found = Number(event.quantity ?? 0);
+    if (!current) {
+      grouped.set(key, {
+        location,
+        category: category || 'Ricerca',
+        lastAt: event.created_at,
+        times: 1,
+        found,
+      });
+      continue;
+    }
+    current.times += 1;
+    current.found += found;
+  }
+
+  return {
+    searches: [...grouped.values()],
+    contactedLeadIds: [...new Set((sent ?? []).map((row) => row.lead_id).filter(Boolean))],
+  };
+}
+
 export async function listWorkspaceLeads(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<LeadRow[]> {

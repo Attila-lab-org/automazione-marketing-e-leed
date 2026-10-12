@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withAdmin } from '@/lib/api/with-admin';
-import { listWorkspaceLeads } from '@/lib/leads/discovery';
+import { listContactBoard, listWorkspaceLeads } from '@/lib/leads/discovery';
 import { createManualLead } from '@/lib/leads/manual';
 import { createAdminSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
@@ -15,9 +15,14 @@ export const GET = withAdmin(async () => {
     );
   }
 
-  const leads = await listWorkspaceLeads(process.env);
+  const [leads, board] = await Promise.all([
+    listWorkspaceLeads(process.env),
+    listContactBoard(process.env),
+  ]);
   return NextResponse.json({
     leads,
+    searches: board.searches,
+    contactedLeadIds: board.contactedLeadIds,
     source: 'supabase',
     count: leads.length,
   });
