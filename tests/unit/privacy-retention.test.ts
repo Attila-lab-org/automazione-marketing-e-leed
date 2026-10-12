@@ -27,6 +27,7 @@ describe('disiscrizione', () => {
     const env = {
       SUPABASE_SERVICE_ROLE_KEY: 'service-role-already-on-vercel',
       NEXT_PUBLIC_APP_URL: 'https://example.test',
+      NODE_ENV: 'test',
     } as NodeJS.ProcessEnv;
     const token = createUnsubscribeToken('workspace-1', 'lead-1', env);
     expect(verifyUnsubscribeToken(token, env)?.leadId).toBe('lead-1');
