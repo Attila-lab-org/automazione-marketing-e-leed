@@ -3,7 +3,9 @@ import {
   decideSendRelease,
   describeSendRelease,
   emptySendRelease,
+  firstContactAlreadySent,
   reviewBlockers,
+  sendSpansMultipleCities,
 } from '@/lib/campaigns/review-queue';
 
 describe('sblocco invio dei contatti già approvati', () => {
@@ -45,5 +47,33 @@ describe('sblocco invio dei contatti già approvati', () => {
     expect(describeSendRelease({ ...emptySendRelease(), queued: 7 })).toMatch(/7 invii/);
     expect(describeSendRelease({ ...emptySendRelease(), waiting: 7 })).toMatch(/già in coda/);
     expect(describeSendRelease(emptySendRelease())).toMatch(/Nessun contatto pronto/);
+  });
+
+  it('non rimanda il primo contatto a chi ha già ricevuto la mail', () => {
+    expect(
+      firstContactAlreadySent({ step: 0, sameRowSent: false, leadAlreadyGotFirstEmail: true }),
+    ).toBe(true);
+    expect(
+      firstContactAlreadySent({ step: 1, sameRowSent: false, leadAlreadyGotFirstEmail: true }),
+    ).toBe(false);
+    expect(
+      reviewBlockers({
+        deliveryMode: 'PRODUCTION',
+        leadEmail: 'cliente@example.com',
+        emailStatus: 'FOUND',
+        testRecipient: null,
+        testRecipientAllowed: false,
+        hasDemo: true,
+        failed: false,
+        hasMessage: true,
+        alreadyContacted: true,
+      }),
+    ).toContain('ALREADY_CONTACTED');
+  });
+
+  it('blocca un invio che mescola più città finché non se ne sceglie una', () => {
+    expect(sendSpansMultipleCities(['Milano', 'Torino'])).toBe(true);
+    expect(sendSpansMultipleCities(['Milano', ' milano '])).toBe(false);
+    expect(describeSendRelease({ ...emptySendRelease(), needsCity: 2 })).toMatch(/più città/);
   });
 });

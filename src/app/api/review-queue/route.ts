@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withAdmin } from '@/lib/api/with-admin';
 import {
+  holdAlreadyContactedFirstEmails,
   listReviewQueue,
   queueMissingMessageDrafts,
   updateCampaignLeadStatus,
@@ -21,8 +22,9 @@ export const GET = withAdmin(async () => {
   const workspace = await ensureDefaultWorkspace(admin);
   const appUrl = resolveAppUrl(process.env);
   await queueMissingMessageDrafts(admin, workspace.id);
+  const alreadyHeld = await holdAlreadyContactedFirstEmails(admin, workspace.id);
   const items = await listReviewQueue(admin, workspace.id, appUrl);
-  return NextResponse.json({ items, count: items.length });
+  return NextResponse.json({ items, count: items.length, alreadyHeld });
 });
 
 export const PATCH = withAdmin(async (request: Request) => {
@@ -34,6 +36,7 @@ export const PATCH = withAdmin(async (request: Request) => {
     campaignLeadId?: string;
     campaignId?: string;
     campaignLeadIds?: string[];
+    city?: string | null;
     subject?: string;
     body?: string;
   };
@@ -64,6 +67,7 @@ export const PATCH = withAdmin(async (request: Request) => {
       workspace.id,
       body.campaignId,
       body.campaignLeadIds,
+      body.city,
     );
     return NextResponse.json(result);
   }
@@ -84,14 +88,28 @@ export const PATCH = withAdmin(async (request: Request) => {
     let queued = 0;
     let requeued = 0;
     let waiting = 0;
+    let alreadySent = 0;
+    let needsCity = 0;
+    let missingDraft = 0;
     for (const [campaignId, ids] of byCampaign) {
-      const result = await approveCampaignLeads(admin, workspace.id, campaignId, ids);
+      const result = await approveCampaignLeads(admin, workspace.id, campaignId, ids, body.city);
       approved += result.approved;
       queued += result.queued;
       requeued += result.requeued;
       waiting += result.waiting;
+      alreadySent += result.alreadySent;
+      needsCity += result.needsCity;
+      missingDraft += result.missingDraft;
     }
-    return NextResponse.json({ approved, queued, requeued, waiting });
+    return NextResponse.json({
+      approved,
+      queued,
+      requeued,
+      waiting,
+      alreadySent,
+      needsCity,
+      missingDraft,
+    });
   }
 
   if (!body.campaignLeadId || !body.action) {

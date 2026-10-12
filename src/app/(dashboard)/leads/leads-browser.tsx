@@ -166,6 +166,7 @@ export default function LeadsBrowser({
   // Campaign bulk modal
   const [campaignModalOpen, setCampaignModalOpen] = useState(false);
   const [campaignLeads, setCampaignLeads] = useState<LeadView[]>([]);
+  const [includedCities, setIncludedCities] = useState<string[]>([]);
   const [campaignName, setCampaignName] = useState("");
   const [manualOpen, setManualOpen] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
@@ -394,18 +395,48 @@ export default function LeadsBrowser({
     }
   }
 
+  function inChosenCity(lead: LeadView): boolean {
+    if (!filterCity.trim()) return true;
+    return searchKey(lead.city).includes(searchKey(filterCity));
+  }
+
   function openCampaignModal(selected: LeadView[]) {
+    const scoped = selected.filter(inChosenCity);
+    if (!scoped.length) {
+      setResultBanner(
+        filterCity.trim()
+          ? `Nessun contatto selezionato per ${cityLabel(filterCity)}.`
+          : "Seleziona almeno un contatto.",
+      );
+      return;
+    }
+    const cities = [
+      ...new Set(
+        scoped
+          .filter((lead) => mailFit(lead).ok && !contactedIds.has(lead.id))
+          .map((lead) => cityLabel(lead.city)),
+      ),
+    ].sort((a, b) => a.localeCompare(b, "it"));
     const dateLabel = new Date().toLocaleDateString("it-IT");
-    setCampaignLeads(selected);
-    setCampaignName(`Invio email ${dateLabel}`);
+    setCampaignLeads(scoped);
+    setIncludedCities(cities);
+    setCampaignName(
+      cities.length === 1 ? `Invio email ${cities[0]} ${dateLabel}` : `Invio email ${dateLabel}`,
+    );
     setCampaignModalOpen(true);
   }
 
   async function onCreateCampaign(e: FormEvent) {
     e.preventDefault();
     if (!campaignLeads.length || !campaignName.trim()) return;
+    const chosen = new Set(includedCities);
     const leadIds = campaignLeads
-      .filter((lead) => mailFit(lead).ok && !contactedIds.has(lead.id))
+      .filter(
+        (lead) =>
+          mailFit(lead).ok &&
+          !contactedIds.has(lead.id) &&
+          chosen.has(cityLabel(lead.city)),
+      )
       .map((lead) => lead.id);
     if (!leadIds.length) {
       setResultBanner("Tra i selezionati non c’è nessuno di nuovo a cui scrivere.");
@@ -820,7 +851,7 @@ export default function LeadsBrowser({
               L’email non parte adesso. Prima scrivo il testo, poi lo invii tu.
             </p>
             <p className="mt-3 text-sm text-stone-800">
-              {campaignLeads.filter((lead) => mailFit(lead).ok && !contactedIds.has(lead.id)).length} nuovi possono riceverla.
+              {campaignLeads.filter((lead) => mailFit(lead).ok && !contactedIds.has(lead.id) && includedCities.includes(cityLabel(lead.city))).length} nuovi possono riceverla.
               {campaignLeads.filter((lead) => contactedIds.has(lead.id)).length
                 ? ` ${campaignLeads.filter((lead) => contactedIds.has(lead.id)).length} già scritti restano fuori.`
                 : ""}
@@ -828,6 +859,51 @@ export default function LeadsBrowser({
                 ? " Chi non ha l’email, o non è un ristorante o un bar, non entra."
                 : ""}
             </p>
+            <div className="mt-4 space-y-2">
+              {[...new Set(campaignLeads.map((lead) => cityLabel(lead.city)))]
+                .sort((a, b) => a.localeCompare(b, "it"))
+                .map((city) => {
+                  const inCity = campaignLeads.filter((lead) => cityLabel(lead.city) === city);
+                  const fresh = inCity.filter((lead) => mailFit(lead).ok && !contactedIds.has(lead.id)).length;
+                  const written = inCity.filter((lead) => contactedIds.has(lead.id)).length;
+                  const checked = includedCities.includes(city);
+                  return (
+                    <label key={city} className="flex items-start gap-2 text-sm text-stone-800">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 rounded border-stone-300"
+                        checked={checked && fresh > 0}
+                        disabled={creatingCampaign || fresh === 0}
+                        onChange={(event) => {
+                          setIncludedCities((current) => {
+                            const next = new Set(current);
+                            if (event.target.checked) next.add(city);
+                            else next.delete(city);
+                            const labels = [...next].sort((a, b) => a.localeCompare(b, "it"));
+                            const dateLabel = new Date().toLocaleDateString("it-IT");
+                            setCampaignName(
+                              labels.length === 1
+                                ? `Invio email ${labels[0]} ${dateLabel}`
+                                : `Invio email ${dateLabel}`,
+                            );
+                            return labels;
+                          });
+                        }}
+                      />
+                      <span>
+                        <span className="font-medium">{city}</span>
+                        {fresh > 0 ? ` · ${fresh} nuovi` : " · nessuno di nuovo"}
+                        {written > 0 ? ` · ${written} già scritti, esclusi` : ""}
+                      </span>
+                    </label>
+                  );
+                })}
+            </div>
+            {includedCities.length > 1 ? (
+              <p className="mt-3 text-sm text-amber-900">
+                Hai più città selezionate. L’invio le prepara insieme, ma per mandarle dovrai sceglierne una alla volta.
+              </p>
+            ) : null}
 
             <label className="mt-5 block text-sm font-medium text-stone-700">
               Nome invio
@@ -853,7 +929,7 @@ export default function LeadsBrowser({
               <button
                 type="submit"
                 title="Crea l’invio con i contatti selezionati. Non invia ancora email."
-                disabled={creatingCampaign}
+                disabled={creatingCampaign || includedCities.length === 0}
                 className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
                 {creatingCampaign ? "Creazione…" : "Crea invio email"}

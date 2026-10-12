@@ -34,6 +34,7 @@ const BLOCKER_LABELS: Record<string, string> = {
   MESSAGE_NOT_READY: "Testo email non ancora scritto",
   PREPARATION_FAILED: "Preparazione non riuscita",
   TEMPLATE_NOT_COMPATIBLE: "Nessun modello compatibile",
+  ALREADY_CONTACTED: "Già inviata: non si rimanda",
 };
 
 function blockerLabel(code: string): string {
@@ -50,11 +51,14 @@ export default function ReviewQueueClient() {
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
   const [armed, setArmed] = useState(false);
+  const [cityFilter, setCityFilter] = useState<string | null>(null);
+  const [alreadyHeld, setAlreadyHeld] = useState(0);
 
   const refresh = useCallback(async () => {
     const r = await fetch("/api/review-queue");
     const data = await r.json();
     setItems(data.items ?? []);
+    setAlreadyHeld(Number(data.alreadyHeld ?? 0));
     setLoading(false);
   }, []);
 
@@ -75,7 +79,10 @@ export default function ReviewQueueClient() {
     fetch("/api/review-queue")
       .then((r) => r.json())
       .then((data) => {
-        if (!cancelled) setItems(data.items ?? []);
+        if (!cancelled) {
+          setItems(data.items ?? []);
+          setAlreadyHeld(Number(data.alreadyHeld ?? 0));
+        }
       })
       .catch(() => {
         if (!cancelled) setItems([]);
@@ -88,9 +95,19 @@ export default function ReviewQueueClient() {
     };
   }, []);
 
+  const cities = useMemo(() => {
+    const names = new Set(items.map((item) => item.city || "Città non indicata"));
+    return [...names].sort((a, b) => a.localeCompare(b, "it"));
+  }, [items]);
+
+  const visibleItems = useMemo(
+    () => items.filter((item) => !cityFilter || (item.city || "Città non indicata") === cityFilter),
+    [items, cityFilter],
+  );
+
   const selectedItems = useMemo(
-    () => items.filter((item) => selected.has(item.id)),
-    [items, selected],
+    () => visibleItems.filter((item) => selected.has(item.id)),
+    [visibleItems, selected],
   );
 
   const approvableSelected = useMemo(
@@ -99,9 +116,17 @@ export default function ReviewQueueClient() {
   );
 
   const sendableItems = useMemo(
-    () => items.filter((item) => item.blockers.length === 0),
-    [items],
+    () => visibleItems.filter((item) => item.blockers.length === 0),
+    [visibleItems],
   );
+
+  const mustChooseCity = cities.length > 1 && !cityFilter;
+
+  function chooseCity(city: string | null) {
+    setArmed(false);
+    setSelected(new Set());
+    setCityFilter(city);
+  }
 
   function toggle(id: string, checked: boolean) {
     setArmed(false);
@@ -119,6 +144,7 @@ export default function ReviewQueueClient() {
       setSelected(new Set());
       return;
     }
+    if (mustChooseCity) return;
     setSelected(new Set(sendableItems.map((i) => i.id)));
   }
 
@@ -156,6 +182,10 @@ export default function ReviewQueueClient() {
   async function bulkApprove() {
     const ids = approvableSelected.map((i) => i.id);
     const skippedBlockers = selectedItems.length - ids.length;
+    if (mustChooseCity) {
+      setMessage("Scegli una città. L’invio parte solo per quella, non per tutte insieme.");
+      return;
+    }
     if (!ids.length) {
       setMessage(
         skippedBlockers
@@ -169,7 +199,7 @@ export default function ReviewQueueClient() {
       setMessage(
         approvableSelected.some((item) => item.deliveryMode === "TEST")
           ? `Prova: ${ids.length} email arrivano solo all’indirizzo di prova, non ai clienti. Premi di nuovo per confermare.`
-          : `Stai per inviare ${ids.length} ${ids.length === 1 ? "email al cliente" : "email ai clienti"}. Premi di nuovo per confermare.`,
+          : `Stai per inviare ${ids.length} ${ids.length === 1 ? "email" : "email"} solo a ${cityFilter ?? approvableSelected[0]?.city ?? "questa città"}. Premi di nuovo per confermare.`,
       );
       return;
     }
@@ -180,18 +210,28 @@ export default function ReviewQueueClient() {
       const res = await fetch("/api/review-queue", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "approve", campaignLeadIds: ids }),
+        body: JSON.stringify({
+          action: "approve",
+          campaignLeadIds: ids,
+          city: cityFilter,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Approvazione fallita");
       const queued = Number(data.queued ?? 0) + Number(data.requeued ?? 0);
       const missing = Number(data.missingDraft ?? 0);
       const waiting = Number(data.waiting ?? 0);
+      const needsCity = Number(data.needsCity ?? 0);
+      const alreadySent = Number(data.alreadySent ?? 0);
       if (missing > 0) void pumpCampaignJobs(8);
       else if (queued > 0) void pumpCampaignJobs(8);
       setMessage(
-        queued > 0
-          ? `Ho messo in invio ${queued} ${queued === 1 ? "email" : "email"}.`
+        needsCity > 0
+          ? "Non ho inviato nulla: c’è più di una città. Scegline una."
+          : queued > 0
+          ? `Ho messo in invio ${queued} ${queued === 1 ? "email" : "email"}${cityFilter ? ` per ${cityFilter}` : ""}.`
+          : alreadySent > 0
+            ? `${alreadySent} ${alreadySent === 1 ? "contatto aveva" : "contatti avevano"} già ricevuto la mail. Non li ho rimandati.`
           : missing > 0
             ? `Non ho inviato nulla. Manca ancora il testo di ${missing} email: lo sto scrivendo adesso.`
             : waiting > 0
@@ -246,22 +286,57 @@ export default function ReviewQueueClient() {
 
   if (!items.length) {
     return (
-      <EmptyState
-        title="Nessuna email da inviare"
-        description="Quando il testo è scritto, compare qui. Finché non lo vedi, non c’è niente da mandare."
-        nextAction={{ label: "Vai alle campagne", href: "/campaigns" }}
-      />
+      <div className="space-y-4">
+        {alreadyHeld > 0 ? (
+          <p className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-800">
+            {alreadyHeld} {alreadyHeld === 1 ? "contatto aveva" : "contatti avevano"} già ricevuto la mail. Non li rimando.
+          </p>
+        ) : null}
+        <EmptyState
+          title="Nessuna email da inviare"
+          description="Quando il testo è scritto, compare qui. Finché non lo vedi, non c’è niente da mandare."
+          nextAction={{ label: "Vai alle campagne", href: "/campaigns" }}
+        />
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      {alreadyHeld > 0 ? (
+        <p className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-800">
+          {alreadyHeld} {alreadyHeld === 1 ? "contatto aveva" : "contatti avevano"} già ricevuto la mail. Non li rimando.
+        </p>
+      ) : null}
+
+      {cities.length > 1 ? (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => chooseCity(null)}
+            className={`rounded-full px-3 py-1 text-sm ${cityFilter ? "border border-stone-300 text-stone-700" : "bg-stone-900 text-white"}`}
+          >
+            Vedi tutte
+          </button>
+          {cities.map((city) => (
+            <button
+              key={city}
+              type="button"
+              onClick={() => chooseCity(city)}
+              className={`rounded-full px-3 py-1 text-sm ${cityFilter === city ? "bg-stone-900 text-white" : "border border-stone-300 text-stone-700"}`}
+            >
+              {city}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3">
         <label className="flex items-center gap-2 text-sm text-stone-700">
           <input
             type="checkbox"
-            checked={sendableItems.length > 0 && selected.size === sendableItems.length}
-            disabled={sendableItems.length === 0}
+            checked={!mustChooseCity && sendableItems.length > 0 && selected.size === sendableItems.length}
+            disabled={mustChooseCity || sendableItems.length === 0}
             onChange={(e) => toggleAll(e.target.checked)}
             className="h-4 w-4 rounded border-stone-300"
           />
@@ -271,11 +346,13 @@ export default function ReviewQueueClient() {
         </label>
         <button
           type="button"
-          disabled={busy || approvableSelected.length === 0}
+          disabled={busy || mustChooseCity || approvableSelected.length === 0}
           onClick={() => void bulkApprove()}
           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {approvableSelected.length === 0
+          {mustChooseCity
+            ? "Scegli la città"
+            : approvableSelected.length === 0
             ? "Nessuna email pronta"
             : armed
               ? `Sì, invia ora ${approvableSelected.length}`
@@ -333,7 +410,7 @@ export default function ReviewQueueClient() {
         </div>
       ) : null}
 
-      {[...items]
+      {[...visibleItems]
         .sort((a, b) => a.blockers.length - b.blockers.length)
         .map((item) => {
         const isTest = item.deliveryMode === "TEST";

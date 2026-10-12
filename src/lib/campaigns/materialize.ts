@@ -162,13 +162,23 @@ export async function createCampaignWithLeads(
     landingLayoutKey: layoutKey,
   };
 
-  const { data: leads } = await admin
-    .from('leads')
-    .select('id, category')
-    .eq('workspace_id', workspaceId)
-    .in('id', input.leadIds);
+  const [{ data: leads }, { data: priorMessages, error: priorError }] = await Promise.all([
+    admin
+      .from('leads')
+      .select('id, category')
+      .eq('workspace_id', workspaceId)
+      .in('id', input.leadIds),
+    admin
+      .from('messages')
+      .select('lead_id')
+      .eq('workspace_id', workspaceId)
+      .eq('direction', 'OUTBOUND')
+      .in('lead_id', input.leadIds),
+  ]);
+  if (priorError) throw new Error(`Campagna: invii precedenti — ${priorError.message}`);
 
   const leadById = new Map((leads ?? []).map((l) => [l.id, l]));
+  const alreadyContacted = new Set((priorMessages ?? []).map((row) => row.lead_id));
   const candidates = published.map((t) => ({
     key: t.templateKey,
     vertical: t.vertical,
@@ -177,6 +187,21 @@ export async function createCampaignWithLeads(
 
   const rows = input.leadIds.map((leadId) => {
     const lead = leadById.get(leadId);
+    if (alreadyContacted.has(leadId)) {
+      return {
+        workspace_id: workspaceId,
+        campaign_id: campaign.id,
+        lead_id: leadId,
+        status: 'SKIPPED',
+        policy_version_id: policy.id,
+        policy_snapshot: policySnapshot,
+        sequence_step: 0,
+        preparation: {
+          blockers: ['ALREADY_CONTACTED'],
+          leadCategory: lead?.category ?? null,
+        },
+      };
+    }
     const matched = pickCompatibleTemplateKey(lead?.category, candidates);
     const compatible =
       matched != null &&

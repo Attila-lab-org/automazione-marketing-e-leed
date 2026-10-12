@@ -168,14 +168,23 @@ export async function buildSendGuardContext(
       .eq('messages.campaign_lead_id', cl.id)
       .limit(1)
       .maybeSingle(),
-    admin
-      .from('messages')
-      .select('id')
-      .eq('campaign_lead_id', cl.id)
-      .eq('sequence_step', sequenceStep)
-      .eq('direction', 'OUTBOUND')
-      .limit(1)
-      .maybeSingle(),
+    sequenceStep === 0
+      ? admin
+          .from('messages')
+          .select('id')
+          .eq('lead_id', cl.lead_id)
+          .eq('sequence_step', 0)
+          .eq('direction', 'OUTBOUND')
+          .limit(1)
+          .maybeSingle()
+      : admin
+          .from('messages')
+          .select('id')
+          .eq('campaign_lead_id', cl.id)
+          .eq('sequence_step', sequenceStep)
+          .eq('direction', 'OUTBOUND')
+          .limit(1)
+          .maybeSingle(),
     admin
       .from('messages')
       .select('id', { count: 'exact', head: true })
