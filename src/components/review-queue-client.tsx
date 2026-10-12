@@ -351,11 +351,11 @@ export default function ReviewQueueClient() {
           city={item.city}
           score={item.score}
           confidence={item.confidence}
-          subject={canSend ? item.subject : "Email non ancora scritta"}
-          messagePreview={canSend ? item.messagePreview : "Appena il testo è pronto, lo leggi qui e poi lo invii."}
+          subject={item.subject}
+          messagePreview={item.messagePreview}
           previewImageUrl={item.previewImageUrl}
           demoUrl={item.demoUrl}
-          emailBody={canSend ? item.body : ""}
+          emailBody={item.body}
           demoSiteId={item.demoSiteId}
           thumbnailLabel="Sito dimostrativo"
           selected={selected.has(item.id)}

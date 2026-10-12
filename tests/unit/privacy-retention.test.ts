@@ -23,6 +23,15 @@ describe('retention demo', () => {
 });
 
 describe('disiscrizione', () => {
+  it('firma anche con la chiave già presente in produzione se manca quella dedicata', () => {
+    const env = {
+      SUPABASE_SERVICE_ROLE_KEY: 'service-role-already-on-vercel',
+      NEXT_PUBLIC_APP_URL: 'https://example.test',
+    } as NodeJS.ProcessEnv;
+    const token = createUnsubscribeToken('workspace-1', 'lead-1', env);
+    expect(verifyUnsubscribeToken(token, env)?.leadId).toBe('lead-1');
+  });
+
   it('firma e verifica senza esporre email nel link', () => {
     const token = createUnsubscribeToken('workspace-1', 'lead-1', ENV);
     expect(token).not.toContain('@');

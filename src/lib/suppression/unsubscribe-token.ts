@@ -8,7 +8,10 @@ type UnsubscribePayload = {
 };
 
 function secret(env: NodeJS.ProcessEnv): string {
-  const value = env.UNSUBSCRIBE_SECRET?.trim() || env.ADMIN_SESSION_SECRET?.trim();
+  const value =
+    env.UNSUBSCRIBE_SECRET?.trim() ||
+    env.ADMIN_SESSION_SECRET?.trim() ||
+    env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!value) throw new Error('UNSUBSCRIBE_SECRET non configurato');
   return value;
 }

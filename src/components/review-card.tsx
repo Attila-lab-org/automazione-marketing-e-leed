@@ -244,39 +244,35 @@ export default function ReviewCard({
         </div>
       </div>
 
-      {emailBody ? (
-        <div className="border-t border-stone-100 px-5 py-4">
-          <details className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50" open>
-            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-stone-800">
-              Leggi l’email
-            </summary>
-            <iframe
-              title={`Mail per ${companyName}`}
-              className="h-80 w-full border-t border-stone-200 bg-white"
-              sandbox="allow-popups allow-popups-to-escape-sandbox"
-              srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:24px;background:#f5f5f4;font-family:Arial,sans-serif}</style></head><body>${emailBody}</body></html>`}
-            />
-          </details>
+      {demoUrl || emailBody ? (
+        <div className="space-y-3 border-t border-stone-100 px-5 py-4">
           {demoUrl ? (
-            <details className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
+            <details className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50" open>
               <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-stone-800">
-                Vedi anche il sito dimostrativo
+                Vedi il sito completo
               </summary>
               <iframe
                 src={demoUrl}
                 title={`Sito proposto per ${companyName}`}
-                className="h-80 w-full border-t border-stone-200 bg-white"
+                className="h-[70vh] w-full border-t border-stone-200 bg-white"
+              />
+            </details>
+          ) : null}
+          {emailBody ? (
+            <details className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50" open>
+              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-stone-800">
+                Vedi la mail come arriverà
+              </summary>
+              <iframe
+                title={`Mail per ${companyName}`}
+                className="h-[28rem] w-full border-t border-stone-200 bg-white"
+                sandbox="allow-popups allow-popups-to-escape-sandbox"
+                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:24px;background:#f5f5f4;font-family:Arial,sans-serif}</style></head><body>${emailBody}</body></html>`}
               />
             </details>
           ) : null}
         </div>
-      ) : (
-        <div className="border-t border-stone-100 px-5 py-4">
-          <p className="rounded-lg bg-amber-50 px-3 py-3 text-sm text-amber-950">
-            Il testo non è ancora scritto. Quando compare qui, potrai inviarlo. Il sito dimostrativo non è l’email.
-          </p>
-        </div>
-      )}
+      ) : null}
 
       <div className="flex flex-wrap gap-2 border-t border-stone-100 px-5 py-3">
         {actions.filter((action) => action.callback).map((action) => (
