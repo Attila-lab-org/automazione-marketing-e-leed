@@ -1,11 +1,11 @@
 export const LEAD_SUBNAV = [
-  { href: "/leads", label: "Possibili clienti", description: "Cerca, seleziona, elimina o crea una campagna." },
+  { href: "/leads", label: "Possibili clienti", description: "Scegli i contatti e crea l’invio. L’email non parte da qui." },
   { href: "/leads?view=opportunita", label: "Consigliati", description: "Vedi i contatti più interessanti." },
 ] as const;
 
 export const CAMPAIGN_SUBNAV = [
   { href: "/campaigns", label: "Campagne", description: "Prepara e controlla i gruppi di invio email." },
-  { href: "/review-queue", label: "Da controllare", description: "Anteprime, email e follow-up da approvare." },
+  { href: "/review-queue", label: "Email da inviare", description: "Leggi il testo e invialo al cliente." },
   { href: "/follow-ups", label: "Follow-up", description: "Solleciti +3/+7 giorni da preparare o approvare." },
   { href: "/demos", label: "Anteprime", description: "Siti dimostrativi creati per le attività." },
   { href: "/templates", label: "Modelli", description: "Modelli usati per le anteprime." },

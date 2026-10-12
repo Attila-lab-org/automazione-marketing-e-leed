@@ -63,17 +63,11 @@ const CAMPAIGN_STATUS: Record<string, string> = {
   ARCHIVED: "Archiviata",
 };
 
-const CAMPAIGN_MODE: Record<string, string> = {
-  MANUAL: "Controllo manuale",
-  SCORE_BASED: "In base al punteggio",
-  FULL_AUTO: "Completamente automatica",
-};
-
 const ACTIVITY_STATUS: Record<string, string> = {
   PENDING: "In attesa",
   GENERATING: "In preparazione",
   READY: "Pronta",
-  REVIEW: "Da controllare",
+  REVIEW: "Testo scritto",
   APPROVED: "Approvata",
   SENDING: "Invio in corso",
   SENT: "Inviata",
@@ -298,60 +292,50 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
     return <p className="text-sm text-stone-500">Caricamento campagna…</p>;
   }
 
-  const preparing = totals.pending + totals.generating;
-  const reviewable = totals.review + totals.ready;
+  const writing = totals.pending + totals.generating + totals.ready;
+  const readyToSend = totals.review;
   const problems = totals.failed + totals.skipped;
-  const progress =
-    totals.leads > 0 ? Math.min(100, Math.round((totals.sent / totals.leads) * 100)) : 0;
 
   let nextAction: NextAction;
   let nextTitle: string;
   let nextDescription: string;
   if (campaign.status === "PAUSED") {
-    nextAction = { kind: "resume", label: "Riprendi la campagna" };
-    nextTitle = "La campagna è in pausa";
-    nextDescription =
-      "Nessuna nuova operazione parte finché non la riattivi. Le attività già salvate non vengono perse.";
-  } else if (reviewable > 0) {
+    nextAction = { kind: "resume", label: "Riprendi" };
+    nextTitle = "Questo invio è in pausa";
+    nextDescription = "Non parte niente finché non lo riattivi.";
+  } else if (readyToSend > 0) {
     nextAction = {
       kind: "review",
-      label: `Controlla ${reviewable} ${reviewable === 1 ? "attività" : "attività"}`,
+      label: readyToSend === 1 ? "Apri l’email da inviare" : `Apri le ${readyToSend} email da inviare`,
     };
-    nextTitle = "Controlla prima di inviare";
+    nextTitle = readyToSend === 1 ? "C’è 1 email da leggere e inviare" : `Ci sono ${readyToSend} email da leggere e inviare`;
     nextDescription =
-      "Apri il controllo. Se il testo dell’email non è ancora scritto, il pulsante di invio resta fermo e la pagina lo prepara.";
-  } else if (preparing > 0) {
-    nextAction = { kind: "wait", label: "Preparazione in corso" };
-    nextTitle = totals.generating > 0 ? "Sto creando anteprime e messaggi" : "Preparazione in coda";
+      writing > 0
+        ? `Le altre ${writing} le sto ancora scrivendo. Puoi già mandare quelle pronte.`
+        : "Apri l’elenco, leggi il testo e premi Invia. Prima di quel pulsante non parte nessuna email.";
+  } else if (writing > 0) {
+    nextAction = { kind: "wait", label: "Sto scrivendo le email" };
+    nextTitle = "Sto scrivendo le email";
     nextDescription =
-      "Non devi premere nulla: questa pagina si aggiorna automaticamente ogni 5 secondi.";
+      "Non c’è ancora niente da premere. Resta su questa pagina: quando il testo è pronto compare il pulsante per inviarlo.";
   } else if (totals.approved > 0 || totals.sending > 0) {
-    nextAction = { kind: "wait", label: "Invio in corso" };
-    nextTitle = "Le attività approvate sono in lavorazione";
-    nextDescription =
-      "Send Guard e il provider stanno gestendo gli invii. La pagina si aggiorna automaticamente.";
+    nextAction = { kind: "wait", label: "Le email stanno uscendo" };
+    nextTitle = "Le email stanno uscendo";
+    nextDescription = "Hai già dato l’invio. Questa pagina si aggiorna da sola.";
   } else if (totals.leads > 0 && totals.sent + totals.skipped >= totals.leads) {
-    nextAction = { kind: "complete", label: "Torna alle campagne" };
-    nextTitle = "Campagna completata";
+    nextAction = { kind: "complete", label: "Torna agli invii" };
+    nextTitle = totals.sent > 0 ? "Invio concluso" : "Nessuna email è partita";
     nextDescription = `${totals.sent} ${
-      totals.sent === 1 ? "messaggio inviato" : "messaggi inviati"
-    }${totals.skipped ? `, ${totals.skipped} attività saltate` : ""}.`;
+      totals.sent === 1 ? "email inviata" : "email inviate"
+    }${totals.skipped ? `. ${totals.skipped} contatti non potevano riceverla` : ""}.`;
   } else {
     nextAction = {
       kind: "prepare",
-      label: totals.failed > 0 ? "Riprova la preparazione" : "Avvia la preparazione",
+      label: totals.failed > 0 ? "Riprova" : "Prepara le email",
     };
-    nextTitle = totals.failed > 0 ? "La preparazione richiede un nuovo tentativo" : "Campagna pronta da preparare";
-    nextDescription =
-      "Il sistema analizzerà le attività e creerà demo e messaggi. Nessuna email viene inviata in questa fase.";
+    nextTitle = totals.failed > 0 ? "La scrittura si è fermata" : "Le email non sono ancora partite";
+    nextDescription = "Prima scrivo il testo. L’invio lo fai tu, dopo, quando puoi leggerlo.";
   }
-
-  const currentStep =
-    totals.sent > 0 || totals.approved > 0 || totals.sending > 0
-      ? 3
-      : reviewable > 0
-        ? 2
-        : 1;
 
   function runPrimaryAction() {
     if (nextAction.kind === "prepare") void runAction("prepare");
@@ -380,50 +364,15 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
               </span>
             </div>
             <p className="mt-1 text-sm text-stone-500">
-              {CAMPAIGN_MODE[campaign.mode] ?? campaign.mode} · Creata{" "}
-              {new Date(campaign.created_at).toLocaleString("it-IT")}
+              Creata {new Date(campaign.created_at).toLocaleString("it-IT")}
             </p>
           </div>
           <Link
             href="/campaigns"
             className="text-sm font-medium text-stone-500 hover:text-stone-800"
           >
-            ← Tutte le campagne
+            ← Tutti gli invii
           </Link>
-        </div>
-
-        <div className="mt-6 grid grid-cols-3 gap-2" aria-label="Avanzamento campagna">
-          {[
-            { n: 1, label: "Prepara" },
-            { n: 2, label: "Controlla" },
-            { n: 3, label: "Invia" },
-          ].map((step) => {
-            const active = currentStep === step.n;
-            const done = currentStep > step.n || (step.n === 3 && progress === 100);
-            return (
-              <div
-                key={step.n}
-                className={`rounded-lg border px-3 py-2 ${
-                  active
-                    ? "border-amber-300 bg-amber-50"
-                    : done
-                      ? "border-emerald-200 bg-emerald-50"
-                      : "border-stone-200 bg-stone-50"
-                }`}
-              >
-                <p
-                  className={`text-[10px] font-bold uppercase tracking-wide ${
-                    active ? "text-amber-800" : done ? "text-emerald-700" : "text-stone-400"
-                  }`}
-                >
-                  {done ? "Completato" : active ? "Adesso" : "Dopo"}
-                </p>
-                <p className="mt-0.5 text-sm font-semibold text-stone-800">
-                  {step.n}. {step.label}
-                </p>
-              </div>
-            );
-          })}
         </div>
       </section>
 
@@ -438,24 +387,23 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       >
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-wide text-stone-500">
-              Prossimo passo
-            </p>
-            <h3 className="mt-1 text-lg font-semibold text-stone-900">{nextTitle}</h3>
+            <h3 className="text-lg font-semibold text-stone-900">{nextTitle}</h3>
             <p className="mt-1 text-sm leading-6 text-stone-600">{nextDescription}</p>
           </div>
-          <button
-            type="button"
-            disabled={busy || nextAction.kind === "wait"}
-            onClick={runPrimaryAction}
-            className={`shrink-0 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70 ${
-              nextAction.kind === "complete"
-                ? "bg-emerald-700 hover:bg-emerald-800"
-                : "bg-stone-900 hover:bg-stone-800"
-            }`}
-          >
-            {busy ? "Operazione in corso…" : nextAction.label}
-          </button>
+          {nextAction.kind === "wait" ? null : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={runPrimaryAction}
+              className={`shrink-0 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70 ${
+                nextAction.kind === "complete"
+                  ? "bg-emerald-700 hover:bg-emerald-800"
+                  : "bg-stone-900 hover:bg-stone-800"
+              }`}
+            >
+              {busy ? "Un attimo…" : nextAction.label}
+            </button>
+          )}
         </div>
 
         {message ? (
@@ -470,10 +418,10 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {[
-          { label: "Attività", value: totals.leads, note: "nella campagna" },
-          { label: "In preparazione", value: preparing, note: "automaticamente" },
-          { label: "Da controllare", value: reviewable, note: "richiedono la tua verifica" },
-          { label: "Inviati", value: totals.sent, note: `${progress}% completato` },
+          { label: "Da inviare", value: readyToSend, note: "testo già scritto" },
+          { label: "In scrittura", value: writing, note: "aspetta, non premere" },
+          { label: "Già inviate", value: totals.sent, note: "uscite davvero" },
+          { label: "Non le mando", value: problems, note: "manca l’email o non è un ristorante" },
         ].map((stat) => (
           <div key={stat.label} className="rounded-xl border border-stone-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">
@@ -490,9 +438,9 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       <section className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold text-stone-900">Email inviate</h3>
+            <h3 className="text-base font-semibold text-stone-900">Email già uscite</h3>
             <p className="mt-1 text-sm text-stone-600">
-              Qui vedi chi è stato contattato, il testo realmente inviato e gli eventi di consegna.
+              Solo quelle partite davvero. Se questa lista è vuota, non è uscita nessuna email.
             </p>
           </div>
           <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-700">
@@ -567,19 +515,18 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
           </div>
         ) : (
           <div className="mt-4 rounded-lg bg-stone-50 px-4 py-4 text-sm text-stone-600">
-            Nessuna email è stata ancora inviata da questa campagna.
+            Nessuna email è uscita.
           </div>
         )}
       </section>
 
+      {manualFollowups.length ? (
       <section className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold text-stone-900">Follow-up da approvare</h3>
+            <h3 className="text-base font-semibold text-stone-900">Solleciti</h3>
             <p className="mt-1 max-w-2xl text-sm text-stone-600">
-              Due sollecito personalizzati (+3 e +7 giorni), sempre leggeri e senza pressione.
-              Il primo clic prepara la bozza: l’invio avviene solo dopo la tua approvazione nella
-              coda di controllo. Chi ha risposto, chiesto stop o è in gestione umana viene escluso.
+              Per chi non ha risposto. Prima preparo il testo, poi lo invii tu dalla pagina delle email.
             </p>
           </div>
           <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-700">
@@ -614,12 +561,9 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
               </li>
             ))}
           </ul>
-        ) : (
-          <div className="mt-4 rounded-lg bg-stone-50 px-4 py-3 text-sm text-stone-600">
-            Nessun follow-up da valutare. Compariranno qui solo i clienti che non hanno risposto.
-          </div>
-        )}
+        ) : null}
       </section>
+      ) : null}
 
       {resendMode === "mock" ? (
         <section className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -630,15 +574,15 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       {problems > 0 ? (
         <section className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
           <p className="text-sm font-semibold text-red-800">
-            {problems} {problems === 1 ? "attività richiede" : "attività richiedono"} attenzione
+            {problems} {problems === 1 ? "contatto non riceve questa email" : "contatti non ricevono questa email"}
           </p>
           <p className="mt-1 text-xs text-red-700">
-            {totals.failed ? `${totals.failed} non riuscite. ` : ""}
+            {totals.failed ? `${totals.failed} si sono fermati durante la scrittura. ` : ""}
             {skipReasons.EMAIL_NOT_FOUND
-              ? `${skipReasons.EMAIL_NOT_FOUND} senza email del cliente: nell’invio reale non partono. `
+              ? `${skipReasons.EMAIL_NOT_FOUND} senza email pubblica. `
               : ""}
             {skipReasons.TEMPLATE_NOT_COMPATIBLE
-              ? `${skipReasons.TEMPLATE_NOT_COMPATIBLE} non sono ristoranti o bar, quindi questo modello non le accetta. `
+              ? `${skipReasons.TEMPLATE_NOT_COMPATIBLE} non sono ristoranti o bar. `
               : ""}
             {totals.skipped -
               (skipReasons.EMAIL_NOT_FOUND ?? 0) -
@@ -657,7 +601,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       <section className="rounded-xl border border-stone-200 bg-white">
         <details>
           <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-stone-800">
-            Impostazioni e controlli secondari
+            Pausa, archivio, elimina
           </summary>
           <div className="border-t border-stone-100 px-5 py-4">
             <div className="flex flex-wrap items-center gap-2">

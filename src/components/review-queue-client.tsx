@@ -49,6 +49,7 @@ export default function ReviewQueueClient() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
+  const [armed, setArmed] = useState(false);
 
   const refresh = useCallback(async () => {
     const r = await fetch("/api/review-queue");
@@ -97,7 +98,13 @@ export default function ReviewQueueClient() {
     [selectedItems],
   );
 
+  const sendableItems = useMemo(
+    () => items.filter((item) => item.blockers.length === 0),
+    [items],
+  );
+
   function toggle(id: string, checked: boolean) {
+    setArmed(false);
     setSelected((prev) => {
       const next = new Set(prev);
       if (checked) next.add(id);
@@ -107,11 +114,12 @@ export default function ReviewQueueClient() {
   }
 
   function toggleAll(checked: boolean) {
+    setArmed(false);
     if (!checked) {
       setSelected(new Set());
       return;
     }
-    setSelected(new Set(items.map((i) => i.id)));
+    setSelected(new Set(sendableItems.map((i) => i.id)));
   }
 
   async function act(
@@ -145,11 +153,6 @@ export default function ReviewQueueClient() {
     }
   }
 
-  const hasTestItems = useMemo(
-    () => items.some((i) => i.deliveryMode === "TEST"),
-    [items],
-  );
-
   async function bulkApprove() {
     const ids = approvableSelected.map((i) => i.id);
     const skippedBlockers = selectedItems.length - ids.length;
@@ -161,17 +164,16 @@ export default function ReviewQueueClient() {
       );
       return;
     }
-    const testSelected = approvableSelected.filter((i) => i.deliveryMode === "TEST");
-    const ok = window.confirm(
-      testSelected.length
-        ? `Approvare e avviare la prova per ${ids.length} attività?\nLe email arriveranno soltanto all'indirizzo di prova, non ai clienti.${
-            skippedBlockers ? `\n(${skippedBlockers} attività con problemi verranno ignorate)` : ""
-          }`
-        : `Approvare e avviare l'invio per ${ids.length} attività?${
-            skippedBlockers ? `\n(${skippedBlockers} attività con problemi verranno ignorate)` : ""
-          }`,
-    );
-    if (!ok) return;
+    if (!armed) {
+      setArmed(true);
+      setMessage(
+        approvableSelected.some((item) => item.deliveryMode === "TEST")
+          ? `Prova: ${ids.length} email arrivano solo all’indirizzo di prova, non ai clienti. Premi di nuovo per confermare.`
+          : `Stai per inviare ${ids.length} ${ids.length === 1 ? "email al cliente" : "email ai clienti"}. Premi di nuovo per confermare.`,
+      );
+      return;
+    }
+    setArmed(false);
     setBusy(true);
     setMessage(null);
     try {
@@ -245,8 +247,8 @@ export default function ReviewQueueClient() {
   if (!items.length) {
     return (
       <EmptyState
-        title="Niente da controllare"
-        description="Crea una campagna e avvia la preparazione. Qui compariranno le anteprime e i messaggi prima dell’invio."
+        title="Nessuna email da inviare"
+        description="Quando il testo è scritto, compare qui. Finché non lo vedi, non c’è niente da mandare."
         nextAction={{ label: "Vai alle campagne", href: "/campaigns" }}
       />
     );
@@ -258,33 +260,32 @@ export default function ReviewQueueClient() {
         <label className="flex items-center gap-2 text-sm text-stone-700">
           <input
             type="checkbox"
-            checked={selected.size > 0 && selected.size === items.length}
+            checked={sendableItems.length > 0 && selected.size === sendableItems.length}
+            disabled={sendableItems.length === 0}
             onChange={(e) => toggleAll(e.target.checked)}
             className="h-4 w-4 rounded border-stone-300"
           />
-          Selezionati: {selected.size}
-          {approvableSelected.length !== selected.size ? (
-            <span className="text-xs text-stone-400">
-              ({approvableSelected.length} approvabili)
-            </span>
-          ) : null}
+          {sendableItems.length === 0
+            ? "Nessuna email pronta"
+            : `Seleziona le ${sendableItems.length} pronte`}
         </label>
         <button
           type="button"
-          title="Approva tutte le attività selezionate che non hanno problemi e avvia gli invii previsti."
           disabled={busy || approvableSelected.length === 0}
           onClick={() => void bulkApprove()}
           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {hasTestItems || approvableSelected.some((i) => i.deliveryMode === "TEST")
-            ? `Approva e avvia la prova ${approvableSelected.length || ""}`
-            : `Approva e avvia ${approvableSelected.length || ""}`}
+          {approvableSelected.length === 0
+            ? "Nessuna email pronta"
+            : armed
+              ? `Sì, invia ora ${approvableSelected.length}`
+              : `Invia ${approvableSelected.length} ${approvableSelected.length === 1 ? "email" : "email"}`}
         </button>
       </div>
 
       {waitingForMessages ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Il testo delle email non è ancora scritto. Lo sto preparando: il pulsante di invio si accende solo quando c’è il messaggio da leggere.
+          Sto ancora scrivendo alcune email. Il pulsante Invia si accende solo quando il testo si può leggere.
         </p>
       ) : null}
 
@@ -332,11 +333,16 @@ export default function ReviewQueueClient() {
         </div>
       ) : null}
 
-      {items.map((item) => {
+      {[...items]
+        .sort((a, b) => a.blockers.length - b.blockers.length)
+        .map((item) => {
         const isTest = item.deliveryMode === "TEST";
+        const canSend = item.blockers.length === 0;
         const deliveryNote = isTest
-          ? `Attività: ${item.companyName} · Email del cliente: ${item.email ?? "non disponibile"} · La prova arriverà a: ${item.testRecipient ?? "non disponibile"}`
-          : null;
+          ? `Prova: non arriva al cliente. Arriva a ${item.testRecipient ?? "indirizzo di prova mancante"}.`
+          : item.email
+            ? `Arriva a ${item.email}`
+            : "Non ho l’email del cliente, quindi non parte.";
         return (
         <ReviewCard
           key={item.id}
@@ -345,57 +351,35 @@ export default function ReviewQueueClient() {
           city={item.city}
           score={item.score}
           confidence={item.confidence}
-          subject={item.subject}
-          messagePreview={item.messagePreview}
+          subject={canSend ? item.subject : "Email non ancora scritta"}
+          messagePreview={canSend ? item.messagePreview : "Appena il testo è pronto, lo leggi qui e poi lo invii."}
           previewImageUrl={item.previewImageUrl}
           demoUrl={item.demoUrl}
-          emailBody={item.body}
+          emailBody={canSend ? item.body : ""}
           demoSiteId={item.demoSiteId}
-          thumbnailLabel={item.previewImageUrl ? "Anteprima email" : undefined}
+          thumbnailLabel="Sito dimostrativo"
           selected={selected.has(item.id)}
-          onSelectChange={(checked) => toggle(item.id, checked)}
+          onSelectChange={canSend ? (checked) => toggle(item.id, checked) : undefined}
           headerBadge={isTest ? "PROVA" : null}
           deliveryNote={deliveryNote}
-          approveLabel={isTest ? "Approva e avvia test" : "Approva"}
-          approveDisabled={busy || item.blockers.length > 0}
+          approveLabel={canSend ? (isTest ? "Invia la prova" : "Invia al cliente") : "Non ancora"}
+          approveDisabled={busy || !canSend}
           approveHint={
-            item.blockers.length > 0
-              ? `Prima risolvi: ${item.blockers.map(blockerLabel).join(", ")}.`
-              : isTest
-              ? "Autorizza la prova verso l'indirizzo consentito. Il cliente non riceverà nulla."
-              : "Autorizza l'invio di questo messaggio al cliente."
+            canSend
+              ? isTest
+                ? "Manda la prova solo all’indirizzo di prova."
+                : "Manda questa email al cliente."
+              : item.blockers.map(blockerLabel).join(", ")
           }
           signals={[
             {
-              label: item.email ? "Email trovata" : "Email mancante",
-              ok: Boolean(item.email),
-              tooltip: item.emailEvidenceLabel
-                ? `${item.email ?? ""} · ${item.emailEvidenceLabel}`
-                : item.email ?? "Enrichment email non ha trovato un indirizzo pubblico.",
-            },
-            ...(item.emailEvidenceLabel
-              ? [
-                  {
-                    label: item.emailEvidenceLabel,
-                    ok: true as const,
-                  },
-                ]
-              : []),
-            {
-              label: item.previewImageUrl ? "Demo pronta" : "Demo assente",
-              ok: Boolean(item.previewImageUrl),
-            },
-            {
-              label: item.blockers.length
-                ? `Problemi: ${item.blockers.map(blockerLabel).join(", ")}`
-                : "Pronto da controllare",
-              ok: item.blockers.length === 0,
+              label: canSend ? "Puoi inviarla" : blockerLabel(item.blockers[0] ?? ""),
+              ok: canSend,
             },
           ]}
-          onApprove={() => void act(item.id, "approve")}
-          onEditDraft={() => startEdit(item)}
+          onApprove={canSend ? () => void act(item.id, "approve") : undefined}
+          onEditDraft={canSend ? () => startEdit(item) : undefined}
           onSkip={() => void act(item.id, "skip")}
-          onReject={() => void act(item.id, "stop")}
         />
         );
       })}

@@ -6,7 +6,6 @@ import LeadQuickDrawer, {
   type LeadQuickDrawerLead,
 } from "@/components/lead-quick-drawer";
 import DangerZoneModal from "@/components/danger-zone-modal";
-import ScoreBadge from "@/components/score-badge";
 import SmartDataTable, {
   type SmartDataTableColumn,
 } from "@/components/smart-data-table";
@@ -39,20 +38,30 @@ type LeadView = LeadQuickDrawerLead & {
   raw: LeadRow;
 };
 
+const MAIL_CATEGORIES = new Set([
+  "Ristoranti",
+  "Pizzerie",
+  "Bar ed enoteche",
+  "Cibo da asporto",
+  "Agriturismi",
+]);
+
+function mailFit(lead: { category: string; email?: string }): { ok: boolean; label: string } {
+  if (!MAIL_CATEGORIES.has(lead.category)) {
+    return { ok: false, label: "Non la riceve: non è un ristorante o un bar" };
+  }
+  if (!lead.email) {
+    return { ok: false, label: "Non la riceve: manca l’email" };
+  }
+  return { ok: true, label: "La riceve" };
+}
+
 const STATUS_LABELS: Record<QualificationStatus, string> = {
   NEW: "Nuova",
   PREQUALIFIED: "Buona opportunità",
   NEEDS_ANALYSIS: "Da controllare",
   LOW_PRIORITY: "Bassa priorità",
   REJECTED: "Scartata",
-};
-
-const STATUS_STYLE: Record<QualificationStatus, string> = {
-  NEW: "border-stone-200 bg-stone-50 text-stone-600",
-  PREQUALIFIED: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  NEEDS_ANALYSIS: "border-amber-200 bg-amber-50 text-amber-800",
-  LOW_PRIORITY: "border-stone-200 bg-stone-100 text-stone-500",
-  REJECTED: "border-red-200 bg-red-50 text-red-700",
 };
 
 function cityLabel(raw: string | null): string {
@@ -148,7 +157,6 @@ export default function LeadsBrowser({
   const [campaignModalOpen, setCampaignModalOpen] = useState(false);
   const [campaignLeads, setCampaignLeads] = useState<LeadView[]>([]);
   const [campaignName, setCampaignName] = useState("");
-  const [campaignMode, setCampaignMode] = useState<"MANUAL" | "SCORE_BASED">("MANUAL");
   const [manualOpen, setManualOpen] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
   const [manualForm, setManualForm] = useState({
@@ -258,62 +266,26 @@ export default function LeadsBrowser({
       ),
     },
     {
-      key: "score",
-      header: "Punteggio",
+      key: "email",
+      header: "Email",
       render: (lead) =>
-        typeof lead.discoveryScore === "number" ? (
-          <ScoreBadge
-            score={lead.discoveryScore}
-            confidence={(lead.discoveryConfidence ?? 0) / 100}
-          />
+        lead.email ? (
+          <span className="text-sm text-stone-800">{lead.email}</span>
         ) : (
-          <span className="text-xs text-stone-400">—</span>
+          <span className="text-sm text-stone-400">Manca</span>
         ),
     },
     {
-      key: "confidence",
-      header: "Affidabilità dati",
-      render: (lead) =>
-        typeof lead.discoveryConfidence === "number" ? (
-          <span className="font-mono text-sm text-stone-700">
-            {lead.discoveryConfidence}
+      key: "mail",
+      header: "Invio",
+      render: (lead) => {
+        const fit = mailFit(lead);
+        return (
+          <span className={`text-sm ${fit.ok ? "font-medium text-emerald-800" : "text-stone-500"}`}>
+            {fit.label}
           </span>
-        ) : (
-          "—"
-        ),
-    },
-    {
-      key: "website",
-      header: "Sito",
-      render: (lead) =>
-        lead.hasWebsite ? (
-          <span className="font-mono text-xs text-stone-700 truncate max-w-[140px] block">
-            {lead.website}
-          </span>
-        ) : (
-          <span className="text-xs font-medium text-amber-700">Assente</span>
-        ),
-    },
-    {
-      key: "status",
-      header: "Stato",
-      render: (lead) => (
-        <span
-          className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[lead.qualificationStatus]}`}
-        >
-          {STATUS_LABELS[lead.qualificationStatus]}
-        </span>
-      ),
-    },
-    {
-      key: "offer",
-      header: "Offerta",
-      render: (lead) =>
-        lead.offerCandidate ? (
-          <span className="text-xs text-stone-600">{lead.offerCandidate}</span>
-        ) : (
-          <span className="text-xs text-stone-400">—</span>
-        ),
+        );
+      },
     },
   ];
 
@@ -405,7 +377,6 @@ export default function LeadsBrowser({
     const dateLabel = new Date().toLocaleDateString("it-IT");
     setCampaignLeads(selected);
     setCampaignName(`Invio email ${dateLabel}`);
-    setCampaignMode("MANUAL");
     setCampaignModalOpen(true);
   }
 
@@ -421,7 +392,7 @@ export default function LeadsBrowser({
         body: JSON.stringify({
           name: campaignName.trim(),
           leadIds: campaignLeads.map((l) => l.id),
-          mode: campaignMode,
+          mode: "MANUAL",
           deliveryMode: "PRODUCTION",
           prepare: true,
         }),
@@ -690,17 +661,25 @@ export default function LeadsBrowser({
           </p>
         </div>
       ) : (
+        <div className="space-y-3">
+        <p className="text-sm text-stone-600">
+          Spunta i contatti. «La riceve» vuol dire che l’email può arrivare. Poi premi «Crea invio con questi».
+        </p>
         <SmartDataTable
           columns={columns}
           rows={filtered}
           rowKey={(lead) => lead.id}
+          selectionSingular="contatto"
+          selectionPlural="contatti"
+          filterPlaceholder="Cerca per nome, email o città…"
           searchText={(lead) =>
-            `${lead.name} ${lead.category} ${lead.city} ${lead.website ?? ""} ${lead.offerCandidate ?? ""}`
+            `${lead.name} ${lead.category} ${lead.city} ${lead.email ?? ""} ${lead.website ?? ""}`
           }
           onRowClick={(lead) => setSelectedLead(lead)}
           bulkActions={[
             {
-              label: "Crea invio email",
+              label: "Crea invio con questi",
+              variant: "primary",
               onApply: (rows) => openCampaignModal(rows),
             },
             {
@@ -710,6 +689,7 @@ export default function LeadsBrowser({
             },
           ]}
         />
+        </div>
       )}
 
       <LeadQuickDrawer
@@ -764,33 +744,16 @@ export default function LeadsBrowser({
             onSubmit={onCreateCampaign}
             className="relative w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl"
           >
-            <h2 className="text-lg font-semibold text-stone-900">Crea invio email</h2>
-            <p className="mt-1 text-sm text-stone-500">
-              {campaignLeads.length} attività selezionat
-              {campaignLeads.length === 1 ? "o" : "i"} · preparazione automatica
+            <h2 className="text-lg font-semibold text-stone-900">Crea l’invio</h2>
+            <p className="mt-1 text-sm text-stone-600">
+              L’email non parte adesso. Prima scrivo il testo, poi lo invii tu.
             </p>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {[...new Set(campaignLeads.map((lead) => lead.category))].map((item) => (
-                <span
-                  key={item}
-                  className="rounded-full bg-stone-100 px-2 py-1 text-xs font-medium text-stone-700"
-                >
-                  {item}
-                </span>
-              ))}
-            </div>
-            {campaignLeads.some(
-              (lead) =>
-                !["Ristoranti", "Pizzerie", "Bar ed enoteche", "Cibo da asporto", "Agriturismi"].includes(
-                  lead.category,
-                ),
-            ) ? (
-              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                Alcuni settori selezionati non hanno ancora un modello demo dedicato. L’invio
-                verrà creato, ma quei contatti potrebbero richiedere un modello compatibile prima
-                della preparazione.
-              </p>
-            ) : null}
+            <p className="mt-3 text-sm text-stone-800">
+              {campaignLeads.filter((lead) => mailFit(lead).ok).length} di {campaignLeads.length} possono riceverla.
+              {campaignLeads.some((lead) => !mailFit(lead).ok)
+                ? " Gli altri restano nell’invio ma non ricevono la mail: manca l’email oppure non sono un ristorante o un bar."
+                : ""}
+            </p>
 
             <label className="mt-5 block text-sm font-medium text-stone-700">
               Nome invio
@@ -801,21 +764,6 @@ export default function LeadsBrowser({
                 className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 disabled={creatingCampaign}
               />
-            </label>
-
-            <label className="mt-4 block text-sm font-medium text-stone-700">
-              Modalità
-              <select
-                value={campaignMode}
-                onChange={(e) =>
-                  setCampaignMode(e.target.value as "MANUAL" | "SCORE_BASED")
-                }
-                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
-                disabled={creatingCampaign}
-              >
-                <option value="MANUAL">Controllo manuale — approvi tutto tu</option>
-                <option value="SCORE_BASED">Scelta automatica — in base al punteggio</option>
-              </select>
             </label>
 
             <div className="mt-6 flex justify-end gap-3">

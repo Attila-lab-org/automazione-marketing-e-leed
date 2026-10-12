@@ -34,9 +34,9 @@ export function campaignActivityLabel(status: string, leads: number, progress: C
   if (leads > 0 && progress.skipped >= leads && progress.sent === 0) {
     return "Nessuna attività può ricevere questa email";
   }
-  if (progress.review + progress.ready > 0) return "Messaggi pronti: controlla e approva";
-  if (progress.approved + progress.sending > 0) return "Invio in corso";
-  if (progress.pending + progress.generating > 0) return "Sto preparando demo e messaggi";
+  if (progress.review > 0) return "Email pronte: apri e inviale";
+  if (progress.approved + progress.sending > 0) return "Le email stanno uscendo";
+  if (progress.pending + progress.generating + progress.ready > 0) return "Sto ancora scrivendo le email";
   if (progress.sent > 0) return "Email già uscite";
   if (progress.failed > 0) return "La preparazione si è fermata";
   return "Aperta, in attesa del prossimo passo";

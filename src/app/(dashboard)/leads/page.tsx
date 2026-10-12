@@ -15,7 +15,7 @@ export default async function LeadsPage({
         description={
           opportunita
             ? "I contatti più interessanti, pronti per un invio email."
-            : "Tutti i contatti arrivati da Google, Telegram o inseriti a mano."
+            : "Spunta i contatti e crea l’invio. Da qui l’email non parte: prima viene scritto il testo."
         }
       />
       <LeadsBrowser view={opportunita ? "opportunita" : "tutti"} />

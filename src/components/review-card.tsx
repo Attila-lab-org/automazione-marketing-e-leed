@@ -104,15 +104,15 @@ export default function ReviewCard({
     },
     {
       key: "edit",
-      label: "Modifica bozza",
-      hint: "Modifica l’oggetto e il testo dell’email prima di approvarla.",
+      label: "Cambia testo",
+      hint: "Cambia oggetto e testo prima di inviare.",
       callback: onEditDraft,
       className: "border border-stone-300 text-stone-700 hover:bg-stone-50",
     },
     {
       key: "skip",
-      label: "Togli dalla coda",
-      hint: "La togli da quelle da fare. Nessuna email parte e i solleciti su questa attività si fermano.",
+      label: "Non inviare",
+      hint: "Questa email non parte.",
       callback: onSkip,
       className: "border border-stone-300 text-stone-700 hover:bg-stone-50",
     },
@@ -194,7 +194,7 @@ export default function ReviewCard({
           </div>
 
           {deliveryNote ? (
-            <p className="mt-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
+            <p className="mt-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800">
               {deliveryNote}
             </p>
           ) : null}
@@ -244,38 +244,42 @@ export default function ReviewCard({
         </div>
       </div>
 
-      {demoUrl || emailBody ? (
-        <div className="space-y-3 border-t border-stone-100 px-5 py-4">
+      {emailBody ? (
+        <div className="border-t border-stone-100 px-5 py-4">
+          <details className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50" open>
+            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-stone-800">
+              Leggi l’email
+            </summary>
+            <iframe
+              title={`Mail per ${companyName}`}
+              className="h-80 w-full border-t border-stone-200 bg-white"
+              sandbox="allow-popups allow-popups-to-escape-sandbox"
+              srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:24px;background:#f5f5f4;font-family:Arial,sans-serif}</style></head><body>${emailBody}</body></html>`}
+            />
+          </details>
           {demoUrl ? (
-            <details className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50" open>
+            <details className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
               <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-stone-800">
-                Vedi il sito completo
+                Vedi anche il sito dimostrativo
               </summary>
               <iframe
                 src={demoUrl}
                 title={`Sito proposto per ${companyName}`}
-                className="h-[70vh] w-full border-t border-stone-200 bg-white"
-              />
-            </details>
-          ) : null}
-          {emailBody ? (
-            <details className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50" open>
-              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-stone-800">
-                Vedi la mail come arriverà
-              </summary>
-              <iframe
-                title={`Mail per ${companyName}`}
-                className="h-[28rem] w-full border-t border-stone-200 bg-white"
-                sandbox="allow-popups allow-popups-to-escape-sandbox"
-                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:24px;background:#f5f5f4;font-family:Arial,sans-serif}</style></head><body>${emailBody}</body></html>`}
+                className="h-80 w-full border-t border-stone-200 bg-white"
               />
             </details>
           ) : null}
         </div>
-      ) : null}
+      ) : (
+        <div className="border-t border-stone-100 px-5 py-4">
+          <p className="rounded-lg bg-amber-50 px-3 py-3 text-sm text-amber-950">
+            Il testo non è ancora scritto. Quando compare qui, potrai inviarlo. Il sito dimostrativo non è l’email.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 border-t border-stone-100 px-5 py-3">
-        {actions.map((action) => (
+        {actions.filter((action) => action.callback).map((action) => (
           <button
             key={action.key}
             type="button"

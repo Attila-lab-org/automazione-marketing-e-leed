@@ -6,7 +6,7 @@ export default function CampaignsPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
         title="Invii email"
-        description="Prepara, controlla e segui le email inviate ai contatti."
+        description="Apri un gruppo, aspetta che il testo sia scritto, poi invialo."
       />
 
       <CampaignsClient />

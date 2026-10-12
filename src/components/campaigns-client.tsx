@@ -19,14 +19,36 @@ type Campaign = {
   categories: string[];
 };
 
-const CAMPAIGN_STATUS: Record<string, string> = {
-  DRAFT: "Bozza",
-  ACTIVE: "Attiva",
-  PAUSED: "In pausa",
-  COMPLETED: "Completata",
-  STOPPED: "Fermata",
-  ARCHIVED: "Archiviata",
-};
+const LIST_FILTERS = [
+  { value: "", label: "Tutti" },
+  { value: "ready", label: "Email pronte" },
+  { value: "writing", label: "In scrittura" },
+  { value: "sent", label: "Già inviate" },
+  { value: "paused", label: "In pausa" },
+] as const;
+
+function campaignBucket(campaign: Campaign): string {
+  if (campaign.status === "PAUSED") return "paused";
+  const progress = campaign.progress;
+  if (progress && progress.review > 0) return "ready";
+  if (progress && progress.pending + progress.generating + progress.ready > 0) return "writing";
+  if (progress && progress.sent > 0) return "sent";
+  return "other";
+}
+
+function campaignFacts(campaign: Campaign): string {
+  const progress = campaign.progress;
+  const parts = [
+    `${campaign.lead_count} ${campaign.lead_count === 1 ? "contatto" : "contatti"}`,
+  ];
+  if (progress?.review) parts.push(`${progress.review} pronte da inviare`);
+  const writing = (progress?.pending ?? 0) + (progress?.generating ?? 0) + (progress?.ready ?? 0);
+  if (writing) parts.push(`${writing} in scrittura`);
+  if (progress?.sent) parts.push(`${progress.sent} già inviate`);
+  const blocked = (progress?.skipped ?? 0) + (progress?.failed ?? 0);
+  if (blocked) parts.push(`${blocked} non le ricevono`);
+  return parts.join(" · ");
+}
 
 export default function CampaignsClient() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -124,7 +146,7 @@ export default function CampaignsClient() {
   const visibleCampaigns = useMemo(() => {
     const search = query.trim().toLocaleLowerCase("it-IT");
     return campaigns.filter((campaign) => {
-      if (status && campaign.status !== status) return false;
+      if (status && campaignBucket(campaign) !== status) return false;
       if (category && !campaign.categories.includes(category)) return false;
       if (
         search &&
@@ -180,15 +202,14 @@ export default function CampaignsClient() {
               </select>
             </label>
             <label className="text-xs font-semibold text-stone-600">
-              Stato
+              Situazione
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
                 className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-normal"
               >
-                <option value="">Tutti gli stati</option>
-                {Object.entries(CAMPAIGN_STATUS).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
+                {LIST_FILTERS.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
                 ))}
               </select>
             </label>
@@ -209,8 +230,8 @@ export default function CampaignsClient() {
         </section>
         <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
           <div className="border-b border-stone-100 px-5 py-3">
-            <h2 className="text-sm font-semibold text-stone-900">Invii email creati</h2>
-            <p className="text-xs text-stone-500">Ogni riga è un gruppo di invio, non una singola attività Google.</p>
+            <h2 className="text-sm font-semibold text-stone-900">I tuoi invii</h2>
+            <p className="text-xs text-stone-500">Apri una riga. Il testo sotto il nome dice se puoi già inviare oppure se sto ancora scrivendo.</p>
           </div>
           <ul className="divide-y divide-stone-100">
             {visibleCampaigns.map((c) => (
@@ -224,18 +245,13 @@ export default function CampaignsClient() {
                     >
                       {c.name}
                     </Link>
-                    <span className="rounded-full bg-stone-900 px-2 py-0.5 text-[11px] font-semibold text-white">
-                      {CAMPAIGN_STATUS[c.status] ?? c.status}
-                    </span>
                     {c.delivery_mode === "TEST" ? (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
                         Prova
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-sm text-stone-600">
-                    {c.lead_count} {c.lead_count === 1 ? "destinatario" : "destinatari"}
-                    {" · "}
+                  <p className="mt-1 text-sm font-medium text-stone-800">
                     {campaignActivityLabel(c.status, c.lead_count, c.progress ?? {
                       pending: 0,
                       generating: 0,
@@ -248,30 +264,38 @@ export default function CampaignsClient() {
                       failed: 0,
                     })}
                   </p>
+                  <p className="mt-0.5 text-xs text-stone-500">{campaignFacts(c)}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <Link
                     href={`/campaigns/${c.id}`}
                     className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-semibold text-white"
                   >
-                    Apri invio
+                    {(c.progress?.review ?? 0) > 0 ? "Apri le email" : "Apri"}
                   </Link>
-                  <button
-                    type="button"
-                    disabled={busyId === c.id}
-                    onClick={() => void archiveCampaign(c)}
-                    className="text-xs font-semibold text-stone-500 hover:text-stone-800 disabled:opacity-50"
-                  >
-                    {busyId === c.id ? "…" : "Archivia"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busyId === c.id}
-                    onClick={() => void deleteCampaign(c)}
-                    className="text-xs font-semibold text-stone-500 hover:text-red-700 disabled:opacity-50"
-                  >
-                    {busyId === c.id ? "…" : "Elimina"}
-                  </button>
+                  <details className="relative">
+                    <summary className="cursor-pointer list-none text-xs font-semibold text-stone-500 hover:text-stone-800">
+                      Altro
+                    </summary>
+                    <div className="absolute right-0 z-10 mt-1 flex w-36 flex-col rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+                      <button
+                        type="button"
+                        disabled={busyId === c.id}
+                        onClick={() => void archiveCampaign(c)}
+                        className="rounded px-2 py-1.5 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                      >
+                        Archivia
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyId === c.id}
+                        onClick={() => void deleteCampaign(c)}
+                        className="rounded px-2 py-1.5 text-left text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Elimina
+                      </button>
+                    </div>
+                  </details>
                 </div>
               </li>
             ))}

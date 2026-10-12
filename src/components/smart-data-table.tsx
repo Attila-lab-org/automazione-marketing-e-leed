@@ -14,7 +14,7 @@ export type SmartDataTableBulkAction<T> = {
   label: string;
   /** Riceve le righe selezionate; il conteggio è sempre visibile (§21.1). */
   onApply: (rows: T[]) => void;
-  variant?: "default" | "danger";
+  variant?: "default" | "primary" | "danger";
 };
 
 export type SmartDataTableProps<T> = {
@@ -26,6 +26,8 @@ export type SmartDataTableProps<T> = {
   searchText: (row: T) => string;
   filterPlaceholder?: string;
   bulkActions?: SmartDataTableBulkAction<T>[];
+  selectionSingular?: string;
+  selectionPlural?: string;
   onRowClick?: (row: T) => void;
   emptyTitle?: string;
   emptyDescription?: string;
@@ -45,6 +47,8 @@ export default function SmartDataTable<T>({
   searchText,
   filterPlaceholder = "Filtra per nome, dominio, email, città…",
   bulkActions = [],
+  selectionSingular = "record",
+  selectionPlural = "record",
   onRowClick,
   emptyTitle = "Nessun risultato",
   emptyDescription = "Modifica i filtri oppure aggiungi nuovi dati.",
@@ -115,12 +119,6 @@ export default function SmartDataTable<T>({
             className="w-full rounded-lg border border-stone-200 bg-stone-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-100"
           />
         </div>
-        <span
-          title="In futuro potrai salvare una combinazione di filtri e riutilizzarla."
-          className="cursor-help rounded-lg border border-dashed border-stone-300 px-3 py-2 text-xs text-stone-400"
-        >
-          Filtri salvati · presto
-        </span>
       </div>
 
       {/* Barra bulk actions: sempre con conteggio record (§21.1) */}
@@ -129,8 +127,8 @@ export default function SmartDataTable<T>({
           <span className="text-sm font-medium text-amber-900">
             <span className="tabular-nums">{selectedRows.length}</span>{" "}
             {selectedRows.length === 1
-              ? "record selezionato"
-              : "record selezionati"}
+              ? `${selectionSingular} selezionato`
+              : `${selectionPlural} selezionati`}
           </span>
           {bulkActions.map((action) => (
             <button
@@ -141,7 +139,9 @@ export default function SmartDataTable<T>({
               className={
                 action.variant === "danger"
                   ? "rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-50"
-                  : "rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50"
+                  : action.variant === "primary"
+                    ? "rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-stone-800"
+                    : "rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50"
               }
             >
               {action.label}
