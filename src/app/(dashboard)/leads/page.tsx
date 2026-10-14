@@ -15,7 +15,7 @@ export default async function LeadsPage({
         description={
           opportunita
             ? "I contatti più interessanti, pronti per un invio email."
-            : "Spunta i contatti e crea l’invio. Da qui l’email non parte: prima viene scritto il testo."
+            : "Cerca la città. Poi spunta chi ha l’email."
         }
       />
       <LeadsBrowser view={opportunita ? "opportunita" : "tutti"} initialCity={citta ?? ""} />

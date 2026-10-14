@@ -24,15 +24,11 @@ export const POST = withAdmin(async (request: Request) => {
     const input = validateDiscoveryInput(body);
     const result = await runLeadDiscovery(input, process.env);
 
-    const zones =
-      result.areas.length > 1 ? ` Ho cercato ${result.areas.length} zone nuove.` : '';
     const message = result.exhausted
-      ? 'Per questa città e questa categoria ho già cercato le zone che conosco. Non restano altri locali da aggiungere così.'
+      ? 'In questa città non ho altre zone da cercare.'
       : result.created === 0
-        ? `Nessun locale nuovo. Quelli restituiti da Google erano già in elenco.${zones}`
-        : `Aggiunti ${result.created} locali nuovi.${zones}${
-            result.duplicates > 0 ? ` ${result.duplicates} erano già presenti.` : ''
-          }`;
+        ? 'Nessun locale nuovo. Quelli trovati erano già salvati.'
+        : `Trovati ${result.created} locali nuovi. Sono qui sotto.`;
 
     return NextResponse.json({
       found: result.found,

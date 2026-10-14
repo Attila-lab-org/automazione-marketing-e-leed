@@ -50,13 +50,9 @@ type LeadView = LeadQuickDrawerLead & {
 const MAIL_CATEGORIES = new Set<string>(MAILABLE_DISCOVERY_CATEGORIES);
 
 function mailFit(lead: { category: string; email?: string }): { ok: boolean; label: string } {
-  if (!MAIL_CATEGORIES.has(lead.category)) {
-    return { ok: false, label: "Non la riceve: per questo settore non ho ancora il modello" };
-  }
-  if (!lead.email) {
-    return { ok: false, label: "Non la riceve: manca l’email" };
-  }
-  return { ok: true, label: "La riceve" };
+  if (!lead.email) return { ok: false, label: "Senza email" };
+  if (!MAIL_CATEGORIES.has(lead.category)) return { ok: false, label: "Settore non pronto" };
+  return { ok: true, label: "Ha l’email" };
 }
 
 const STATUS_LABELS: Record<QualificationStatus, string> = {
@@ -159,6 +155,8 @@ export default function LeadsBrowser({
   const [searching, setSearching] = useState(false);
   const [resultBanner, setResultBanner] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [shownIds, setShownIds] = useState<string[] | null>(null);
+  const [showAll, setShowAll] = useState(view === "opportunita" && !initialCity);
 
   // Campaign bulk modal
   const [campaignModalOpen, setCampaignModalOpen] = useState(false);
@@ -179,12 +177,7 @@ export default function LeadsBrowser({
   const [deleteLeads, setDeleteLeads] = useState<LeadView[]>([]);
   const [deleting, setDeleting] = useState(false);
 
-  // Filters
-  const [minScore, setMinScore] = useState(0);
-  const [filterCategory, setFilterCategory] = useState("");
   const [filterCity, setFilterCity] = useState(initialCity);
-  const [filterWebsite, setFilterWebsite] = useState<"all" | "yes" | "no">("all");
-  const [filterStatus, setFilterStatus] = useState<"" | QualificationStatus>("");
 
   useEffect(() => {
     let cancelled = false;
@@ -223,50 +216,26 @@ export default function LeadsBrowser({
     };
   }, [reloadToken]);
 
-  const categories = useMemo(
-    () =>
-      Array.from(
-        new Set(rows.map((r) => r.category).filter((c) => c && c !== "Altro settore")),
-      ).sort(),
-    [rows],
-  );
-  const cities = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          rows
-            .map((r) => r.city)
-            .filter((c) => c && c !== "Località non indicata"),
-        ),
-      ).sort(),
-    [rows],
-  );
-  const activeFilterCount =
-    Number(minScore > 0) +
-    Number(Boolean(filterCategory)) +
-    Number(Boolean(filterCity)) +
-    Number(filterWebsite !== "all") +
-    Number(Boolean(filterStatus));
-
   const filtered = useMemo(() => {
-    return rows
-      .filter((r) => (r.discoveryScore ?? 0) >= minScore)
-      .filter((r) => !filterCategory || r.category === filterCategory)
-      .filter((r) => !filterCity || searchKey(r.city).includes(searchKey(filterCity)))
-      .filter((r) => {
-        if (filterWebsite === "yes") return r.hasWebsite;
-        if (filterWebsite === "no") return !r.hasWebsite;
-        return true;
-      })
-      .filter((r) => !filterStatus || r.qualificationStatus === filterStatus)
-      .filter((r) =>
-        view === "opportunita"
-          ? r.qualificationStatus === "PREQUALIFIED" ||
-            r.qualificationStatus === "NEEDS_ANALYSIS"
-          : true,
-      )
-      .sort((a, b) => (b.discoveryScore ?? -1) - (a.discoveryScore ?? -1));
-  }, [rows, minScore, filterCategory, filterCity, filterWebsite, filterStatus, view]);
+    const base = rows.filter((r) =>
+      view === "opportunita"
+        ? r.qualificationStatus === "PREQUALIFIED" || r.qualificationStatus === "NEEDS_ANALYSIS"
+        : true,
+    );
+    const ranked = [...base].sort((a, b) => (b.discoveryScore ?? -1) - (a.discoveryScore ?? -1));
+    if (shownIds) {
+      const ids = new Set(shownIds);
+      return ranked.filter((r) => ids.has(r.id));
+    }
+    if (filterCity.trim()) {
+      const key = searchKey(filterCity);
+      return ranked.filter((r) => {
+        const city = searchKey(r.city);
+        return city === key || city.startsWith(`${key} `);
+      });
+    }
+    return showAll ? ranked : [];
+  }, [rows, filterCity, shownIds, showAll, view]);
 
   const columns: SmartDataTableColumn<LeadView>[] = [
     {
@@ -275,35 +244,20 @@ export default function LeadsBrowser({
       render: (lead) => (
         <div>
           <p className="font-medium text-stone-900">{lead.name}</p>
-          <p className="text-xs text-stone-400">
-            {lead.category} · {lead.city}
-          </p>
+          <p className="text-xs text-stone-400">{lead.city}</p>
         </div>
       ),
     },
     {
       key: "email",
       header: "Email",
-      render: (lead) =>
-        lead.email ? (
-          <span className="text-sm text-stone-800">{lead.email}</span>
-        ) : (
-          <span className="text-sm text-stone-400">Manca</span>
-        ),
-    },
-    {
-      key: "mail",
-      header: "Invio",
       render: (lead) => {
         if (contactedIds.has(lead.id)) {
-          return <span className="text-sm font-medium text-stone-500">Già scritta</span>;
+          return <span className="text-sm text-stone-500">Già scritta</span>;
         }
-        const fit = mailFit(lead);
-        return (
-          <span className={`text-sm ${fit.ok ? "font-medium text-emerald-800" : "text-stone-500"}`}>
-            {fit.label}
-          </span>
-        );
+        if (!lead.email) return <span className="text-sm text-stone-400">Senza email</span>;
+        if (!mailFit(lead).ok) return <span className="text-sm text-stone-500">Settore non pronto</span>;
+        return <span className="text-sm text-stone-800">{lead.email}</span>;
       },
     },
   ];
@@ -338,6 +292,10 @@ export default function LeadsBrowser({
         throw new Error(`Discovery fallita (HTTP ${res.status})`);
       }
       if (!res.ok) throw new Error(data.error ?? "Discovery fallita");
+      const ids = (data.leads ?? []).flatMap((lead) => (lead.id ? [lead.id] : []));
+      setShownIds(ids);
+      setFilterCity("");
+      setShowAll(false);
       setResultBanner(data.message ?? "Ricerca completata");
       setLoading(true);
       setReloadToken((n) => n + 1);
@@ -346,14 +304,6 @@ export default function LeadsBrowser({
     } finally {
       setSearching(false);
     }
-  }
-
-  function resetFilters() {
-    setMinScore(0);
-    setFilterCategory("");
-    setFilterCity("");
-    setFilterWebsite("all");
-    setFilterStatus("");
   }
 
   async function onCreateDemo(leadId: string) {
@@ -373,22 +323,6 @@ export default function LeadsBrowser({
     } catch (err) {
       setResultBanner(err instanceof Error ? err.message : "Creazione demo fallita");
       setCreatingDemo(false);
-    }
-  }
-
-  async function onRequalify() {
-    setSearching(true);
-    try {
-      const res = await fetch("/api/leads/qualify", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Ricalcolo fallito");
-      setResultBanner(data.message);
-      setLoading(true);
-      setReloadToken((n) => n + 1);
-    } catch (err) {
-      setResultBanner(err instanceof Error ? err.message : "Ricalcolo fallito");
-    } finally {
-      setSearching(false);
     }
   }
 
@@ -534,33 +468,7 @@ export default function LeadsBrowser({
         onSubmit={onDiscover}
         className="rounded-xl border border-stone-200 bg-white p-4"
       >
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-stone-900">Cerca nuovi contatti su Google</h2>
-            <p className="mt-0.5 text-xs text-stone-500">
-              La prima volta prendo fino a 60 locali. Se cerchi di nuovo la stessa città, passo alle zone successive e salto quelli già salvati.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              title="Inserisci a mano un’attività che conosci già."
-              onClick={() => setManualOpen(true)}
-              className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
-            >
-              Aggiungi a mano
-            </button>
-            <button
-              type="button"
-              title="Ricalcola il punteggio di tutte le attività usando i dati disponibili."
-              onClick={() => void onRequalify()}
-              disabled={searching}
-              className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 disabled:opacity-60"
-            >
-              Ricalcola punteggi
-            </button>
-          </div>
-        </div>
+        <h2 className="text-sm font-semibold text-stone-900">Cerca una città</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-[1.2fr_1fr_auto]">
           <label className="text-sm font-medium text-stone-700">
             Settore
@@ -583,9 +491,7 @@ export default function LeadsBrowser({
               if (!known) return null;
               return (
                 <span className="mt-1 block text-xs font-medium text-amber-800">
-                  {cityLabel(known.location)} è già stata cercata il{" "}
-                  {new Date(known.lastAt).toLocaleDateString("it-IT")}
-                  {known.category ? ` per ${known.category}` : ""}. Una nuova ricerca prende le zone successive.
+                  Già cercata. Prendo solo locali nuovi.
                 </span>
               );
             })()}
@@ -595,7 +501,7 @@ export default function LeadsBrowser({
             disabled={searching || !category}
             className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60 md:self-end"
           >
-            {searching ? "Cerco…" : "Avvia ricerca"}
+            {searching ? "Cerco…" : "Cerca"}
           </button>
         </div>
         {resultBanner ? (
@@ -608,137 +514,14 @@ export default function LeadsBrowser({
             {resultBanner}
           </p>
         ) : null}
+        <button
+          type="button"
+          onClick={() => setManualOpen(true)}
+          className="mt-3 text-sm text-stone-500 underline-offset-2 hover:text-stone-800 hover:underline"
+        >
+          Aggiungi un contatto a mano
+        </button>
       </form>
-
-      <section className="rounded-xl border border-stone-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-stone-900">Città già cercate</h2>
-        <p className="mt-0.5 text-xs text-stone-500">
-          Qui resta scritto dove hai già cercato. Un contatto con «Già scritta» ha ricevuto la mail e non entra in un invio nuovo.
-        </p>
-        {searches.length ? (
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {searches.map((item) => (
-              <li key={`${item.category}-${item.location}`}>
-                <button
-                  type="button"
-                  onClick={() => setFilterCity(cityLabel(item.location))}
-                  className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-left text-xs text-stone-700 hover:bg-stone-100"
-                >
-                  <span className="font-semibold text-stone-900">{cityLabel(item.location)}</span>
-                  {" · "}
-                  {item.category}
-                  {" · "}
-                  {new Date(item.lastAt).toLocaleDateString("it-IT")}
-                  {item.times > 1 ? ` · cercata ${item.times} volte` : ""}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-3 text-sm text-stone-500">Nessuna ricerca salvata.</p>
-        )}
-      </section>
-
-      <div className="rounded-xl border border-stone-200 bg-white p-4">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-stone-800">Filtra le attività salvate</h2>
-            <p className="mt-0.5 text-xs text-stone-500">
-              Questi filtri cambiano soltanto l’elenco già salvato. La ricerca Google sta nel riquadro sopra.
-            </p>
-          </div>
-          <button
-            type="button"
-            title="Rimuovi tutti i filtri e mostra l’elenco completo."
-            disabled={activeFilterCount === 0}
-            onClick={resetFilters}
-            className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Azzera filtri{activeFilterCount ? ` (${activeFilterCount})` : ""}
-          </button>
-        </div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-12">
-        <label className="text-xs font-medium text-stone-600 md:col-span-2">
-          Punteggio da
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={minScore}
-            onChange={(e) => setMinScore(Number(e.target.value) || 0)}
-            title="Mostra solo le attività con un punteggio uguale o superiore."
-            className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-          />
-        </label>
-        <label className="text-xs font-medium text-stone-600 md:col-span-3">
-          Settore
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            title="Mostra solo le attività già salvate appartenenti a questo settore."
-            className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-          >
-            <option value="">Tutti i settori</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-xs font-medium text-stone-600 md:col-span-3">
-          Città nell’elenco
-          <input
-            list="lead-city-options"
-            value={filterCity}
-            onChange={(e) => setFilterCity(e.target.value)}
-            placeholder="Tutte le città"
-            title="Scrivi o scegli una città tra quelle già presenti nell’elenco."
-            className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-          />
-          <datalist id="lead-city-options">
-            {cities.map((c) => (
-              <option key={c} value={c} />
-            ))}
-          </datalist>
-        </label>
-        <label className="text-xs font-medium text-stone-600 md:col-span-2">
-          Sito
-          <select
-            value={filterWebsite}
-            onChange={(e) =>
-              setFilterWebsite(e.target.value as "all" | "yes" | "no")
-            }
-            className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-          >
-            <option value="all">Con o senza sito</option>
-            <option value="yes">Presente</option>
-            <option value="no">Assente</option>
-          </select>
-        </label>
-        <label className="text-xs font-medium text-stone-600 md:col-span-2">
-          Stato
-          <select
-            value={filterStatus}
-            onChange={(e) =>
-              setFilterStatus(e.target.value as "" | QualificationStatus)
-            }
-            className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-          >
-            <option value="">Tutti gli stati</option>
-            {(Object.keys(STATUS_LABELS) as QualificationStatus[]).map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
-        </div>
-        <p className="mt-3 text-xs text-stone-500">
-          Mostrate <strong className="text-stone-700">{filtered.length}</strong> attività su{" "}
-          {rows.length}.
-        </p>
-      </div>
 
       {loadError ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -747,23 +530,66 @@ export default function LeadsBrowser({
       ) : null}
 
       {loading ? (
-        <p className="text-sm text-stone-500">Caricamento attività…</p>
+        <p className="text-sm text-stone-500">Caricamento…</p>
+      ) : !showAll && !shownIds && !filterCity.trim() ? (
+        <div className="rounded-xl border border-dashed border-stone-300 bg-white px-6 py-10 text-center">
+          <p className="text-sm font-medium text-stone-800">Cerca una città qui sopra.</p>
+          <p className="mt-1 text-sm text-stone-500">I locali compariranno sotto.</p>
+          {rows.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setShowAll(true);
+                setShownIds(null);
+                setFilterCity("");
+              }}
+              className="mt-4 text-sm text-stone-600 underline-offset-2 hover:text-stone-900 hover:underline"
+            >
+              Vedi i {rows.length} contatti già salvati
+            </button>
+          ) : null}
+        </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-stone-300 bg-white px-6 py-10 text-center">
-          <p className="text-sm font-medium text-stone-800">
-            {rows.length ? "Nessun contatto corrisponde ai filtri" : "Nessun contatto"}
-          </p>
-          <p className="mt-1 text-sm text-stone-500">
-            {rows.length
-              ? "Azzera i filtri per rivedere tutti i contatti salvati."
-              : "Usa la ricerca Google qui sopra oppure aggiungi un contatto a mano."}
-          </p>
+          <p className="text-sm font-medium text-stone-800">Nessun locale in questo elenco</p>
+          <button
+            type="button"
+            onClick={() => {
+              setShowAll(true);
+              setShownIds(null);
+              setFilterCity("");
+            }}
+            className="mt-4 text-sm text-stone-600 underline-offset-2 hover:text-stone-900 hover:underline"
+          >
+            Vedi tutti i contatti
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
-        <p className="text-sm text-stone-600">
-          Spunta i contatti. «La riceve» vuol dire che l’email può arrivare. Poi premi «Crea invio con questi».
-        </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-stone-700">
+              {shownIds
+                ? "Locali di questa ricerca"
+                : filterCity.trim()
+                  ? cityLabel(filterCity)
+                  : "Tutti i contatti"}
+              {" · "}
+              {filtered.length}
+            </p>
+            {shownIds || filterCity.trim() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAll(true);
+                  setShownIds(null);
+                  setFilterCity("");
+                }}
+                className="text-sm text-stone-500 underline-offset-2 hover:text-stone-800 hover:underline"
+              >
+                Vedi tutti
+              </button>
+            ) : null}
+          </div>
         <SmartDataTable
           columns={columns}
           rows={filtered}
@@ -800,37 +626,6 @@ export default function LeadsBrowser({
         creatingDemo={creatingDemo}
       />
 
-      {selectedLead ? (
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <h3 className="text-sm font-semibold text-stone-800">
-            Perché ha punteggio {selectedLead.discoveryScore ?? "—"} e affidabilità{" "}
-            {selectedLead.discoveryConfidence ?? "—"}
-          </h3>
-          <ul className="mt-2 space-y-1.5">
-            {selectedLead.reasons.length === 0 ? (
-              <li className="text-sm text-stone-500">Nessuna spiegazione disponibile. Ricalcola il punteggio.</li>
-            ) : (
-              selectedLead.reasons.map((r) => (
-                <li key={`${selectedLead.id}-${r.code}-${r.label}`} className="text-sm text-stone-700">
-                  <span className="font-medium">{r.label}</span>
-                  {r.scoreDelta ? (
-                    <span className="ml-2 text-xs text-stone-400">
-                      punteggio {r.scoreDelta > 0 ? "+" : ""}
-                      {r.scoreDelta}
-                    </span>
-                  ) : null}
-                  {r.confidenceDelta ? (
-                    <span className="ml-2 text-xs text-stone-400">
-                      affidabilità +{r.confidenceDelta}
-                    </span>
-                  ) : null}
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      ) : null}
-
       {campaignModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
@@ -853,7 +648,7 @@ export default function LeadsBrowser({
                 ? ` ${campaignLeads.filter((lead) => contactedIds.has(lead.id)).length} già scritti restano fuori.`
                 : ""}
               {campaignLeads.some((lead) => !mailFit(lead).ok && !contactedIds.has(lead.id))
-                ? " Chi non ha l’email, o non è un ristorante o un bar, non entra."
+                ? " Chi non ha l’email non entra."
                 : ""}
             </p>
             <div className="mt-4 space-y-2">

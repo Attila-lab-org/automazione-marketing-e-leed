@@ -151,13 +151,30 @@ export function discoveryCategoryLabel(raw: string | null | undefined): string {
   const value = raw?.trim();
   if (!value) return "Altro settore";
   const normalized = value.toLocaleLowerCase("it-IT");
-  return (
+  const known =
     GOOGLE_CATEGORY_LABELS[normalized] ??
     DISCOVERY_CATEGORIES.find(
       (category) => category.toLocaleLowerCase("it-IT") === normalized,
-    ) ??
-    normalized
-      .replaceAll("_", " ")
-      .replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("it-IT"))
-  );
+    );
+  if (known) return known;
+  if (
+    normalized.includes("restaurant") ||
+    normalized.includes("ristorant") ||
+    normalized.includes("osteria") ||
+    normalized.includes("trattoria")
+  ) {
+    return "Ristoranti";
+  }
+  if (normalized.includes("pizzer") || normalized.includes("pizza")) return "Pizzerie";
+  if (normalized.includes("gelat") || normalized.includes("ice cream") || normalized.includes("ice_cream")) {
+    return "Gelaterie";
+  }
+  if (normalized.includes("pasticcer") || normalized.includes("bakery")) return "Pasticcerie";
+  if (normalized.includes("agritur") || normalized.includes("farmstay")) return "Agriturismi";
+  if (normalized.includes("enotec") || normalized.includes("wine_bar") || normalized.includes("wine bar")) {
+    return "Bar ed enoteche";
+  }
+  return normalized
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("it-IT"));
 }
