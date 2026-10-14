@@ -9,6 +9,7 @@ import { createAdminSupabaseClient } from '@/lib/supabase/client';
 import type { LeadRow } from '@/lib/types/database';
 import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
+import { normalizePlaceKey, planDiscoveryLocations } from './discovery-areas';
 import { discoveredPlaceToLeadInsert } from './normalize';
 import {
   ESTIMATED_COST_USD,
@@ -16,8 +17,11 @@ import {
   recordCostEvent,
 } from './qualify';
 
-/** Max risultati discovery (Places pageSize≤20 → paginazione lato adapter). */
-export const DISCOVERY_MAX_RESULTS = 50;
+/** Max risultati di una singola frase (Places pageSize≤20, tre pagine). */
+export const DISCOVERY_MAX_RESULTS = 60;
+
+/** Quanti locali nuovi cercare in una città già vista, a zone. */
+export const DISCOVERY_AREA_RESULTS = 20;
 
 export type DiscoveryInput = {
   category: string;
@@ -32,6 +36,8 @@ export type DiscoveryResult = {
   qualified: number;
   leads: LeadRow[];
   query: DiscoveryQuery;
+  areas: string[];
+  exhausted: boolean;
 };
 
 export function validateDiscoveryInput(raw: unknown): DiscoveryInput {
@@ -94,6 +100,31 @@ async function assertDiscoveryEnabled(
   }
 }
 
+async function listSearchedLocations(
+  admin: AppSupabaseClient,
+  workspaceId: string,
+  category: string,
+): Promise<string[]> {
+  const { data, error } = await admin
+    .from('cost_events')
+    .select('meta')
+    .eq('workspace_id', workspaceId)
+    .eq('operation', 'discovery')
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) throw new Error(`Ricerche già fatte: ${error.message}`);
+  const wanted = normalizePlaceKey(category);
+  const locations: string[] = [];
+  for (const row of data ?? []) {
+    const meta = row.meta as { category?: unknown; location?: unknown } | null;
+    const foundCategory = typeof meta?.category === 'string' ? meta.category : '';
+    const location = typeof meta?.location === 'string' ? meta.location.trim() : '';
+    if (!location || normalizePlaceKey(foundCategory) !== wanted) continue;
+    locations.push(location);
+  }
+  return locations;
+}
+
 function isFixturePlace(place: DiscoveredPlace): boolean {
   return (
     place.googlePlaceId.startsWith('mock-place-') ||
@@ -119,32 +150,75 @@ export async function runLeadDiscovery(
   await assertDiscoveryEnabled(admin, workspace.id);
   const provider = getGooglePlacesProvider(env);
   const mode = (env.GOOGLE_PLACES_PROVIDER_MODE ?? 'mock').toLowerCase();
-  let places = await provider.searchMinimal(query);
+  const alreadySearched = await listSearchedLocations(admin, workspace.id, query.category);
+  const areas = planDiscoveryLocations({
+    location: query.location,
+    alreadySearched,
+  });
+  if (!areas.length) {
+    return {
+      found: 0,
+      created: 0,
+      duplicates: 0,
+      qualified: 0,
+      leads: [],
+      query,
+      areas,
+      exhausted: true,
+    };
+  }
 
-  // In live mode non persistere mai risultati fixture/mock.
-  if (mode === 'live') {
-    places = places.filter((p) => !isFixturePlace(p));
+  const places: DiscoveredPlace[] = [];
+  const seenPlaceIds = new Set<string>();
+  const fetched: Array<{ area: string; count: number; maxResults: number }> = [];
+  for (const area of areas) {
+    const primary = normalizePlaceKey(area) === normalizePlaceKey(query.location);
+    const batchQuery: DiscoveryQuery = {
+      ...query,
+      location: area,
+      maxResults: primary ? query.maxResults : DISCOVERY_AREA_RESULTS,
+    };
+    let batch = await provider.searchMinimal(batchQuery);
+    if (mode === 'live') batch = batch.filter((place) => !isFixturePlace(place));
+    const fresh = batch.filter((place) => {
+      if (seenPlaceIds.has(place.googlePlaceId)) return false;
+      seenPlaceIds.add(place.googlePlaceId);
+      return true;
+    });
+    places.push(...fresh);
+    fetched.push({ area, count: batch.length, maxResults: batchQuery.maxResults ?? DISCOVERY_AREA_RESULTS });
+  }
+
+  for (const batch of fetched) {
+    await recordCostEvent(admin, {
+      workspace_id: workspace.id,
+      provider: 'google_places',
+      operation: 'discovery',
+      entity_type: 'discovery_run',
+      quantity: batch.count,
+      estimated_cost_usd: batch.count * ESTIMATED_COST_USD['google_places.discovery_per_result'],
+      meta: {
+        category: query.category,
+        location: batch.area,
+        requestedLocation: query.location,
+        maxResults: batch.maxResults,
+        mode,
+      },
+    });
   }
 
   if (places.length === 0) {
-    return { found: 0, created: 0, duplicates: 0, qualified: 0, leads: [], query };
+    return {
+      found: 0,
+      created: 0,
+      duplicates: 0,
+      qualified: 0,
+      leads: [],
+      query,
+      areas,
+      exhausted: false,
+    };
   }
-
-  await recordCostEvent(admin, {
-    workspace_id: workspace.id,
-    provider: 'google_places',
-    operation: 'discovery',
-    entity_type: 'discovery_run',
-    quantity: places.length,
-    estimated_cost_usd:
-      places.length * ESTIMATED_COST_USD['google_places.discovery_per_result'],
-    meta: {
-      category: query.category,
-      location: query.location,
-      maxResults: query.maxResults,
-      mode,
-    },
-  });
 
   const placeIds = places.map((p) => p.googlePlaceId);
   const { data: existingRows, error: existingError } = await admin
@@ -258,6 +332,8 @@ export async function runLeadDiscovery(
     qualified,
     leads,
     query,
+    areas,
+    exhausted: false,
   };
 }
 

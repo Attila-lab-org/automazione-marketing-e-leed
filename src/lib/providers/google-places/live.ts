@@ -161,7 +161,7 @@ export class GooglePlacesLive implements GooglePlacesProvider {
   }
 
   async searchMinimal(query: DiscoveryQuery): Promise<DiscoveredPlace[]> {
-    const max = Math.min(Math.max(query.maxResults ?? 5, 1), 50);
+    const max = Math.min(Math.max(query.maxResults ?? 5, 1), 60);
     const textQuery = `${query.category.trim()} ${query.location.trim()}`.trim();
     if (!textQuery) {
       throw new Error('GooglePlacesLive.searchMinimal: category e location sono obbligatorie');

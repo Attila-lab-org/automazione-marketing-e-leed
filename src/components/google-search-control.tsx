@@ -28,7 +28,7 @@ export default function GoogleSearchControl({
         body: JSON.stringify({
           category: category.trim(),
           location: location.trim(),
-          maxResults: 20,
+          maxResults: 60,
         }),
       });
       const data = (await response.json()) as { message?: string; error?: string };
@@ -49,7 +49,7 @@ export default function GoogleSearchControl({
     <section className="rounded-xl border border-stone-200 bg-white p-5">
       <h2 className="text-base font-semibold text-stone-900">Cerca su Google</h2>
       <p className="mt-1 text-sm text-stone-600">
-        Trova attività. I risultati finiscono in Contatti, non in Campagne.
+        La prima ricerca prende fino a 60 locali. Se ripeti la città, continuo dalle zone non ancora cercate. I risultati finiscono in Contatti.
       </p>
       <form onSubmit={onSearch} className="mt-4 space-y-3">
         <label className="block text-sm font-medium text-stone-700">

@@ -4,9 +4,9 @@ import LeadsBrowser from "./leads-browser";
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; citta?: string }>;
 }) {
-  const { view } = await searchParams;
+  const { view, citta } = await searchParams;
   const opportunita = view === "opportunita";
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -18,7 +18,7 @@ export default async function LeadsPage({
             : "Spunta i contatti e crea l’invio. Da qui l’email non parte: prima viene scritto il testo."
         }
       />
-      <LeadsBrowser view={opportunita ? "opportunita" : "tutti"} />
+      <LeadsBrowser view={opportunita ? "opportunita" : "tutti"} initialCity={citta ?? ""} />
     </div>
   );
 }

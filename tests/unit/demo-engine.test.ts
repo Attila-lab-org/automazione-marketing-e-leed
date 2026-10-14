@@ -97,6 +97,9 @@ describe('Phase C demo / template engine', () => {
 
   it('sceglie Restaurant Premium per verticale food', () => {
     expect(isRestaurantVertical('italian_restaurant')).toBe(true);
+    expect(isRestaurantVertical('ice_cream_shop')).toBe(true);
+    expect(isRestaurantVertical('bakery')).toBe(true);
+    expect(isRestaurantVertical('gym')).toBe(false);
     expect(
       pickCompatibleTemplateKey('italian_restaurant', [
         { key: RESTAURANT_PREMIUM_TEMPLATE_KEY, vertical: 'restaurant', published: true },

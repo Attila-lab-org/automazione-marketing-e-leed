@@ -14,6 +14,7 @@ import type { QualificationReason } from "@/lib/domain/discovery-qualification";
 import SectorSelect from "@/components/sector-select";
 import {
   DISCOVERY_CATEGORIES,
+  MAILABLE_DISCOVERY_CATEGORIES,
   discoveryCategoryLabel,
 } from "@/lib/leads/discovery-categories";
 
@@ -46,17 +47,11 @@ type LeadView = LeadQuickDrawerLead & {
   raw: LeadRow;
 };
 
-const MAIL_CATEGORIES = new Set([
-  "Ristoranti",
-  "Pizzerie",
-  "Bar ed enoteche",
-  "Cibo da asporto",
-  "Agriturismi",
-]);
+const MAIL_CATEGORIES = new Set<string>(MAILABLE_DISCOVERY_CATEGORIES);
 
 function mailFit(lead: { category: string; email?: string }): { ok: boolean; label: string } {
   if (!MAIL_CATEGORIES.has(lead.category)) {
-    return { ok: false, label: "Non la riceve: non è un ristorante o un bar" };
+    return { ok: false, label: "Non la riceve: per questo settore non ho ancora il modello" };
   }
   if (!lead.email) {
     return { ok: false, label: "Non la riceve: manca l’email" };
@@ -146,8 +141,10 @@ function toView(lead: LeadRow): LeadView {
 
 export default function LeadsBrowser({
   view = "tutti",
+  initialCity = "",
 }: {
   view?: "tutti" | "opportunita";
+  initialCity?: string;
 }) {
   const router = useRouter();
   const [creatingDemo, setCreatingDemo] = useState(false);
@@ -158,7 +155,7 @@ export default function LeadsBrowser({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [category, setCategory] = useState("");
-  const [location, setLocation] = useState("");
+  const [location, setLocation] = useState(initialCity);
   const [searching, setSearching] = useState(false);
   const [resultBanner, setResultBanner] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -185,7 +182,7 @@ export default function LeadsBrowser({
   // Filters
   const [minScore, setMinScore] = useState(0);
   const [filterCategory, setFilterCategory] = useState("");
-  const [filterCity, setFilterCity] = useState("");
+  const [filterCity, setFilterCity] = useState(initialCity);
   const [filterWebsite, setFilterWebsite] = useState<"all" | "yes" | "no">("all");
   const [filterStatus, setFilterStatus] = useState<"" | QualificationStatus>("");
 
@@ -322,7 +319,7 @@ export default function LeadsBrowser({
         body: JSON.stringify({
           category: category.trim(),
           location: location.trim(),
-          maxResults: 20,
+          maxResults: 60,
         }),
       });
       const raw = await res.text();
@@ -541,7 +538,7 @@ export default function LeadsBrowser({
           <div>
             <h2 className="text-sm font-semibold text-stone-900">Cerca nuovi contatti su Google</h2>
             <p className="mt-0.5 text-xs text-stone-500">
-              I risultati vengono aggiunti direttamente ai contatti.
+              La prima volta prendo fino a 60 locali. Se cerchi di nuovo la stessa città, passo alle zone successive e salto quelli già salvati.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -588,7 +585,7 @@ export default function LeadsBrowser({
                 <span className="mt-1 block text-xs font-medium text-amber-800">
                   {cityLabel(known.location)} è già stata cercata il{" "}
                   {new Date(known.lastAt).toLocaleDateString("it-IT")}
-                  {known.category ? ` per ${known.category}` : ""}.
+                  {known.category ? ` per ${known.category}` : ""}. Una nuova ricerca prende le zone successive.
                 </span>
               );
             })()}

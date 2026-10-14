@@ -87,6 +87,21 @@ export const DISCOVERY_CATEGORIES = DISCOVERY_CATEGORY_GROUPS.flatMap(
   (group) => group.items,
 );
 
+/** Settori per cui esiste già il modello della mail e del sito dimostrativo. */
+export const MAILABLE_DISCOVERY_CATEGORIES = [
+  'Ristoranti',
+  'Pizzerie',
+  'Bar ed enoteche',
+  'Cibo da asporto',
+  'Agriturismi',
+  'Gelaterie',
+  'Pasticcerie',
+] as const;
+
+export const MAILABLE_DISCOVERY_GROUPS: DiscoveryCategoryGroup[] = [
+  { label: 'Locali a cui puoi scrivere', items: [...MAILABLE_DISCOVERY_CATEGORIES] },
+];
+
 const GOOGLE_CATEGORY_LABELS: Record<string, string> = {
   lawyer: "Studi legali",
   notary: "Notai",
@@ -123,6 +138,8 @@ const GOOGLE_CATEGORY_LABELS: Record<string, string> = {
   family_restaurant: "Ristoranti",
   fusion_restaurant: "Ristoranti",
   pizza_restaurant: "Pizzerie",
+  meal_takeaway: "Cibo da asporto",
+  meal_delivery: "Cibo da asporto",
   bar: "Bar ed enoteche",
   wine_bar: "Bar ed enoteche",
   ice_cream_shop: "Gelaterie",

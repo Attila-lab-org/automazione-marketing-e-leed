@@ -41,7 +41,11 @@ function blockerLabel(code: string): string {
   return BLOCKER_LABELS[code] ?? "Problema da risolvere";
 }
 
-export default function ReviewQueueClient() {
+export default function ReviewQueueClient({
+  initialCity = null,
+}: {
+  initialCity?: string | null;
+}) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -51,7 +55,7 @@ export default function ReviewQueueClient() {
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
   const [armed, setArmed] = useState(false);
-  const [cityFilter, setCityFilter] = useState<string | null>(null);
+  const [cityFilter, setCityFilter] = useState<string | null>(initialCity);
   const [alreadyHeld, setAlreadyHeld] = useState(0);
 
   const refresh = useCallback(async () => {

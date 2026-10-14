@@ -48,7 +48,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/overview",
         label: "Oggi",
         hint: "",
-        description: "Vedi cosa richiede attenzione e lo stato delle automazioni.",
+        description: "Quadro della campagna: città, mail uscite e chi non ha risposto.",
         match: ["/overview"],
         icon: navIcon("M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10"),
       },

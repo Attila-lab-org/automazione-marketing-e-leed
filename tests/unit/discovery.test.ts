@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { validateDiscoveryInput, DiscoveryValidationError } from '@/lib/leads/discovery';
+import { planDiscoveryLocations } from '@/lib/leads/discovery-areas';
 import { discoveredPlaceToLeadInsert, normalizeDomain } from '@/lib/leads/normalize';
 import { mapPlaceToDiscovered } from '@/lib/providers/google-places/live';
 import type { DiscoveredPlace } from '@/lib/providers/google-places/types';
 
 describe('validateDiscoveryInput', () => {
-  it('accetta input valido e limita maxResults a 50', () => {
+  it('accetta input valido e limita maxResults a 60', () => {
     expect(
       validateDiscoveryInput({
         category: 'Ristoranti',
         location: 'Milano',
-        maxResults: 50,
+        maxResults: 60,
       }),
-    ).toEqual({ category: 'Ristoranti', location: 'Milano', maxResults: 50 });
+    ).toEqual({ category: 'Ristoranti', location: 'Milano', maxResults: 60 });
   });
 
-  it('rifiuta maxResults > 50', () => {
+  it('rifiuta maxResults > 60', () => {
     expect(() =>
       validateDiscoveryInput({
         category: 'Ristoranti',
@@ -94,5 +95,38 @@ describe('mapPlaceToDiscovered', () => {
     expect(mapped?.city).toBe('Milano');
     expect(mapped?.category).toBe('restaurant');
     expect(mapped?.websiteUrl).toBe('https://osteria.example.com');
+  });
+});
+
+describe('planDiscoveryLocations', () => {
+  it('la prima ricerca di una città grande resta sulla città', () => {
+    expect(planDiscoveryLocations({ location: 'Milano', alreadySearched: [] })).toEqual(['Milano']);
+  });
+
+  it('la ricerca successiva passa alle zone non ancora usate', () => {
+    expect(
+      planDiscoveryLocations({
+        location: 'Milano',
+        alreadySearched: ['Milano', 'Milano Navigli'],
+        limit: 2,
+      }),
+    ).toEqual(['Milano Isola', 'Milano Porta Romana']);
+  });
+
+  it('una città piccola, già cercata, prova i punti cardinali', () => {
+    expect(
+      planDiscoveryLocations({
+        location: 'Soresina',
+        alreadySearched: ['Soresina'],
+        limit: 2,
+      }),
+    ).toEqual(['Soresina centro', 'Soresina nord']);
+  });
+
+  it('quando le zone conosciute sono finite non ripete la stessa ricerca', () => {
+    const areas = planDiscoveryLocations({ location: 'Verona', alreadySearched: [] });
+    expect(areas).toEqual(['Verona']);
+    const done = ['Verona', 'Verona Centro', 'Verona Borgo Trento', 'Verona San Zeno', 'Verona Borgo Roma', 'Verona Golosine'];
+    expect(planDiscoveryLocations({ location: 'Verona', alreadySearched: done })).toEqual([]);
   });
 });

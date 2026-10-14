@@ -1,6 +1,6 @@
 "use client";
 
-import { DISCOVERY_CATEGORY_GROUPS } from "@/lib/leads/discovery-categories";
+import { MAILABLE_DISCOVERY_GROUPS } from "@/lib/leads/discovery-categories";
 
 export default function SectorSelect({
   id,
@@ -25,7 +25,7 @@ export default function SectorSelect({
       <option value="" disabled>
         Scegli un settore
       </option>
-      {DISCOVERY_CATEGORY_GROUPS.map((group) => (
+      {MAILABLE_DISCOVERY_GROUPS.map((group) => (
         <optgroup key={group.label} label={group.label}>
           {group.items.map((item) => (
             <option key={item} value={item}>
