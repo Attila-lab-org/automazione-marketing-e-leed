@@ -3,9 +3,15 @@ import {
   defaultEmailEnrichmentProvider,
   formatEmailEvidenceLabel,
   pickPublicEmail,
+  websiteCanHoldPublicEmail,
 } from '../../src/lib/enrichment/email-from-website';
 
 describe('Email enrichment evidence — selected candidate provenance', () => {
+  it('ignora le pagine social, dove l’email del locale non c’è', () => {
+    expect(websiteCanHoldPublicEmail('https://www.facebook.com/osteria')).toBe(false);
+    expect(websiteCanHoldPublicEmail('https://www.trattoriaaldina.it/')).toBe(true);
+  });
+
   it('selected email evidence corresponds to selected candidate (not first page)', async () => {
     const originalFetch = global.fetch;
     global.fetch = async (input: RequestInfo | URL) => {

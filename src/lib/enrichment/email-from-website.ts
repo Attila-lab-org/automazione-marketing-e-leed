@@ -50,7 +50,13 @@ function normalizeDomain(url: string): string | null {
 }
 
 function normalizeEmail(raw: string): string {
-  return raw.trim().toLowerCase();
+  let value = raw.trim().toLowerCase();
+  try {
+    value = decodeURIComponent(value);
+  } catch {
+    value = raw.trim().toLowerCase();
+  }
+  return value.replace(/^[\s"'<>]+|[\s"'<>]+$/g, '');
 }
 
 export function isPrivateIp(hostnameOrIp: string): boolean {
@@ -127,6 +133,19 @@ function extractEmails(html: string): { emails: string[]; mailto: string[] } {
     found.add(normalizeEmail(match[0]!));
   }
   return { emails: [...found], mailto: [...mailto] };
+}
+
+const DIRECTORY_HOST =
+  /(^|\.)(facebook|instagram|fb|tripadvisor|yelp|quandoo|thefork|eatbu|blogspot|linktr)\./i;
+
+/** Un sito del locale può contenere l'email. Una pagina social no. */
+export function websiteCanHoldPublicEmail(websiteUrl: string): boolean {
+  try {
+    const host = new URL(websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`).hostname;
+    return !DIRECTORY_HOST.test(host);
+  } catch {
+    return false;
+  }
 }
 
 const JUNK_EMAIL_HOSTS = [

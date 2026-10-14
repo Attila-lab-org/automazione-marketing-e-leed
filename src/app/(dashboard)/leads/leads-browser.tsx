@@ -12,6 +12,7 @@ import SmartDataTable, {
 import type { LeadRow, QualificationStatus } from "@/lib/types/database";
 import type { QualificationReason } from "@/lib/domain/discovery-qualification";
 import SectorSelect from "@/components/sector-select";
+import { websiteCanHoldPublicEmail } from "@/lib/enrichment/email-from-website";
 import {
   DISCOVERY_CATEGORIES,
   MAILABLE_DISCOVERY_CATEGORIES,
@@ -255,9 +256,14 @@ export default function LeadsBrowser({
         if (contactedIds.has(lead.id)) {
           return <span className="text-sm text-stone-500">Già scritta</span>;
         }
-        if (!lead.email) return <span className="text-sm text-stone-400">Senza email</span>;
-        if (!mailFit(lead).ok) return <span className="text-sm text-stone-500">Settore non pronto</span>;
-        return <span className="text-sm text-stone-800">{lead.email}</span>;
+        if (lead.email && mailFit(lead).ok) {
+          return <span className="text-sm text-stone-800">{lead.email}</span>;
+        }
+        if (!lead.website) return <span className="text-sm text-stone-400">Senza sito</span>;
+        if (!websiteCanHoldPublicEmail(lead.website)) {
+          return <span className="text-sm text-stone-400">Solo social</span>;
+        }
+        return <span className="text-sm text-stone-400">Email non sul sito</span>;
       },
     },
   ];

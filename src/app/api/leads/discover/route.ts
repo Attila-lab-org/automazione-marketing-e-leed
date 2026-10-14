@@ -26,9 +26,11 @@ export const POST = withAdmin(async (request: Request) => {
 
     const message = result.exhausted
       ? 'In questa città non ho altre zone da cercare.'
-      : result.created === 0
+      : result.created === 0 && result.emailsFound === 0
         ? 'Nessun locale nuovo. Quelli trovati erano già salvati.'
-        : `Trovati ${result.created} locali nuovi. Sono qui sotto.`;
+        : result.created === 0
+          ? `Nessun locale nuovo. Sul sito ho letto ${result.emailsFound} email.`
+          : `Trovati ${result.created} locali. Sul sito ho letto ${result.emailsFound} email.`;
 
     return NextResponse.json({
       found: result.found,

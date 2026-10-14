@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   defaultEmailEnrichmentProvider,
+  websiteCanHoldPublicEmail,
   type EmailEnrichmentProvider,
   type EmailEnrichmentResult,
 } from './email-from-website';
@@ -98,4 +99,43 @@ export async function enrichLeadEmail(
   }
 
   return { ...result, status: result.status === 'FOUND' ? 'FOUND' : result.status };
+}
+
+/** Legge l'email pubblica sul sito dei locali che non ce l'hanno ancora. */
+export async function fillMissingPublicEmails(
+  admin: SupabaseClient,
+  workspaceId: string,
+  leads: Array<{ id: string; email?: string | null; website_url?: string | null; normalized_email?: string | null }>,
+  options?: { concurrency?: number; budgetMs?: number },
+): Promise<number> {
+  const pending = leads.filter(
+    (lead) => !lead.email?.trim() && lead.website_url && websiteCanHoldPublicEmail(lead.website_url),
+  );
+  const budgetMs = options?.budgetMs ?? 25_000;
+  const concurrency = Math.max(1, options?.concurrency ?? 4);
+  const started = Date.now();
+  let cursor = 0;
+  let found = 0;
+
+  async function worker(): Promise<void> {
+    while (Date.now() - started < budgetMs) {
+      const index = cursor;
+      cursor += 1;
+      const lead = pending[index];
+      if (!lead) return;
+      try {
+        const result = await enrichLeadEmail(admin, workspaceId, lead.id);
+        if (result.email) {
+          lead.email = result.email;
+          lead.normalized_email = result.email;
+          found += 1;
+        }
+      } catch (error) {
+        console.error('fillMissingPublicEmails', lead.id, error instanceof Error ? error.message : error);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, () => worker()));
+  return found;
 }

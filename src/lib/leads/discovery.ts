@@ -1,6 +1,5 @@
 /**
- * Discovery Google Places → dedupe Place ID → persist → qualify → cost event.
- * Phase B: nessuna email, nessun outreach, nessuna AI/browser.
+ * Discovery Google Places → dedupe Place ID → persist → email pubblica dal sito → qualify.
  */
 
 import { getGooglePlacesProvider } from '@/lib/providers/google-places';
@@ -11,6 +10,7 @@ import type { AppSupabaseClient } from '@/lib/types/supabase-database';
 import { ensureDefaultWorkspace } from '@/lib/workspace';
 import { normalizePlaceKey, planDiscoveryLocations } from './discovery-areas';
 import { discoveredPlaceToLeadInsert } from './normalize';
+import { fillMissingPublicEmails } from '@/lib/enrichment/enrich-lead-email';
 import {
   ESTIMATED_COST_USD,
   qualifyLeadsBulk,
@@ -34,6 +34,7 @@ export type DiscoveryResult = {
   created: number;
   duplicates: number;
   qualified: number;
+  emailsFound: number;
   leads: LeadRow[];
   query: DiscoveryQuery;
   areas: string[];
@@ -161,6 +162,7 @@ export async function runLeadDiscovery(
       created: 0,
       duplicates: 0,
       qualified: 0,
+      emailsFound: 0,
       leads: [],
       query,
       areas,
@@ -213,6 +215,7 @@ export async function runLeadDiscovery(
       created: 0,
       duplicates: 0,
       qualified: 0,
+      emailsFound: 0,
       leads: [],
       query,
       areas,
@@ -325,11 +328,17 @@ export async function runLeadDiscovery(
     });
   }
 
+  const emailsFound = await fillMissingPublicEmails(admin, workspace.id, leads, {
+    concurrency: 4,
+    budgetMs: 25_000,
+  });
+
   return {
     found: places.length,
     created: createdLeads.length,
     duplicates: places.length - createdLeads.length,
     qualified,
+    emailsFound,
     leads,
     query,
     areas,
